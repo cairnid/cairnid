@@ -1,0 +1,10 @@
+<svg width="960" height="220" viewBox="0 0 960 220" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Cairn Identity</title>
+  <desc id="desc">Cairn Identity wordmark with stacked stone mark.</desc>
+  <rect width="960" height="220" rx="24" fill="#0D1117"/>
+  <path d="M112 153C112 138.641 123.641 127 138 127H246C260.359 127 272 138.641 272 153C272 167.359 260.359 179 246 179H138C123.641 179 112 167.359 112 153Z" fill="#E6EDF3"/>
+  <path d="M130 97C130 83.7452 140.745 73 154 73H230C243.255 73 254 83.7452 254 97C254 110.255 243.255 121 230 121H154C140.745 121 130 110.255 130 97Z" fill="#7DD3FC"/>
+  <path d="M157 50C157 38.9543 165.954 30 177 30H207C218.046 30 227 38.9543 227 50C227 61.0457 218.046 70 207 70H177C165.954 70 157 61.0457 157 50Z" fill="#34D399"/>
+  <text x="320" y="103" fill="#F8FAFC" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="56" font-weight="750" letter-spacing="0">Cairn Identity</text>
+  <text x="322" y="145" fill="#94A3B8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24" font-weight="500" letter-spacing="0">Strict OIDC. Clear operations. Small surface.</text>
+</svg>

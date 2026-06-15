@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: cairn_identity
+      POSTGRES_USER: cairn
+      POSTGRES_PASSWORD: cairn
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cairn -d cairn_identity"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      CAIRN_ENV: development
+      CAIRN_API_BIND: 0.0.0.0:8080
+      CAIRN_ISSUER: http://localhost:8080
+      CAIRN_PUBLIC_WEB_ORIGIN: http://localhost:5173
+      DATABASE_URL: postgres://cairn:cairn@postgres:5432/cairn_identity
+      CAIRN_KEY_ENCRYPTION_KEY: ${CAIRN_KEY_ENCRYPTION_KEY:?Generate a KEK with cairn-api signing-key generate-kek before starting Compose}
+      RUST_LOG: cairn_api=info,cairn_oidc=info,tower_http=info
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      PUBLIC_CAIRN_API_ORIGIN: http://localhost:8080
+    ports:
+      - "5173:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

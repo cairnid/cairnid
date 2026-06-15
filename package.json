@@ -1,0 +1,30 @@
+{
+  "name": "cairnid",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ibuuvai/cairnid.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ibuuvai/cairnid/issues"
+  },
+  "homepage": "https://github.com/ibuuvai/cairnid#readme",
+  "type": "module",
+  "packageManager": "bun@1.3.4",
+  "scripts": {
+    "dev": "bun run --cwd apps/web dev",
+    "build": "bun run --cwd apps/web build",
+    "check": "bun run --cwd apps/web check",
+    "check:public-surface": "bun infra/scripts/check-public-surface.ts",
+    "test": "bun run --cwd apps/web test",
+    "test:e2e": "bun run --cwd apps/web test:e2e",
+    "audit": "bun audit"
+  },
+  "overrides": {
+    "cookie": "0.7.2"
+  },
+  "workspaces": [
+    "apps/web"
+  ]
+}

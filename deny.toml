@@ -1,0 +1,78 @@
+[graph]
+all-features = true
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-pc-windows-gnu",
+  "x86_64-pc-windows-msvc",
+]
+
+[advisories]
+yanked = "deny"
+unmaintained = "workspace"
+unsound = "all"
+unused-ignored-advisory = "deny"
+ignore = []
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+skip = [
+  { crate = "base64@0.21.7", reason = "webauthn-rs 0.5.4 uses base64urlsafedata on base64 0.21 while the service uses base64 0.22 directly" },
+  { crate = "block-buffer@0.10.4", reason = "RustCrypto 0.10 is still required by argon2, aes-gcm, and totp-rs while SQLx 0.9 has moved part of its graph to digest 0.11" },
+  { crate = "cpufeatures@0.2.17", reason = "RustCrypto 0.10 dependencies still use cpufeatures 0.2 while SQLx 0.9 pulls cpufeatures 0.3 through digest 0.11" },
+  { crate = "crypto-common@0.1.7", reason = "RustCrypto 0.10 dependencies still use crypto-common 0.1 while SQLx 0.9 pulls crypto-common 0.2 through digest 0.11" },
+  { crate = "digest@0.10.7", reason = "argon2, aes-gcm, sha2, and totp-rs still use digest 0.10 while SQLx 0.9 has moved part of its graph to digest 0.11" },
+  { crate = "getrandom@0.2.17", reason = "rand_core 0.6 remains in the RustCrypto 0.10 graph until upstreams finish migrating" },
+  { crate = "getrandom@0.3.4", reason = "rand 0.9 and aws-lc-rs use getrandom 0.3 while SQLx/uuid have moved to getrandom 0.4" },
+  { crate = "hashbrown@0.16.1", reason = "SQLx 0.9 currently uses hashlink on hashbrown 0.16 and indexmap on hashbrown 0.17" },
+  { crate = "hmac@0.12.1", reason = "totp-rs 5.7 uses hmac 0.12 while SQLx 0.9 uses hmac 0.13" },
+  { crate = "rand@0.10.1", reason = "SQLx 0.9 uses rand 0.10 while webauthn-rs and the service use rand 0.9" },
+  { crate = "rand_core@0.6.4", reason = "RustCrypto 0.10 dependencies still use rand_core 0.6 while newer dependencies use rand_core 0.9/0.10" },
+  { crate = "rand_core@0.10.1", reason = "SQLx 0.9 uses rand_core 0.10 while webauthn-rs and the service use rand_core 0.9" },
+  { crate = "sha2@0.11.0", reason = "SQLx 0.9 uses sha2 0.11 while service crypto dependencies still use sha2 0.10" },
+  { crate = "thiserror@1.0.69", reason = "x509-parser in the webauthn-rs graph still uses thiserror 1 while the service and SQLx use thiserror 2" },
+  { crate = "thiserror-impl@1.0.69", reason = "paired with the temporary thiserror 1 skip from the webauthn-rs transitive x509-parser graph" },
+  { crate = "untrusted@0.7.1", reason = "aws-lc-rs currently uses untrusted 0.7 while ring/rustls use untrusted 0.9" },
+]
+
+[bans.workspace-dependencies]
+duplicates = "deny"
+include-path-dependencies = true
+unused = "deny"
+
+[licenses]
+confidence-threshold = 0.93
+include-build = true
+include-dev = false
+unused-allowed-license = "allow"
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "OpenSSL",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "Zlib",
+]
+exceptions = [
+  { crate = "base64urlsafedata", allow = ["MPL-2.0"] },
+  { crate = "webauthn-attestation-ca", allow = ["MPL-2.0"] },
+  { crate = "webauthn-rs", allow = ["MPL-2.0"] },
+  { crate = "webauthn-rs-core", allow = ["MPL-2.0"] },
+  { crate = "webauthn-rs-proto", allow = ["MPL-2.0"] },
+  { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+required-git-spec = "rev"
+unused-allowed-source = "allow"

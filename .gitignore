@@ -1,0 +1,17 @@
+target/
+.env
+.env.*
+!.env.example
+node_modules/
+.svelte-kit/
+build/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
+*.pem
+!.dev.example.pem
+*.sqlite
+*.sqlite3
+/*_TRACKER.md
