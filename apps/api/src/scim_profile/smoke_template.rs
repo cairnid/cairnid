@@ -55,6 +55,7 @@ pub fn scim_connector_smoke_template(
             "bearer_token",
             "client_secret",
             "password",
+            "provider_credential",
             "provider_credentials",
             "raw_token",
             "secret_token",
