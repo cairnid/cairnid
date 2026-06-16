@@ -30,17 +30,28 @@ impl LifecycleEmailSmokeEvidenceReport {
     ) -> Self {
         let messages = evidence_messages
             .into_iter()
-            .map(|message| LifecycleEmailSmokeEvidenceMessageReport {
-                kind: message.kind,
-                template: if lifecycle_email_template_is_allowed(&message.kind, &message.template) {
-                    message.template
+            .map(|message| {
+                let LifecycleEmailEvidenceMessage {
+                    kind,
+                    template,
+                    action_url_present,
+                    provider_message_id,
+                    sent_at,
+                } = message;
+                let template = if lifecycle_email_template_is_allowed(&kind, &template) {
+                    template
                 } else {
                     "invalid_template".to_owned()
-                },
-                status: "sent",
-                action_url_present: message.action_url_present,
-                provider_message_id: message.provider_message_id,
-                sent_at: message.sent_at,
+                };
+
+                LifecycleEmailSmokeEvidenceMessageReport {
+                    kind,
+                    template,
+                    status: "sent",
+                    action_url_present,
+                    provider_message_id,
+                    sent_at,
+                }
             })
             .collect::<Vec<_>>();
 
