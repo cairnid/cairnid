@@ -39,7 +39,7 @@ Cairn Identity focuses on a narrow identity-provider core: issue tokens correctl
 | Authentication | Password login, Argon2 hashing, TOTP, WebAuthn/passkeys, recovery codes, session review and revocation |
 | Account lifecycle | Invitations, email verification, password recovery, security notifications, outbox delivery worker |
 | Provisioning | SCIM 2.0 user and group subset with bounded PATCH/Bulk behavior and token-rotation support |
-| Operations | Docker Compose, health checks, signing-key rotation, KEK rotation, restore checks, audit export/purge |
+| Operations | Docker Compose, health checks, signing-key rotation, KEK rotation, restore checks, audit export/purge, release-evidence MCP tools |
 
 ## Quick Start
 
@@ -86,6 +86,7 @@ bun run dev
 ```text
 apps/api          Rust Axum API and OIDC provider
 apps/web          SvelteKit admin, login, consent, and user UI
+apps/mcp          Local stdio MCP server for read-only release-evidence inspection
 crates/audit      Audit event builders and redaction
 crates/authn      Password, token, PKCE, TOTP, and WebAuthn primitives
 crates/database   SQLx repositories and migrations
@@ -129,6 +130,7 @@ cargo test -p cairn-database --test postgres_migrations --locked
 - [API](docs/api.md)
 - [Deployment](docs/deployment.md)
 - [Operations](docs/operations.md)
+- [MCP](docs/mcp.md)
 - [Security posture](docs/security.md)
 - [Threat model](docs/threat-model.md)
 - [MFA](docs/mfa.md)

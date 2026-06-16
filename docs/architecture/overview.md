@@ -7,8 +7,10 @@ Cairn Identity is a monorepo with one Rust API, one SvelteKit web app, and focus
 ```mermaid
 flowchart LR
   browser["Browser"]
+  operator["Operator"]
   web["apps/web\nSvelteKit adapter-node UI"]
   api["apps/api\nAxum API and operator CLI"]
+  mcp["apps/mcp\nstdio release-evidence tools"]
   postgres[("Postgres")]
   oidcClient["OIDC client"]
   scimClient["SCIM client"]
@@ -16,8 +18,10 @@ flowchart LR
 
   browser --> web
   web --> api
+  operator --> mcp
   oidcClient --> api
   scimClient --> api
+  mcp --> evidence["Release evidence directory"]
   api --> postgres
   api --> emailProvider
 ```
@@ -83,6 +87,7 @@ flowchart TD
 - `cairn-database`: SQLx repositories, migrations, row mapping, and persistence DTOs.
 - `cairn-audit`: audit event builders and metadata redaction.
 - `cairn-api`: Axum routing, protocol endpoints, admin/session APIs, SCIM endpoints, deployment health checks, and operator commands.
+- `cairnid-mcp`: local stdio MCP server exposing read-only release-evidence plan, manifest, status, and check tools.
 
 ## API Boundaries
 

@@ -47,6 +47,13 @@
       "description": "Preflight, release evidence, backup, restore, key rotation, audit export, and drills."
     },
     {
+      "slug": "mcp",
+      "title": "MCP",
+      "section": "Operate",
+      "source": "docs/mcp.md",
+      "description": "Local stdio MCP server exposing read-only release-evidence tools."
+    },
+    {
       "slug": "security",
       "title": "Security Posture",
       "section": "Trust",
