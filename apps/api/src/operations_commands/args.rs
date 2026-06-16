@@ -1,5 +1,5 @@
 use super::errors::{config_error, config_error_owned};
-use crate::operations_evidence::DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS;
+use cairn_operations::DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS;
 
 pub(super) fn release_evidence_max_age_days(
     args: &[String],
@@ -36,7 +36,7 @@ pub(super) fn release_evidence_init_force(
 #[cfg(test)]
 mod tests {
     use super::{release_evidence_init_force, release_evidence_max_age_days};
-    use crate::operations_evidence::DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS;
+    use cairn_operations::DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS;
 
     #[test]
     fn release_evidence_max_age_days_defaults_and_accepts_valid_override() {

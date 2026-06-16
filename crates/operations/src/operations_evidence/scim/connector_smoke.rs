@@ -4,8 +4,9 @@ use super::super::validation::{
     require_non_empty_string_at_path_dynamic, require_rfc3339_timestamp, require_string,
     require_string_at_path, require_uuid_array_exact_len, require_uuid_at_path,
 };
-use super::connector_profile::expected_scim_connector_display_name;
-use crate::scim_profile::REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS;
+use super::{
+    REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS, connector_profile::expected_scim_connector_display_name,
+};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -105,8 +106,7 @@ pub(in crate::operations_evidence) fn validate_scim_connector_smoke(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_scim_connector_smoke;
-    use crate::scim_profile::REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS;
+    use super::{REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS, validate_scim_connector_smoke};
     use serde_json::json;
 
     const USER_ONE: &str = "01890d6f-109f-767a-96cb-2927626f45b1";

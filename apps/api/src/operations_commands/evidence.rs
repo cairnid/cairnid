@@ -2,7 +2,7 @@ use super::{
     args::{release_evidence_init_force, release_evidence_max_age_days},
     errors::{config_error, config_error_owned},
 };
-use crate::operations_evidence::{
+use cairn_operations::{
     check_release_evidence, init_release_evidence_directory, release_evidence_capture_plan,
     release_evidence_manifest, release_evidence_status_report,
 };
