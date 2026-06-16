@@ -15,7 +15,10 @@ mod types;
 mod validation;
 
 use self::dispatch::validate_artifact;
-pub use self::email_evidence::REQUIRED_LIFECYCLE_EMAIL_KINDS;
+pub use self::email_evidence::{
+    REQUIRED_LIFECYCLE_EMAIL_KINDS, lifecycle_email_template_is_allowed,
+    lifecycle_email_template_requirement,
+};
 use self::redaction::sanitize_release_evidence_failure;
 use self::registry::EVIDENCE_SPECS;
 pub use self::types::{

@@ -1353,16 +1353,16 @@ async fn lifecycle_email_evidence_lists_latest_sent_message_per_required_kind()
     queued.sent_at = None;
     database.insert_email_outbox_message(&queued).await?;
 
-    let mut template_mismatch = lifecycle_email_message(
+    let mut latest_invalid_template = lifecycle_email_message(
         organization.id,
         "password_recovery",
         true,
         now + Duration::seconds(1),
     );
-    template_mismatch.id = Uuid::new_v4();
-    template_mismatch.template = "email_verification".to_owned();
+    latest_invalid_template.id = Uuid::new_v4();
+    latest_invalid_template.template = "email_verification".to_owned();
     database
-        .insert_email_outbox_message(&template_mismatch)
+        .insert_email_outbox_message(&latest_invalid_template)
         .await?;
 
     let other_message = lifecycle_email_message(
@@ -1387,7 +1387,14 @@ async fn lifecycle_email_evidence_lists_latest_sent_message_per_required_kind()
         Some("provider-invitation")
     );
     assert!(invitation.action_url_present);
+    assert_eq!(invitation.template, "account_invitation");
     assert_db_timestamp_eq(invitation.sent_at, now);
+    let password_recovery = evidence
+        .iter()
+        .find(|message| message.kind == "password_recovery")
+        .expect("password recovery evidence");
+    assert_eq!(password_recovery.template, "email_verification");
+    assert_db_timestamp_eq(password_recovery.sent_at, now + Duration::seconds(1));
     assert!(
         evidence
             .iter()
@@ -4709,7 +4716,7 @@ fn lifecycle_email_message(
         format!("{kind}@example.com"),
         sent_at - Duration::seconds(10),
     );
-    message.template = kind.to_owned();
+    message.template = lifecycle_email_template(kind).to_owned();
     message.action_path = action_url_present.then(|| format!("/{kind}"));
     message.status = "sent".to_owned();
     message.provider_message_id = Some(format!("provider-{kind}"));
@@ -4717,4 +4724,11 @@ fn lifecycle_email_message(
     message.updated_at = sent_at;
     message.sent_at = Some(sent_at);
     message
+}
+
+fn lifecycle_email_template(kind: &str) -> &str {
+    match kind {
+        "invitation" => "account_invitation",
+        _ => kind,
+    }
 }

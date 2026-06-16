@@ -541,11 +541,18 @@ pub(super) fn lifecycle_email_smoke_receipt() -> Value {
 fn lifecycle_email_message(kind: &str, action_url_present: bool) -> Value {
     json!({
         "kind": kind,
-        "template": kind,
+        "template": lifecycle_email_template(kind),
         "status": "sent",
         "action_url_present": action_url_present,
         "provider_message_id": format!("provider-{kind}")
     })
+}
+
+fn lifecycle_email_template(kind: &str) -> &str {
+    match kind {
+        "invitation" => "account_invitation",
+        _ => kind,
+    }
 }
 
 pub(super) fn signing_key_rotation_receipt() -> Value {

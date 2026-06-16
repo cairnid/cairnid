@@ -1,5 +1,11 @@
 use super::{provider::email_provider_name, types::LifecycleEmailSmokeEvidenceReport};
-use crate::{config::ApiConfig, operations_evidence::REQUIRED_LIFECYCLE_EMAIL_KINDS};
+use crate::{
+    config::ApiConfig,
+    operations_evidence::{
+        REQUIRED_LIFECYCLE_EMAIL_KINDS, lifecycle_email_template_is_allowed,
+        lifecycle_email_template_requirement,
+    },
+};
 use cairn_database::{Database, LifecycleEmailEvidenceMessage};
 use cairn_domain::OrganizationId;
 use std::collections::BTreeSet;
@@ -49,6 +55,19 @@ pub(super) fn lifecycle_email_smoke_evidence_report_from_messages(
     if provider != "command" {
         failures.push(format!("provider must be command, got {provider}"));
     }
+    for (index, message) in evidence_messages.iter().enumerate() {
+        if !lifecycle_email_template_is_allowed(&message.kind, &message.template) {
+            let requirement =
+                lifecycle_email_template_requirement(&message.kind).unwrap_or_else(|| {
+                    format!(
+                        "template is not allowed for lifecycle kind {}",
+                        message.kind
+                    )
+                });
+            failures.push(format!("messages[{index}].{requirement}"));
+        }
+    }
+
     for missing_kind in &missing_kinds {
         failures.push(format!(
             "missing sent lifecycle email evidence for {missing_kind}"

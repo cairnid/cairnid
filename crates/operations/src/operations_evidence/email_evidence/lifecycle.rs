@@ -1,4 +1,7 @@
-use super::constants::REQUIRED_LIFECYCLE_EMAIL_KINDS;
+use super::constants::{
+    REQUIRED_LIFECYCLE_EMAIL_KINDS, lifecycle_email_template_is_allowed,
+    lifecycle_email_template_requirement,
+};
 use crate::operations_evidence::validation::{
     reject_non_empty_array, require_rfc3339_timestamp, require_string,
 };
@@ -76,11 +79,12 @@ fn validate_lifecycle_message(
     failures: &mut Vec<String>,
 ) {
     match message.get("template").and_then(Value::as_str) {
-        Some(template) if template == kind => {}
-        Some(template) => failures.push(format!(
-            "messages[{index}].template must match kind {kind}, got {template}"
-        )),
-        None => failures.push(format!("messages[{index}].template must match kind {kind}")),
+        Some(template) if lifecycle_email_template_is_allowed(kind, template) => {}
+        Some(_) | None => {
+            let requirement = lifecycle_email_template_requirement(kind)
+                .unwrap_or_else(|| format!("template is not allowed for lifecycle kind {kind}"));
+            failures.push(format!("messages[{index}].{requirement}"));
+        }
     }
     match message.get("status").and_then(Value::as_str) {
         Some("sent") => {}

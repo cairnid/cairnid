@@ -193,7 +193,7 @@ The command records whether each template included an action URL, but does not s
   "messages": [
     {
       "kind": "invitation",
-      "template": "invitation",
+      "template": "account_invitation",
       "status": "sent",
       "action_url_present": true,
       "provider_message_id": "provider-message-id"

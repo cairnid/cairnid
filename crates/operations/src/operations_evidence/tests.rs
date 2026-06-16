@@ -2002,7 +2002,7 @@ fn release_evidence_rejects_invalid_lifecycle_email_smoke_receipt() {
             "messages": [
                 {
                     "kind": "invitation",
-                    "template": "password_recovery",
+                    "template": "unexpected_provider_template",
                     "status": "failed",
                     "action_url_present": false,
                     "provider_message_id": ""
@@ -2049,11 +2049,14 @@ fn release_evidence_rejects_invalid_lifecycle_email_smoke_receipt() {
             .iter()
             .any(|failure| failure.contains("completed_at"))
     );
+    assert!(lifecycle_artifact.failures.iter().any(|failure| {
+        failure.contains("template must be one of account_invitation for lifecycle kind invitation")
+    }));
     assert!(
         lifecycle_artifact
             .failures
             .iter()
-            .any(|failure| failure.contains("template must match kind invitation"))
+            .all(|failure| !failure.contains("unexpected_provider_template"))
     );
     assert!(
         lifecycle_artifact

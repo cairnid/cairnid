@@ -70,7 +70,6 @@ impl Database {
                   AND status = 'sent'
                   AND sent_at IS NOT NULL
                   AND metadata->>'kind' = ANY($2::text[])
-                  AND template = metadata->>'kind'
             )
             SELECT kind, template, action_url_present, provider_message_id, sent_at
             FROM ranked

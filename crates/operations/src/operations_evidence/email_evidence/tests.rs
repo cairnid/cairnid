@@ -89,6 +89,40 @@ fn lifecycle_email_smoke_accepts_all_required_kinds() {
 }
 
 #[test]
+fn lifecycle_email_smoke_rejects_wrong_template_without_echoing_value() {
+    let wrong_template = "unexpected_provider_template";
+    let value = json!({
+        "status": "completed",
+        "provider": "command",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "failures": [],
+        "errors": [],
+        "messages": [
+            {
+                "kind": "invitation",
+                "template": wrong_template,
+                "status": "sent",
+                "action_url_present": true,
+                "provider_message_id": "provider-invitation"
+            }
+        ]
+    });
+    let mut checks = Vec::new();
+    let mut failures = Vec::new();
+
+    validate_lifecycle_email_smoke(&value, &mut checks, &mut failures);
+
+    assert!(failures.iter().any(|failure| {
+        failure == "messages[0].template must be one of account_invitation for lifecycle kind invitation"
+    }));
+    assert!(
+        failures
+            .iter()
+            .all(|failure| !failure.contains(wrong_template))
+    );
+}
+
+#[test]
 fn lifecycle_email_smoke_rejects_missing_kind_and_action_url_mismatch() {
     let value = json!({
         "status": "completed",
@@ -131,9 +165,16 @@ fn lifecycle_email_smoke_rejects_missing_kind_and_action_url_mismatch() {
 fn lifecycle_message(kind: &str, action_url_present: bool) -> Value {
     json!({
         "kind": kind,
-        "template": kind,
+        "template": lifecycle_template(kind),
         "status": "sent",
         "action_url_present": action_url_present,
         "provider_message_id": format!("{kind}-message")
     })
+}
+
+fn lifecycle_template(kind: &str) -> &str {
+    match kind {
+        "invitation" => "account_invitation",
+        _ => kind,
+    }
 }

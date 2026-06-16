@@ -3,6 +3,8 @@ use cairn_domain::OrganizationId;
 use serde::Serialize;
 use time::OffsetDateTime;
 
+use crate::operations_evidence::lifecycle_email_template_is_allowed;
+
 #[derive(Debug, Serialize)]
 pub(super) struct LifecycleEmailSmokeEvidenceReport {
     status: &'static str,
@@ -30,7 +32,11 @@ impl LifecycleEmailSmokeEvidenceReport {
             .into_iter()
             .map(|message| LifecycleEmailSmokeEvidenceMessageReport {
                 kind: message.kind,
-                template: message.template,
+                template: if lifecycle_email_template_is_allowed(&message.kind, &message.template) {
+                    message.template
+                } else {
+                    "invalid_template".to_owned()
+                },
                 status: "sent",
                 action_url_present: message.action_url_present,
                 provider_message_id: message.provider_message_id,
