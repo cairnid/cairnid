@@ -3,6 +3,8 @@
 ## Local Docker Compose
 
 ```powershell
+cargo run -p cairn-api -- signing-key generate-kek
+$env:CAIRN_KEY_ENCRYPTION_KEY="<paste generated value>"
 docker compose -f infra/docker-compose.yml up --build
 ```
 
@@ -22,24 +24,28 @@ The root `Dockerfile` builds `cairn-api` with CMake, NASM, pkg-config, and Linux
 
 The API image healthcheck runs `cairn-api healthcheck`, which performs an HTTP GET against the local `/healthz` endpoint and requires the JSON status payload to be `ok`. Because `/healthz` performs a database health check, container health probes cover both HTTP serving and Postgres reachability after startup migrations.
 
-Required variables:
+Set these explicitly for deployed API containers:
 
-- `DATABASE_URL`
-- `CAIRN_ISSUER`
-- `CAIRN_PUBLIC_WEB_ORIGIN`
-- `CAIRN_BOOTSTRAP_SETUP_SECRET` when `CAIRN_ENV=production`; the first administrator bootstrap request must submit this operator-held setup secret.
-
-Recommended production variables:
-
-- `CAIRN_ENV=production`
+- `DATABASE_URL`: Postgres connection string.
+- `CAIRN_ISSUER`: public API/OIDC origin.
+- `CAIRN_PUBLIC_WEB_ORIGIN`: public web origin used for lifecycle action links.
+- `CAIRN_KEY_ENCRYPTION_KEY`: generate with `cairn-api signing-key generate-kek`; required by Local Docker Compose, encrypted database-backed signing-key generation and rotation, and production account lifecycle email outbox delivery.
+- `CAIRN_ENV=production` for production deployments.
 - `RUST_LOG=cairn_api=info,cairn_oidc=info,tower_http=info`
-- `CAIRN_KEY_ENCRYPTION_KEY`: generate with `cairn-api signing-key generate-kek`; required for encrypted database-backed signing-key generation, signing-key rotation, and production account lifecycle email outbox delivery.
-- `CAIRN_EMAIL_PROVIDER=command`: enables production outbox delivery through a shell-free executable provider.
+
+Production-only bootstrap and email variables:
+
+- `CAIRN_BOOTSTRAP_SETUP_SECRET`: required when `CAIRN_ENV=production`; the first administrator bootstrap request must submit this operator-held setup secret.
+- `CAIRN_EMAIL_PROVIDER=command`: required before production lifecycle email delivery.
 - `CAIRN_EMAIL_COMMAND_PATH`: executable that receives rendered email JSON on stdin and exits `0` after provider acceptance.
+
+Optional/defaulted variables:
+
 - `CAIRN_EMAIL_BATCH_SIZE`: default `10`, clamped to `1..100`.
 - `CAIRN_EMAIL_MAX_ATTEMPTS`: default `5`, clamped to `1..20`.
 - `CAIRN_EMAIL_RETRY_SECONDS`: default `300`, clamped to `1..86400`.
 - `CAIRN_EMAIL_SENDING_TIMEOUT_SECONDS`: default `900`, clamped to `30..86400`; stale `sending` rows older than this can be reclaimed.
+- `CAIRN_TRUSTED_PROXY_IPS`: optional comma-separated exact IP addresses for direct reverse proxy or CDN peers. Leave unset unless the direct peer is trusted to set forwarded IP headers. When the peer matches, the first `X-Forwarded-For` IP, falling back to `X-Real-IP`, becomes the audit and rate-limit client identity; otherwise the socket peer IP is used.
 - `CAIRN_SCIM_BEARER_TOKEN_SHA256`: optional 64-character SHA-256 hex digest of the raw SCIM bearer token; accepts up to four comma-separated hashes during rotation; required only when SCIM provisioning is enabled.
 
 `CAIRN_ISSUER` and `CAIRN_PUBLIC_WEB_ORIGIN` must be absolute origins, not full paths. Production accepts HTTPS only. Development may use HTTP only for `localhost`, `127.0.0.1`, or `[::1]`.

@@ -14,4 +14,16 @@ test-results/
 !.dev.example.pem
 *.sqlite
 *.sqlite3
+*.tsbuildinfo
+*.lcov
+*.local
+*.local.*
+*.secret
+*.secrets
+secrets/
+scratch/
+tmp/
+local-notes/
+NOTES.md
+*_NOTES.md
 /*_TRACKER.md

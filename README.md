@@ -7,14 +7,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ibuuvai/cairnid/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ibuuvai/cairnid/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/cairnid/cairnid/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/cairnid/cairnid/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <img alt="Rust" src="https://img.shields.io/badge/rust-1.94%2B-f46623">
   <img alt="Bun" src="https://img.shields.io/badge/bun-1.3.4-black">
 </p>
 
 <p align="center">
-  <a href="docs/architecture/overview.md">Architecture</a>
+  <a href="docs/README.md">Docs</a>
+  | <a href="docs/architecture/overview.md">Architecture</a>
   | <a href="docs/api.md">API</a>
   | <a href="docs/deployment.md">Deployment</a>
   | <a href="docs/security.md">Security</a>
@@ -45,6 +46,8 @@ Cairn Identity focuses on a narrow identity-provider core: issue tokens correctl
 Run the full local stack with Docker Compose:
 
 ```powershell
+cargo run -p cairn-api -- signing-key generate-kek
+$env:CAIRN_KEY_ENCRYPTION_KEY="<paste generated value>"
 docker compose -f infra/docker-compose.yml up --build
 ```
 
@@ -121,6 +124,7 @@ cargo test -p cairn-database --test postgres_migrations --locked
 
 ## Documentation
 
+- [Docs index](docs/README.md)
 - [Architecture](docs/architecture/overview.md)
 - [API](docs/api.md)
 - [Deployment](docs/deployment.md)
@@ -133,6 +137,7 @@ cargo test -p cairn-database --test postgres_migrations --locked
 - [OpenID conformance](docs/openid-conformance.md)
 - [Dependency policy](docs/dependencies.md)
 - [Release gates](docs/release-gates.md)
+- [Changelog](CHANGELOG.md)
 - [Roadmap](ROADMAP.md)
 
 ## Security

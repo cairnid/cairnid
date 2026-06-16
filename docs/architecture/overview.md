@@ -4,6 +4,24 @@ Cairn Identity is a monorepo with one Rust API, one SvelteKit web app, and focus
 
 ## Runtime Components
 
+```mermaid
+flowchart LR
+  browser["Browser"]
+  web["apps/web\nSvelteKit adapter-node UI"]
+  api["apps/api\nAxum API and operator CLI"]
+  postgres[("Postgres")]
+  oidcClient["OIDC client"]
+  scimClient["SCIM client"]
+  emailProvider["Command email provider"]
+
+  browser --> web
+  web --> api
+  oidcClient --> api
+  scimClient --> api
+  api --> postgres
+  api --> emailProvider
+```
+
 ```text
 Browser
   -> apps/web  SvelteKit adapter-node UI
@@ -14,6 +32,48 @@ Browser
 The web app is stateless. It serves login, consent, user, and admin screens, then calls the API with cookie credentials and CSRF headers.
 
 The API owns migrations, sessions, OAuth grants, MFA ceremonies, account lifecycle tokens, signing keys, audit events, SCIM provisioning, and operational commands.
+
+## Authorization Code Flow
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Client as OIDC client
+  participant Web as CairnID web
+  participant API as CairnID API
+  participant DB as Postgres
+
+  Client->>API: GET /oauth2/authorize with PKCE
+  API->>Web: Redirect to login or consent
+  User->>Web: Login and approve consent
+  Web->>API: Complete browser session or consent
+  API->>DB: Persist authorization code
+  API->>Client: Redirect with code and state
+  Client->>API: POST /oauth2/token with code verifier
+  API->>DB: Consume code and issue tokens
+  API->>Client: ID token, access token, optional refresh token
+```
+
+## Operational Boundaries
+
+```mermaid
+flowchart TD
+  operator["Operator"]
+  cli["cairn-api operator commands"]
+  runtime["API runtime"]
+  evidence["Release evidence directory"]
+  keys["Signing keys and KEK operations"]
+  audit["Audit export and purge"]
+  restore["Restore checks"]
+
+  operator --> cli
+  cli --> evidence
+  cli --> keys
+  cli --> audit
+  cli --> restore
+  runtime --> keys
+  runtime --> audit
+```
 
 ## Crates
 

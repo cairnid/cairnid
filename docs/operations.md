@@ -2,19 +2,14 @@
 
 This runbook covers the current production operations surface for Cairn Identity: backups, restores, key-encryption-key handling, signing-key rotation, break-glass admin recovery, audit retention/export, and lifecycle email delivery jobs.
 
-## Required Production Secrets
+## Runtime Configuration And Secrets
 
-- `DATABASE_URL`: Postgres connection string.
+Set these for deployed API runtimes. Local development has localhost defaults for the two origin variables, but production operators should set them explicitly.
+
+- `DATABASE_URL`: required Postgres connection string.
 - `CAIRN_ISSUER`: public API/OIDC origin. Production must be HTTPS with no path, query, fragment, or credentials.
 - `CAIRN_PUBLIC_WEB_ORIGIN`: public web origin used for lifecycle action links. Production must be HTTPS with no path, query, fragment, or credentials.
-- `CAIRN_BOOTSTRAP_SETUP_SECRET`: random operator-held setup secret required for first administrator bootstrap in production.
-- `CAIRN_KEY_ENCRYPTION_KEY`: base64url-no-padding 32-byte AES-256-GCM key.
-- `CAIRN_AUDIT_RETENTION_DAYS`: audit rows older than this window are eligible for explicit purge. Defaults to 365 and is bounded between 30 and 3650.
-- `CAIRN_AUDIT_PURGE_BATCH_SIZE`: maximum rows deleted by one `audit purge-expired` run. Defaults to 1000 and is bounded between 1 and 50000.
-- `CAIRN_AUDIT_EXPORT_MAX_ROWS`: maximum rows emitted by one admin audit export page. Defaults to 10000 and is bounded between 1 and 50000.
-- `CAIRN_EMAIL_PROVIDER=command`: production lifecycle email delivery provider.
-- `CAIRN_EMAIL_COMMAND_PATH`: executable that sends rendered email payloads.
-- `CAIRN_SCIM_BEARER_TOKEN_SHA256`: optional 64-character SHA-256 hex digest for the SCIM bearer token when provisioning is enabled; accepts up to four comma-separated hashes during rotation.
+- `CAIRN_KEY_ENCRYPTION_KEY`: base64url-no-padding 32-byte AES-256-GCM key. It is required by Local Docker Compose, database-backed signing-key generation and rotation, and production lifecycle action-link encryption.
 
 Generate a KEK:
 
@@ -23,6 +18,38 @@ cairn-api signing-key generate-kek
 ```
 
 Store the generated value in the platform secret store. Do not commit it, print it in deployment logs, or rotate it without first backing up the database.
+
+## Production Bootstrap And Email Requirements
+
+- `CAIRN_ENV=production`: set for production deployments so production origin, cookie, bootstrap, and email-provider rules apply.
+- `CAIRN_BOOTSTRAP_SETUP_SECRET`: random operator-held setup secret required for first administrator bootstrap when `CAIRN_ENV=production`.
+- `CAIRN_EMAIL_PROVIDER=command`: required before production lifecycle email delivery is marked ready. The provider defaults to `stdout` in development and `disabled` in production; `stdout` is rejected in production.
+- `CAIRN_EMAIL_COMMAND_PATH`: required when `CAIRN_EMAIL_PROVIDER=command`; points to the executable that sends rendered email payloads.
+
+## Optional And Defaulted Operations Settings
+
+- `CAIRN_DEFAULT_ORG_SLUG`: defaults to `default`. Operator commands such as break-glass admin recovery, audit export, audit purge, and restore checks use this slug to resolve the organization.
+- `CAIRN_AUDIT_RETENTION_DAYS`: audit rows older than this window are eligible for explicit purge. Defaults to `365` and is clamped to `30..3650`.
+- `CAIRN_AUDIT_PURGE_BATCH_SIZE`: maximum rows deleted by one `audit purge-expired` run. Defaults to `1000` and is clamped to `1..50000`.
+- `CAIRN_AUDIT_EXPORT_MAX_ROWS`: maximum rows emitted by one admin audit export page. Defaults to `10000` and is clamped to `1..50000`.
+- `CAIRN_EMAIL_BATCH_SIZE`: default `10`, clamped to `1..100`.
+- `CAIRN_EMAIL_MAX_ATTEMPTS`: default `5`, clamped to `1..20`.
+- `CAIRN_EMAIL_RETRY_SECONDS`: default `300`, clamped to `1..86400`.
+- `CAIRN_EMAIL_SENDING_TIMEOUT_SECONDS`: default `900`, clamped to `30..86400`.
+- `CAIRN_TRUSTED_PROXY_IPS`: optional comma-separated exact IP addresses for direct reverse proxy or CDN peers. Leave unset unless the direct peer is trusted to set forwarded IP headers. When the peer matches, the first `X-Forwarded-For` IP, falling back to `X-Real-IP`, becomes the audit and rate-limit client identity; otherwise the socket peer IP is used.
+
+## Optional SCIM Setting
+
+- `CAIRN_SCIM_BEARER_TOKEN_SHA256`: optional 64-character SHA-256 hex digest for the SCIM bearer token when provisioning is enabled; accepts up to four comma-separated hashes during rotation.
+
+## Operator-Only Env Vars
+
+Set these only in the operator shell or job that runs the named command, not as long-lived API runtime settings:
+
+- `CAIRN_BREAK_GLASS_CONFIRM`: one-shot confirmation for `cairn-api admin break-glass-owner`.
+- `CAIRN_OLD_KEY_ENCRYPTION_KEY` and `CAIRN_NEW_KEY_ENCRYPTION_KEY`: KEK rotation inputs for `cairn-api key-encryption rotate`.
+- `CAIRN_OIDC_METADATA_SMOKE_ISSUER`, `CAIRN_BROWSER_ORIGIN_SMOKE_BASE_URL`, `CAIRN_BROWSER_ORIGIN_SMOKE_HOSTILE_ORIGIN`, `CAIRN_SECURITY_HEADERS_API_BASE_URL`, and `CAIRN_SECURITY_HEADERS_WEB_BASE_URL`: smoke-command target overrides.
+- `CAIRN_SCIM_SMOKE_BASE_URL`, `CAIRN_SCIM_BEARER_TOKEN`, `CAIRN_SCIM_SECONDARY_BEARER_TOKEN`, and `CAIRN_SCIM_REJECTED_BEARER_TOKEN`: SCIM smoke inputs. The raw bearer-token values belong only in the command environment used for the smoke run.
 
 ## Operational Preflight
 

@@ -1,0 +1,134 @@
+{
+  "basePath": "/docs",
+  "assets": [
+    {
+      "source": "docs/assets/cairn-wordmark.svg",
+      "output": "assets/cairn-wordmark.svg"
+    },
+    {
+      "source": "deny.toml",
+      "output": "assets/deny.toml"
+    }
+  ],
+  "documents": [
+    {
+      "slug": "index",
+      "title": "Documentation",
+      "section": "Start",
+      "source": "docs/README.md",
+      "description": "Start here for CairnID architecture, API, deployment, operations, and release gates."
+    },
+    {
+      "slug": "architecture",
+      "title": "Architecture",
+      "section": "Start",
+      "source": "docs/architecture/overview.md",
+      "description": "Runtime components, crate boundaries, API modules, storage, and deployment flow."
+    },
+    {
+      "slug": "api",
+      "title": "API",
+      "section": "Reference",
+      "source": "docs/api.md",
+      "description": "Implemented HTTP, OIDC/OAuth, session, admin, MFA, account lifecycle, and SCIM APIs."
+    },
+    {
+      "slug": "deployment",
+      "title": "Deployment",
+      "section": "Operate",
+      "source": "docs/deployment.md",
+      "description": "Local Compose, container runtime, environment variables, and build notes."
+    },
+    {
+      "slug": "operations",
+      "title": "Operations",
+      "section": "Operate",
+      "source": "docs/operations.md",
+      "description": "Preflight, release evidence, backup, restore, key rotation, audit export, and drills."
+    },
+    {
+      "slug": "security",
+      "title": "Security Posture",
+      "section": "Trust",
+      "source": "docs/security.md",
+      "description": "Implemented controls, release evidence, gaps, and private reporting boundaries."
+    },
+    {
+      "slug": "release-gates",
+      "title": "Release Gates",
+      "section": "Trust",
+      "source": "docs/release-gates.md",
+      "description": "Required evidence before CairnID can be recommended for production use."
+    },
+    {
+      "slug": "threat-model",
+      "title": "Threat Model",
+      "section": "Trust",
+      "source": "docs/threat-model.md",
+      "description": "Assets, trust boundaries, controls, invariants, and residual risks."
+    },
+    {
+      "slug": "mfa",
+      "title": "MFA",
+      "section": "Product",
+      "source": "docs/mfa.md",
+      "description": "TOTP, WebAuthn, recovery codes, session elevation, and MFA evidence."
+    },
+    {
+      "slug": "account-lifecycle",
+      "title": "Account Lifecycle",
+      "section": "Product",
+      "source": "docs/account-lifecycle.md",
+      "description": "Invitations, email verification, password recovery, notifications, and outbox delivery."
+    },
+    {
+      "slug": "scim",
+      "title": "SCIM",
+      "section": "Product",
+      "source": "docs/scim.md",
+      "description": "SCIM 2.0 provisioning subset, token rotation, smoke tests, and connector evidence."
+    },
+    {
+      "slug": "openid-conformance",
+      "title": "OpenID Conformance",
+      "section": "Protocol",
+      "source": "docs/openid-conformance.md",
+      "description": "OpenID Foundation conformance preparation and evidence capture."
+    },
+    {
+      "slug": "dependencies",
+      "title": "Dependency Policy",
+      "section": "Trust",
+      "source": "docs/dependencies.md",
+      "description": "Dependency review, audit tooling, evidence receipts, and lockfile policy."
+    },
+    {
+      "slug": "changelog",
+      "title": "Changelog",
+      "section": "Project",
+      "source": "CHANGELOG.md",
+      "description": "Notable changes and release history for CairnID."
+    },
+    {
+      "slug": "security-policy",
+      "title": "Security Policy",
+      "section": "Trust",
+      "source": "SECURITY.md",
+      "description": "Supported versions, vulnerability reporting, triage targets, and disclosure handling."
+    },
+    {
+      "slug": "support",
+      "title": "Support",
+      "section": "Project",
+      "source": "SUPPORT.md",
+      "description": "Support channels for usage questions, bug reports, and security reports."
+    },
+    {
+      "slug": "roadmap",
+      "title": "Roadmap",
+      "section": "Project",
+      "source": "ROADMAP.md",
+      "description": "Planned beta gates, future protocol coverage, and ongoing project constraints."
+    }
+  ]
+}
