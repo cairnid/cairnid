@@ -9,9 +9,12 @@ Participation is covered by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Report vul
 ```powershell
 cargo fmt --all -- --check
 cargo check --workspace --locked
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-bun install
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo deny check
+cargo audit
+bun install --frozen-lockfile
+bun run audit
 bun run check
 bun run check:public-surface
 bun run test

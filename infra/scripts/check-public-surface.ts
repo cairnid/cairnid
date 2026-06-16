@@ -91,6 +91,7 @@ const madeWord = joinText('gener', 'ated');
 const codedMood = joinText('vi', 'be');
 const trackerNameUk = joinText('MODERN', 'ISATION', '_', 'TRACK', 'ER');
 const trackerNameUs = joinText('MODERN', 'IZATION', '_', 'TRACK', 'ER');
+const trackerSuffixPattern = joinText('[^/]*', '_', 'TRACK', 'ER');
 const trackerPhraseUk = joinText('modern', 'isation', ' ', 'track', 'er');
 const trackerPhraseUs = joinText('modern', 'ization', ' ', 'track', 'er');
 const chatTool = joinText('chat', 'gpt');
@@ -112,7 +113,7 @@ const mojibakeMarkers = [
 const pathRules: PathRule[] = [
   {
     name: 'workspace planning file',
-    pattern: new RegExp(`(^|/)(?:${trackerNameUk}|${trackerNameUs}|[^/]*_TRACKER)\\.md$`, 'i'),
+    pattern: new RegExp(`(^|/)(?:${trackerNameUk}|${trackerNameUs}|${trackerSuffixPattern})\\.md$`, 'i'),
   },
   {
     name: 'local note artifact',
