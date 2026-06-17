@@ -9,6 +9,7 @@ Cairn Identity is pre-beta. A release can be recommended for production use only
 | Source hygiene | `bun run check:public-surface` passes | CI-gated |
 | Dependency policy | `cargo deny check`, `cargo audit`, `bun run audit`, and `cairn-api operations dependency-policy-evidence` pass | CI-gated locally; release receipt required |
 | Rust quality | `cargo fmt`, `cargo check`, `cargo test`, and `cargo clippy -D warnings` pass | CI-gated |
+| CLI Windows lifecycle proof | `cargo test -p cairnid --locked` passes on Windows, including binary-level release-evidence manifest, init, incomplete status/check, and failure-redaction coverage | CI-gated |
 | MCP stdio and Windows behavior | `cargo test -p cairnid-mcp --locked` and `cargo clippy -p cairnid-mcp --locked --all-targets -- -D warnings` pass on Windows, including stdio initialize, `tools/list`, and sanitized `tools/call` coverage | CI-gated |
 | Frontend quality | `bun run check`, `bun run test`, `bun run build`, and `bun run test:e2e` pass | CI-gated |
 | Docs export | `bun run docs:site -- --out <temp-dir>` completes without committing generated output | CI-gated |
@@ -28,11 +29,13 @@ Cairn Identity is pre-beta. A release can be recommended for production use only
 
 ## Evidence Workflow
 
+There is not a packaged `cairnid` CLI release yet. From a local checkout, run the current CLI with `cargo run -p cairnid --locked -- <args>` or build it locally with `cargo build -p cairnid --locked` and run the resulting binary from `target`.
+
 ```powershell
-cairnid evidence plan
-cairnid evidence init <evidence-dir>
-cairnid evidence status <evidence-dir>
-cairnid evidence check <evidence-dir>
+cargo run -p cairnid --locked -- evidence plan
+cargo run -p cairnid --locked -- evidence init <evidence-dir>
+cargo run -p cairnid --locked -- evidence status --evidence-dir <evidence-dir>
+cargo run -p cairnid --locked -- evidence check --evidence-dir <evidence-dir>
 ```
 
 `cairnid evidence plan` confirms that required environment variable names are present without printing values. `cairnid evidence init` creates the guarded evidence directory. `cairnid evidence status` shows missing or failed artifacts while evidence is being collected. `cairnid evidence check` is the final local release gate.

@@ -76,11 +76,13 @@ Run preflight after deployment migrations, after signing-key or KEK maintenance,
 
 Release evidence scaffold and check:
 
+There is no packaged `cairnid` CLI release yet. In a local checkout, run it through Cargo or build the local binary first:
+
 ```powershell
-cairnid evidence plan
-cairnid evidence init <evidence-dir>
-cairnid evidence status <evidence-dir>
-cairnid evidence check <evidence-dir>
+cargo run -p cairnid --locked -- evidence plan
+cargo run -p cairnid --locked -- evidence init <evidence-dir>
+cargo run -p cairnid --locked -- evidence status --evidence-dir <evidence-dir>
+cargo run -p cairnid --locked -- evidence check --evidence-dir <evidence-dir>
 ```
 
 Run the plan first to confirm required capture environment variable names are present without printing values. Run the initializer before collecting artifacts so the directory has the generated manifest, checklist README, and `.gitignore` guard for secret-bearing evidence. Run the status command during collection to get counts and next artifact commands, then run the checker after production-like deployed OIDC metadata, OIDF, SCIM, email, restore, key-rotation, break-glass, and audit drill evidence has been collected. It validates scaffold integrity, strict directory inventory, required artifact names, freshness, forbidden secret-bearing field names in token-free artifacts, and passing status without printing secrets, with failure text redacting obvious secret-looking values; the full artifact contract is documented in [operations.md](operations.md).
@@ -94,7 +96,7 @@ cairn-api conformance oidcc-static-config > cairn-oidcc-static.json
 
 Use these against a production-like HTTPS issuer to prepare Config OP and Basic OP suite runs. `cairn-api operations preflight` reports missing `CAIRN_CONFORMANCE_*` variables and whether the issuer is suitable for the suite before the artifact commands are run. The full profile setup is documented in [openid-conformance.md](openid-conformance.md).
 
-CI validates `cairnid evidence` tooling with placeholder environment values. It proves `cairnid evidence plan` does not print values, `cairnid evidence init` writes the expected scaffold, and `cairnid evidence status` reports next actions for an incomplete evidence directory.
+CI validates `cairnid evidence` tooling with placeholder environment values. Linux CI proves `cairnid evidence plan` does not print values, `cairnid evidence init` writes the expected scaffold, and `cairnid evidence status` reports next actions for an incomplete evidence directory. Windows CI runs `cargo test -p cairnid --locked` for the CLI binary contract, including manifest, init, incomplete status/check, and common failure-redaction coverage.
 
 CI also generates the dependency-policy evidence receipt after pinned `cargo-deny`, `cargo-audit`, and Bun audit checks pass. Container checks validate the Compose file, build both production images, run `cairn-api signing-key generate-kek` inside the API image, run `bun --version` inside the web image, and boot the web image long enough to run its `/healthz` probe. Docker Compose waits for Postgres health before starting the API and waits for API health before starting the web service. The image smokes verify Dockerfile buildability and runtime entrypoint dependencies without requiring a live database or external provider.
 

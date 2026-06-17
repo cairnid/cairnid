@@ -64,9 +64,17 @@ enum EvidenceCommand {
     Status {
         #[arg(
             value_name = "EVIDENCE_DIR",
+            required_unless_present = "evidence_dir_option",
+            conflicts_with = "evidence_dir_option",
             help = "Release evidence directory to inspect"
         )]
-        evidence_dir: PathBuf,
+        evidence_dir: Option<PathBuf>,
+        #[arg(
+            long = "evidence-dir",
+            value_name = "EVIDENCE_DIR",
+            help = "Release evidence directory to inspect"
+        )]
+        evidence_dir_option: Option<PathBuf>,
         #[arg(
             long,
             value_name = "DAYS",
@@ -83,9 +91,17 @@ enum EvidenceCommand {
     Check {
         #[arg(
             value_name = "EVIDENCE_DIR",
+            required_unless_present = "evidence_dir_option",
+            conflicts_with = "evidence_dir_option",
             help = "Release evidence directory to validate"
         )]
-        evidence_dir: PathBuf,
+        evidence_dir: Option<PathBuf>,
+        #[arg(
+            long = "evidence-dir",
+            value_name = "EVIDENCE_DIR",
+            help = "Release evidence directory to validate"
+        )]
+        evidence_dir_option: Option<PathBuf>,
         #[arg(
             long,
             value_name = "DAYS",
@@ -125,18 +141,36 @@ fn run_evidence(command: EvidenceCommand) -> Result<(), Box<dyn Error>> {
             force,
         } => {
             let report =
-                init_release_evidence_directory(&evidence_dir, OffsetDateTime::now_utc(), force)?;
+                init_release_evidence_directory(&evidence_dir, OffsetDateTime::now_utc(), force)
+                    .map_err(release_evidence_cli_error)?;
             print_report(&report)
         }
         EvidenceCommand::Status {
             evidence_dir,
+            evidence_dir_option,
             max_age_days,
-        } => run_evidence_status(evidence_dir, max_age_days),
+        } => run_evidence_status(
+            selected_evidence_dir(evidence_dir, evidence_dir_option),
+            max_age_days,
+        ),
         EvidenceCommand::Check {
             evidence_dir,
+            evidence_dir_option,
             max_age_days,
-        } => run_evidence_check(evidence_dir, max_age_days),
+        } => run_evidence_check(
+            selected_evidence_dir(evidence_dir, evidence_dir_option),
+            max_age_days,
+        ),
     }
+}
+
+fn selected_evidence_dir(
+    evidence_dir: Option<PathBuf>,
+    evidence_dir_option: Option<PathBuf>,
+) -> PathBuf {
+    evidence_dir
+        .or(evidence_dir_option)
+        .expect("clap requires an evidence directory")
 }
 
 fn run_evidence_plan() -> Result<(), Box<dyn Error>> {
@@ -204,6 +238,9 @@ fn release_evidence_cli_error(error: ReleaseEvidenceError) -> Box<dyn Error> {
         ReleaseEvidenceError::NotDirectory(_) => {
             user_error("release evidence path is not a directory".to_owned())
         }
+        ReleaseEvidenceError::ExistingScaffoldFile(_) => user_error(
+            "release evidence scaffold file already exists; pass --force to replace it".to_owned(),
+        ),
         error => Box::new(error),
     }
 }
@@ -233,14 +270,41 @@ mod tests {
         let Commands::Evidence { command } = cli.command;
         let EvidenceCommand::Check {
             evidence_dir,
+            evidence_dir_option,
             max_age_days,
         } = command
         else {
             panic!("expected evidence check command");
         };
 
-        assert_eq!(evidence_dir, PathBuf::from("release-evidence"));
+        assert_eq!(evidence_dir, Some(PathBuf::from("release-evidence")));
+        assert_eq!(evidence_dir_option, None);
         assert_eq!(max_age_days, 45);
+    }
+
+    #[test]
+    fn parses_evidence_status_with_evidence_dir_option() {
+        let cli = Cli::parse_from([
+            "cairnid",
+            "evidence",
+            "status",
+            "--evidence-dir",
+            "release-evidence",
+        ]);
+
+        let Commands::Evidence { command } = cli.command;
+        let EvidenceCommand::Status {
+            evidence_dir,
+            evidence_dir_option,
+            max_age_days,
+        } = command
+        else {
+            panic!("expected evidence status command");
+        };
+
+        assert_eq!(evidence_dir, None);
+        assert_eq!(evidence_dir_option, Some(PathBuf::from("release-evidence")));
+        assert_eq!(max_age_days, 30);
     }
 
     #[test]
