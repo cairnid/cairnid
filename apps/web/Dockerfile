@@ -1,6 +1,6 @@
-FROM node:24-bookworm-slim AS node
+FROM node:26-bookworm-slim AS node
 
-FROM oven/bun:1.3.4 AS deps
+FROM oven/bun:1.3.14 AS deps
 WORKDIR /app
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 ENV CAIRN_NODE_PATH=/usr/local/bin/node
@@ -14,7 +14,7 @@ COPY apps/web ./apps/web
 WORKDIR /app/apps/web
 RUN bun run build
 
-FROM oven/bun:1.3.4-slim AS runtime
+FROM oven/bun:1.3.14-slim AS runtime
 WORKDIR /app
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 ENV NODE_ENV=production
