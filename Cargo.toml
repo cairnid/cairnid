@@ -43,7 +43,7 @@ time = { version = "0.3.44", features = ["serde", "serde-well-known", "formattin
 tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread", "signal", "net"] }
 totp-rs = { version = "5.7.1", features = ["otpauth"] }
 tower = "0.5.2"
-tower-http = { version = "0.6.11", features = ["cors", "request-id", "sensitive-headers", "trace", "timeout"] }
+tower-http = { version = "0.7.0", features = ["cors", "request-id", "sensitive-headers", "trace", "timeout"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 url = "2.5.8"
