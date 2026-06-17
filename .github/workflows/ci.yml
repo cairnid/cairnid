@@ -357,13 +357,13 @@ jobs:
                       process.kill()
                       process.wait(timeout=5)
       - name: Upload CI rehearsal CLI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cairnid-cli-ci-rehearsal-${{ matrix.artifact_os }}-${{ github.sha }}
           path: ${{ matrix.cli_binary_path }}
           if-no-files-found: error
       - name: Upload CI rehearsal MCP artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cairnid-mcp-ci-rehearsal-${{ matrix.artifact_os }}-${{ github.sha }}
           path: ${{ matrix.mcp_binary_path }}
