@@ -230,8 +230,7 @@ enum EvidenceDirectoryKind {
 }
 
 fn evidence_directory_input_schema() -> std::sync::Arc<JsonObject> {
-    rmcp::handler::server::common::schema_for_input::<EvidenceDirectoryRequest>()
-        .expect("EvidenceDirectoryRequest must produce a valid MCP input schema")
+    rmcp::handler::server::common::schema_for_type::<EvidenceDirectoryRequest>()
 }
 
 #[tool_router]
