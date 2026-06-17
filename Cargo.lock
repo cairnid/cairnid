@@ -423,7 +423,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "cairn-domain",
- "rand 0.9.4",
+ "rand 0.10.1",
  "secrecy",
  "serde",
  "sha2 0.10.9",
