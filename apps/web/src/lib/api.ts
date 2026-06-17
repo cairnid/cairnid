@@ -212,6 +212,41 @@ export async function api<T>(path: string, schema: z.ZodType<T>, init: RequestIn
   return schema.parse(payload);
 }
 
+export type ApiTextResponse = {
+  body: string;
+  headers: Headers;
+};
+
+export async function apiText(path: string, init: RequestInit = {}): Promise<ApiTextResponse> {
+  const method = init.method?.toUpperCase() ?? 'GET';
+  const headers = new Headers(init.headers);
+
+  if (typeof init.body === 'string' && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (requiresCsrf(method)) {
+    headers.set('X-CAIRN-CSRF', await getCsrfToken());
+  }
+
+  const response = await fetch(`${apiOrigin}${path}`, {
+    credentials: 'include',
+    ...init,
+    headers
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    const message = parseApiErrorMessage(body);
+    throw new Error(message);
+  }
+
+  return {
+    body,
+    headers: response.headers
+  };
+}
+
 export async function apiList<T>(
   path: string,
   itemSchema: z.ZodType<T>,
@@ -253,6 +288,15 @@ function pathWithListParams(path: string, limit: number, cursor: string | null):
   }
   const encoded = params.toString();
   return encoded ? `${pathname}?${encoded}` : pathname;
+}
+
+function parseApiErrorMessage(body: string): string {
+  try {
+    const payload = JSON.parse(body) as { error?: unknown };
+    return typeof payload.error === 'string' ? payload.error : 'Request failed';
+  } catch {
+    return 'Request failed';
+  }
 }
 
 async function getCsrfToken(): Promise<string> {

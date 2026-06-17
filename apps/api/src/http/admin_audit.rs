@@ -78,6 +78,10 @@ fn audit_export_response(page: ListPage<AuditEvent>) -> Result<Response, ApiErro
         header::CONTENT_DISPOSITION,
         HeaderValue::from_static("attachment; filename=\"cairn-audit-events.ndjson\""),
     );
+    headers.insert(
+        header::ACCESS_CONTROL_EXPOSE_HEADERS,
+        HeaderValue::from_static("x-cairn-next-cursor"),
+    );
     if let Some(next_cursor) = page.next_cursor {
         let next_cursor = HeaderValue::from_str(&next_cursor).map_err(|error| {
             tracing::error!(%error, "failed to encode audit event export cursor header");

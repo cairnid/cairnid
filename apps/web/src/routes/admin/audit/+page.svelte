@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { RefreshCw, Search } from '@lucide/svelte';
+  import { Download, RefreshCw, Search } from '@lucide/svelte';
   import Shell from '$lib/components/Shell.svelte';
-  import { apiList, auditEventSchema, type AuditEvent } from '$lib/api';
+  import { apiList, apiText, auditEventSchema, type AuditEvent } from '$lib/api';
 
   type ActorKindFilter = 'all' | 'user' | 'client' | 'system';
+  const MAX_EXPORT_PAGES = 1000;
 
   let events: AuditEvent[] = [];
   let action = '';
@@ -14,12 +15,13 @@
   let from = '';
   let to = '';
   let message = '';
+  let exporting = false;
 
   async function load() {
     events = await apiList(auditPath(), auditEventSchema);
   }
 
-  function auditPath(): string {
+  function auditParams(): URLSearchParams {
     const params = new URLSearchParams();
     const trimmedAction = action.trim();
     const trimmedTarget = target.trim();
@@ -44,8 +46,79 @@
       params.set('to', new Date(to).toISOString());
     }
 
+    return params;
+  }
+
+  function auditPath(pathname = '/api/v1/audit-events', params = auditParams()): string {
     const query = params.toString();
-    return query ? `/api/v1/audit-events?${query}` : '/api/v1/audit-events';
+    return query ? `${pathname}?${query}` : pathname;
+  }
+
+  async function exportNdjson() {
+    exporting = true;
+    message = '';
+
+    try {
+      const params = auditParams();
+      let cursor: string | null = null;
+      let body = '';
+      let rowCount = 0;
+      let pageCount = 0;
+
+      for (let pageIndex = 0; pageIndex < MAX_EXPORT_PAGES; pageIndex += 1) {
+        if (cursor) {
+          params.set('cursor', cursor);
+        } else {
+          params.delete('cursor');
+        }
+
+        const response = await apiText(auditPath('/api/v1/audit-events/export', params), {
+          headers: {
+            Accept: 'application/x-ndjson'
+          }
+        });
+        body = appendNdjson(body, response.body);
+        rowCount += countNdjsonRows(response.body);
+        pageCount = pageIndex + 1;
+
+        cursor = response.headers.get('x-cairn-next-cursor');
+        if (!cursor) {
+          downloadNdjson(body);
+          message = `Exported ${rowCount} audit ${rowCount === 1 ? 'row' : 'rows'} across ${pageCount} ${pageCount === 1 ? 'page' : 'pages'}.`;
+          return;
+        }
+      }
+
+      throw new Error('Too many audit export pages');
+    } catch (error) {
+      message = error instanceof Error ? error.message : 'Audit export failed';
+    } finally {
+      exporting = false;
+    }
+  }
+
+  function downloadNdjson(body: string) {
+    const blob = new Blob([body], { type: 'application/x-ndjson' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `cairn-audit-events-${new Date().toISOString().replace(/[:.]/g, '-')}.ndjson`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function appendNdjson(current: string, next: string): string {
+    if (!current) {
+      return next;
+    }
+    if (!next) {
+      return current;
+    }
+    return current.endsWith('\n') ? `${current}${next}` : `${current}\n${next}`;
+  }
+
+  function countNdjsonRows(body: string): number {
+    return body.split(/\r?\n/).filter((line) => line.length > 0).length;
   }
 
   function actorLabel(event: AuditEvent): string {
@@ -96,10 +169,16 @@
         <input id="audit-to" type="datetime-local" bind:value={to} />
       </div>
     </div>
-    <button class="secondary-button" style="margin-top: 14px;" onclick={load}>
-      <Search size={17} />
-      <span>Apply filters</span>
-    </button>
+    <div class="actions-row">
+      <button class="secondary-button" onclick={load}>
+        <Search size={17} />
+        <span>Apply filters</span>
+      </button>
+      <button class="secondary-button" disabled={exporting} onclick={exportNdjson}>
+        <Download size={17} />
+        <span>{exporting ? 'Exporting...' : 'Export NDJSON'}</span>
+      </button>
+    </div>
   </section>
 
   <section class="panel" style="margin-top: 16px;">
@@ -120,3 +199,12 @@
     </table>
   </section>
 </Shell>
+
+<style>
+  .actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+  }
+</style>

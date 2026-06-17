@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, type Route, test } from '@playwright/test';
 
 const apiOrigin = 'http://localhost:8080';
@@ -857,6 +858,133 @@ test('admin audit page filters events through the list API', async ({ page }) =>
   await expect(page.getByRole('row').filter({ hasText: 'admin.user_created' })).toHaveCount(1);
   await expect(page.getByRole('row').filter({ hasText: 'system.started' })).toHaveCount(0);
   expect(auditListRequests).toBe(2);
+});
+
+test('admin audit page exports filtered NDJSON', async ({ page }) => {
+  const actorId = '11111111-1111-4111-8111-111111111111';
+  let auditListRequests = 0;
+  let auditExportRequests = 0;
+  const exportCursors: Array<string | null> = [];
+
+  await page.route(`${apiOrigin}/**`, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+
+    if (request.method() === 'OPTIONS') {
+      await route.fulfill({
+        headers: corsHeaders,
+        status: 204
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/v1/audit-events' && request.method() === 'GET') {
+      auditListRequests += 1;
+      await fulfillJson(route, { items: [], next_cursor: null });
+      return;
+    }
+
+    if (url.pathname === '/api/v1/audit-events/export' && request.method() === 'GET') {
+      auditExportRequests += 1;
+      const cursor = url.searchParams.get('cursor');
+      exportCursors.push(cursor);
+      expect(request.headers().accept).toContain('application/x-ndjson');
+      expect(url.searchParams.get('action')).toBe('admin.user');
+      expect(url.searchParams.get('target')).toBe('user-2');
+      expect(url.searchParams.get('actor_kind')).toBe('user');
+      expect(url.searchParams.get('actor_id')).toBe(actorId);
+
+      if (!cursor) {
+        await route.fulfill({
+          body:
+            '{"id":"event-1","action":"admin.user_created","target":"user-2"}\n' +
+            '{"id":"event-2","action":"admin.user_updated","target":"user-2"}\n',
+          headers: {
+            ...corsHeaders,
+            'Access-Control-Expose-Headers': 'x-cairn-next-cursor',
+            'Content-Type': 'application/x-ndjson',
+            'x-cairn-next-cursor': 'next-page'
+          },
+          status: 200
+        });
+        return;
+      }
+
+      expect(cursor).toBe('next-page');
+      await route.fulfill({
+        body: '{"id":"event-3","action":"admin.user_deleted","target":"user-2"}\n',
+        headers: {
+          ...corsHeaders,
+          'Access-Control-Expose-Headers': 'x-cairn-next-cursor',
+          'Content-Type': 'application/x-ndjson'
+        },
+        status: 200
+      });
+      return;
+    }
+
+    await route.fulfill({
+      headers: corsHeaders,
+      status: 404
+    });
+  });
+
+  await page.goto('/admin/audit');
+  await page.getByLabel('Action').fill('admin.user');
+  await page.getByLabel('Target').fill('user-2');
+  await page.getByLabel('Actor kind').selectOption('user');
+  await page.getByLabel('Actor ID').fill(actorId);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export NDJSON' }).click();
+  const download = await downloadPromise;
+
+  expect(download.suggestedFilename()).toMatch(/^cairn-audit-events-.*\.ndjson$/);
+  const downloadPath = await download.path();
+  expect(downloadPath).toBeTruthy();
+  const downloadedBody = await readFile(downloadPath!, 'utf8');
+  expect(downloadedBody).toContain('"event-1"');
+  expect(downloadedBody).toContain('"event-2"');
+  expect(downloadedBody).toContain('"event-3"');
+  await expect(page.getByText('Exported 3 audit rows across 2 pages.')).toBeVisible();
+  expect(auditListRequests).toBe(1);
+  expect(auditExportRequests).toBe(2);
+  expect(exportCursors).toEqual([null, 'next-page']);
+});
+
+test('admin audit page displays export API failures', async ({ page }) => {
+  await page.route(`${apiOrigin}/**`, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+
+    if (request.method() === 'OPTIONS') {
+      await route.fulfill({
+        headers: corsHeaders,
+        status: 204
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/v1/audit-events' && request.method() === 'GET') {
+      await fulfillJson(route, { items: [], next_cursor: null });
+      return;
+    }
+
+    if (url.pathname === '/api/v1/audit-events/export' && request.method() === 'GET') {
+      await fulfillJson(route, { error: 'invalid actor_id filter' }, 400);
+      return;
+    }
+
+    await route.fulfill({
+      headers: corsHeaders,
+      status: 404
+    });
+  });
+
+  await page.goto('/admin/audit');
+  await page.getByRole('button', { name: 'Export NDJSON' }).click();
+
+  await expect(page.getByText('invalid actor_id filter')).toBeVisible();
 });
 
 test('account page changes password after inline reauthentication', async ({ page }) => {
