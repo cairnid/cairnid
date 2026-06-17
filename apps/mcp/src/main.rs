@@ -9,8 +9,7 @@ use cairn_operations::{
 };
 use rmcp::{
     Json, ServerHandler, ServiceExt,
-    handler::server::wrapper::Parameters,
-    model::{Implementation, ServerCapabilities, ServerInfo},
+    model::{CallToolResult, Implementation, JsonObject, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
     transport::stdio,
 };
@@ -18,7 +17,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    env, fs,
+    env, fs, io,
     path::{Component, Path, PathBuf},
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -130,6 +129,111 @@ struct McpEvidenceArtifactSummary {
     failure_codes: BTreeMap<String, usize>,
 }
 
+#[derive(Debug, Serialize)]
+struct McpEvidenceErrorEnvelope {
+    error: McpEvidenceErrorBody,
+}
+
+#[derive(Debug, Serialize)]
+struct McpEvidenceErrorBody {
+    code: &'static str,
+    message: &'static str,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct McpEvidenceRequestError {
+    code: &'static str,
+    message: &'static str,
+}
+
+impl McpEvidenceRequestError {
+    const ALLOWLIST_ROOT_UNAVAILABLE: Self = Self::new(
+        "allowlist_root_unavailable",
+        "the evidence allowlist root could not be inspected",
+    );
+    const DRIVE_RELATIVE_OR_ROOT_STYLE_RELATIVE_PATH: Self = Self::new(
+        "drive_relative_or_root_style_relative_path",
+        "evidence_dir must be a relative path without a drive prefix or root prefix, or an absolute path inside the allowlisted evidence root",
+    );
+    const EMPTY_EVIDENCE_DIR: Self = Self::new(
+        "empty_evidence_dir",
+        "evidence_dir must be a non-empty path",
+    );
+    const EVIDENCE_CONTRACT_FAILED: Self = Self::new(
+        "evidence_contract_failed",
+        "release evidence failed the required contract",
+    );
+    const EVIDENCE_READ_FAILED: Self = Self::new(
+        "evidence_read_failed",
+        "release evidence files could not be read",
+    );
+    const INVALID_EVIDENCE_JSON: Self = Self::new(
+        "invalid_evidence_json",
+        "release evidence JSON could not be processed",
+    );
+    const INVALID_EVIDENCE_DIR: Self = Self::new(
+        "invalid_evidence_dir",
+        "evidence_dir must be a string path when provided",
+    );
+    const INVALID_MAX_AGE_DAYS: Self = Self::new(
+        "invalid_max_age_days",
+        "max_age_days must be an integer from 1 through 365",
+    );
+    const MISSING_EVIDENCE_DIR: Self = Self::new(
+        "missing_evidence_dir",
+        "evidence_dir must be an existing directory",
+    );
+    const NON_DIRECTORY_EVIDENCE_DIR: Self = Self::new(
+        "non_directory_evidence_dir",
+        "evidence_dir must be a directory",
+    );
+    const OUTSIDE_ALLOWLISTED_ROOT: Self = Self::new(
+        "outside_allowlisted_root",
+        "evidence_dir must resolve inside the allowlisted evidence root",
+    );
+    const PARENT_TRAVERSAL: Self = Self::new(
+        "parent_traversal",
+        "evidence_dir must not contain parent traversal",
+    );
+    const SYMLINK_ENTRY: Self = Self::new(
+        "symlink_entry",
+        "evidence_dir must not contain symlink entries",
+    );
+    const SYMLINKED_EVIDENCE_DIR: Self = Self::new(
+        "symlinked_evidence_dir",
+        "evidence_dir must not be a symlink",
+    );
+
+    const fn new(code: &'static str, message: &'static str) -> Self {
+        Self { code, message }
+    }
+}
+
+impl From<McpEvidenceRequestError> for CallToolResult {
+    fn from(error: McpEvidenceRequestError) -> Self {
+        let envelope = McpEvidenceErrorEnvelope {
+            error: McpEvidenceErrorBody {
+                code: error.code,
+                message: error.message,
+            },
+        };
+        let value = serde_json::to_value(envelope).expect("MCP evidence error must serialize");
+
+        CallToolResult::structured_error(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EvidenceDirectoryKind {
+    AllowlistRoot,
+    EvidenceDir,
+}
+
+fn evidence_directory_input_schema() -> std::sync::Arc<JsonObject> {
+    rmcp::handler::server::common::schema_for_input::<EvidenceDirectoryRequest>()
+        .expect("EvidenceDirectoryRequest must produce a valid MCP input schema")
+}
+
 #[tool_router]
 impl CairnIdMcpServer {
     #[tool(
@@ -172,6 +276,7 @@ impl CairnIdMcpServer {
     #[tool(
         name = "cairnid.evidence_status",
         description = "Progress/status view for release evidence validation; returns sanitized status counts without changing files.",
+        input_schema = evidence_directory_input_schema(),
         annotations(
             title = "Evidence Status",
             read_only_hint = true,
@@ -182,8 +287,9 @@ impl CairnIdMcpServer {
     )]
     fn evidence_status(
         &self,
-        Parameters(request): Parameters<EvidenceDirectoryRequest>,
-    ) -> Result<Json<McpEvidenceSummary>, String> {
+        arguments: JsonObject,
+    ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
+        let request = parse_evidence_directory_request(arguments)?;
         let root = evidence_allowlist_root()?;
         evidence_status_for_root(&root, request)
     }
@@ -191,6 +297,7 @@ impl CairnIdMcpServer {
     #[tool(
         name = "cairnid.evidence_check",
         description = "Strict final-gate alias for release evidence validation; returns the same sanitized summary shape as evidence_status without changing files.",
+        input_schema = evidence_directory_input_schema(),
         annotations(
             title = "Evidence Check",
             read_only_hint = true,
@@ -201,8 +308,9 @@ impl CairnIdMcpServer {
     )]
     fn evidence_check(
         &self,
-        Parameters(request): Parameters<EvidenceDirectoryRequest>,
-    ) -> Result<Json<McpEvidenceSummary>, String> {
+        arguments: JsonObject,
+    ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
+        let request = parse_evidence_directory_request(arguments)?;
         let root = evidence_allowlist_root()?;
         evidence_check_for_root(&root, request)
     }
@@ -246,21 +354,21 @@ fn init_tracing() {
 fn evidence_status_for_root(
     root: &Path,
     request: EvidenceDirectoryRequest,
-) -> Result<Json<McpEvidenceSummary>, String> {
+) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
     evidence_summary_for_root(root, request)
 }
 
 fn evidence_check_for_root(
     root: &Path,
     request: EvidenceDirectoryRequest,
-) -> Result<Json<McpEvidenceSummary>, String> {
+) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
     evidence_summary_for_root(root, request)
 }
 
 fn evidence_summary_for_root(
     root: &Path,
     request: EvidenceDirectoryRequest,
-) -> Result<Json<McpEvidenceSummary>, String> {
+) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
     let evidence_dir = resolve_evidence_dir_in_root(root, request.evidence_dir.as_deref())?;
     let max_age_days = request
         .max_age_days
@@ -271,65 +379,143 @@ fn evidence_summary_for_root(
     Ok(Json(mcp_evidence_summary(&report)))
 }
 
-fn evidence_allowlist_root() -> Result<PathBuf, String> {
+fn evidence_allowlist_root() -> Result<PathBuf, McpEvidenceRequestError> {
     let current_dir =
-        env::current_dir().map_err(|_| "evidence allowlist root could not be inspected")?;
-    canonical_existing_directory(&current_dir, "evidence allowlist root")
+        env::current_dir().map_err(|_| McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE)?;
+    canonical_existing_directory(&current_dir, EvidenceDirectoryKind::AllowlistRoot)
 }
 
-fn resolve_evidence_dir_in_root(root: &Path, value: Option<&str>) -> Result<PathBuf, String> {
-    let root = canonical_existing_directory(root, "evidence allowlist root")?;
+fn parse_evidence_directory_request(
+    mut arguments: JsonObject,
+) -> Result<EvidenceDirectoryRequest, McpEvidenceRequestError> {
+    let evidence_dir = optional_string_argument(
+        arguments.remove("evidence_dir"),
+        McpEvidenceRequestError::INVALID_EVIDENCE_DIR,
+    )?;
+    let max_age_days = optional_i64_argument(
+        arguments.remove("max_age_days"),
+        McpEvidenceRequestError::INVALID_MAX_AGE_DAYS,
+    )?;
+
+    Ok(EvidenceDirectoryRequest {
+        evidence_dir,
+        max_age_days,
+    })
+}
+
+fn optional_string_argument(
+    value: Option<serde_json::Value>,
+    invalid_error: McpEvidenceRequestError,
+) -> Result<Option<String>, McpEvidenceRequestError> {
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::String(value)) => Ok(Some(value)),
+        Some(_) => Err(invalid_error),
+    }
+}
+
+fn optional_i64_argument(
+    value: Option<serde_json::Value>,
+    invalid_error: McpEvidenceRequestError,
+) -> Result<Option<i64>, McpEvidenceRequestError> {
+    match value {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::Number(value)) => value.as_i64().map(Some).ok_or(invalid_error),
+        Some(_) => Err(invalid_error),
+    }
+}
+
+fn resolve_evidence_dir_in_root(
+    root: &Path,
+    value: Option<&str>,
+) -> Result<PathBuf, McpEvidenceRequestError> {
+    let root = canonical_existing_directory(root, EvidenceDirectoryKind::AllowlistRoot)?;
     let requested = value.unwrap_or(DEFAULT_EVIDENCE_CHILD).trim();
     if requested.is_empty() {
-        return Err("evidence_dir must be a non-empty path".to_owned());
+        return Err(McpEvidenceRequestError::EMPTY_EVIDENCE_DIR);
     }
 
     let requested = Path::new(requested);
     reject_parent_traversal(requested)?;
-    reject_drive_relative_path(requested)?;
+    reject_drive_relative_or_root_style_relative_path(requested)?;
 
     let candidate = if requested.is_absolute() {
         requested.to_path_buf()
     } else {
         root.join(requested)
     };
-    let evidence_dir = canonical_existing_directory(&candidate, "evidence_dir")?;
+    let evidence_dir =
+        canonical_existing_directory(&candidate, EvidenceDirectoryKind::EvidenceDir)?;
 
     if !evidence_dir.starts_with(&root) {
-        return Err("evidence_dir must resolve inside the allowlisted evidence root".to_owned());
+        return Err(McpEvidenceRequestError::OUTSIDE_ALLOWLISTED_ROOT);
     }
 
     reject_symlink_entries(&evidence_dir)?;
     Ok(evidence_dir)
 }
 
-fn canonical_existing_directory(path: &Path, label: &'static str) -> Result<PathBuf, String> {
-    let metadata =
-        fs::symlink_metadata(path).map_err(|_| format!("{label} could not be inspected"))?;
+fn canonical_existing_directory(
+    path: &Path,
+    kind: EvidenceDirectoryKind,
+) -> Result<PathBuf, McpEvidenceRequestError> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error)
+            if kind == EvidenceDirectoryKind::EvidenceDir
+                && error.kind() == io::ErrorKind::NotFound =>
+        {
+            return Err(McpEvidenceRequestError::MISSING_EVIDENCE_DIR);
+        }
+        Err(_) => return Err(directory_inspection_error(kind)),
+    };
 
     if metadata.file_type().is_symlink() {
-        return Err(format!("{label} must not be a symlink"));
+        return Err(directory_symlink_error(kind));
     }
     if !metadata.is_dir() {
-        return Err(format!("{label} must be an existing directory"));
+        return Err(directory_not_directory_error(kind));
     }
 
     path.canonicalize()
-        .map_err(|_| format!("{label} could not be canonicalized"))
+        .map_err(|_| directory_inspection_error(kind))
 }
 
-fn reject_parent_traversal(path: &Path) -> Result<(), String> {
+fn directory_inspection_error(kind: EvidenceDirectoryKind) -> McpEvidenceRequestError {
+    match kind {
+        EvidenceDirectoryKind::AllowlistRoot => McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE,
+        EvidenceDirectoryKind::EvidenceDir => McpEvidenceRequestError::EVIDENCE_READ_FAILED,
+    }
+}
+
+fn directory_symlink_error(kind: EvidenceDirectoryKind) -> McpEvidenceRequestError {
+    match kind {
+        EvidenceDirectoryKind::AllowlistRoot => McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE,
+        EvidenceDirectoryKind::EvidenceDir => McpEvidenceRequestError::SYMLINKED_EVIDENCE_DIR,
+    }
+}
+
+fn directory_not_directory_error(kind: EvidenceDirectoryKind) -> McpEvidenceRequestError {
+    match kind {
+        EvidenceDirectoryKind::AllowlistRoot => McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE,
+        EvidenceDirectoryKind::EvidenceDir => McpEvidenceRequestError::NON_DIRECTORY_EVIDENCE_DIR,
+    }
+}
+
+fn reject_parent_traversal(path: &Path) -> Result<(), McpEvidenceRequestError> {
     if path
         .components()
         .any(|component| matches!(component, Component::ParentDir))
     {
-        return Err("evidence_dir must not contain parent traversal (`..`)".to_owned());
+        return Err(McpEvidenceRequestError::PARENT_TRAVERSAL);
     }
 
     Ok(())
 }
 
-fn reject_drive_relative_path(path: &Path) -> Result<(), String> {
+fn reject_drive_relative_or_root_style_relative_path(
+    path: &Path,
+) -> Result<(), McpEvidenceRequestError> {
     if path.is_absolute() {
         return Ok(());
     }
@@ -338,42 +524,40 @@ fn reject_drive_relative_path(path: &Path) -> Result<(), String> {
         .components()
         .any(|component| matches!(component, Component::Prefix(_) | Component::RootDir))
     {
-        return Err(
-            "evidence_dir must be relative or resolve inside the allowlisted evidence root"
-                .to_owned(),
-        );
+        return Err(McpEvidenceRequestError::DRIVE_RELATIVE_OR_ROOT_STYLE_RELATIVE_PATH);
     }
 
     Ok(())
 }
 
-fn reject_symlink_entries(evidence_dir: &Path) -> Result<(), String> {
-    for entry in fs::read_dir(evidence_dir).map_err(|_| "evidence_dir could not be read")? {
-        let entry = entry.map_err(|_| "evidence_dir entry could not be inspected")?;
+fn reject_symlink_entries(evidence_dir: &Path) -> Result<(), McpEvidenceRequestError> {
+    for entry in
+        fs::read_dir(evidence_dir).map_err(|_| McpEvidenceRequestError::EVIDENCE_READ_FAILED)?
+    {
+        let entry = entry.map_err(|_| McpEvidenceRequestError::EVIDENCE_READ_FAILED)?;
         let file_type = entry
             .file_type()
-            .map_err(|_| "evidence_dir entry could not be inspected")?;
+            .map_err(|_| McpEvidenceRequestError::EVIDENCE_READ_FAILED)?;
 
         if file_type.is_symlink() {
-            return Err("evidence_dir must not contain symlink entries".to_owned());
+            return Err(McpEvidenceRequestError::SYMLINK_ENTRY);
         }
     }
 
     Ok(())
 }
 
-fn mcp_release_evidence_error(error: ReleaseEvidenceError) -> String {
+fn mcp_release_evidence_error(error: ReleaseEvidenceError) -> McpEvidenceRequestError {
     match error {
-        ReleaseEvidenceError::InvalidMaxAge => "max_age_days must be between 1 and 365".to_owned(),
+        ReleaseEvidenceError::InvalidMaxAge => McpEvidenceRequestError::INVALID_MAX_AGE_DAYS,
         ReleaseEvidenceError::NotDirectory(_) => {
-            "evidence_dir must be an existing directory inside the allowlisted evidence root"
-                .to_owned()
+            McpEvidenceRequestError::NON_DIRECTORY_EVIDENCE_DIR
         }
         ReleaseEvidenceError::ExistingScaffoldFile(_) => {
-            "release evidence scaffold already exists".to_owned()
+            McpEvidenceRequestError::EVIDENCE_CONTRACT_FAILED
         }
-        ReleaseEvidenceError::Json(_) => "release evidence JSON could not be serialized".to_owned(),
-        ReleaseEvidenceError::Io(_) => "release evidence files could not be read".to_owned(),
+        ReleaseEvidenceError::Json(_) => McpEvidenceRequestError::INVALID_EVIDENCE_JSON,
+        ReleaseEvidenceError::Io(_) => McpEvidenceRequestError::EVIDENCE_READ_FAILED,
     }
 }
 

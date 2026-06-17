@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
 
 use cairn_operations::{
-    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, check_release_evidence, init_release_evidence_directory,
-    release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
+    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseEvidenceError, check_release_evidence,
+    init_release_evidence_directory, release_evidence_capture_plan, release_evidence_manifest,
+    release_evidence_status_report,
 };
 use clap::{Parser, Subcommand};
 use std::{env, error::Error, io, path::PathBuf, process::ExitCode};
@@ -11,6 +12,9 @@ use time::OffsetDateTime;
 #[derive(Debug, Parser)]
 #[command(name = "cairnid", version, about = "CairnID operator CLI", long_about = None)]
 #[command(propagate_version = true)]
+#[command(
+    after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence check release-evidence"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -18,6 +22,10 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    #[command(
+        about = "Plan, initialize, inspect, and check release evidence",
+        after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence init release-evidence\n  cairnid evidence check release-evidence --max-age-days 30"
+    )]
     Evidence {
         #[command(subcommand)]
         command: EvidenceCommand,
@@ -26,21 +34,65 @@ enum Commands {
 
 #[derive(Debug, Subcommand)]
 enum EvidenceCommand {
+    #[command(
+        about = "Print the release evidence capture plan as JSON",
+        after_help = "Examples:\n  cairnid evidence plan"
+    )]
     Plan,
+    #[command(
+        about = "Print the release evidence manifest contract as JSON",
+        after_help = "Examples:\n  cairnid evidence manifest"
+    )]
     Manifest,
+    #[command(
+        about = "Create a release evidence scaffold directory",
+        after_help = "Examples:\n  cairnid evidence init release-evidence\n  cairnid evidence init release-evidence --force"
+    )]
     Init {
+        #[arg(
+            value_name = "EVIDENCE_DIR",
+            help = "Release evidence directory to create"
+        )]
         evidence_dir: PathBuf,
-        #[arg(long)]
+        #[arg(long, help = "Replace existing generated scaffold files")]
         force: bool,
     },
+    #[command(
+        about = "Summarize release evidence readiness as JSON",
+        after_help = "Examples:\n  cairnid evidence status release-evidence\n  cairnid evidence status release-evidence --max-age-days 14"
+    )]
     Status {
+        #[arg(
+            value_name = "EVIDENCE_DIR",
+            help = "Release evidence directory to inspect"
+        )]
         evidence_dir: PathBuf,
-        #[arg(long, default_value_t = DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS)]
+        #[arg(
+            long,
+            value_name = "DAYS",
+            default_value_t = DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS,
+            value_parser = clap::value_parser!(i64).range(1..=365),
+            help = "Maximum artifact age in days"
+        )]
         max_age_days: i64,
     },
+    #[command(
+        about = "Validate release evidence artifacts and print the full JSON report",
+        after_help = "Examples:\n  cairnid evidence check release-evidence\n  cairnid evidence check release-evidence --max-age-days 7"
+    )]
     Check {
+        #[arg(
+            value_name = "EVIDENCE_DIR",
+            help = "Release evidence directory to validate"
+        )]
         evidence_dir: PathBuf,
-        #[arg(long, default_value_t = DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS)]
+        #[arg(
+            long,
+            value_name = "DAYS",
+            default_value_t = DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS,
+            value_parser = clap::value_parser!(i64).range(1..=365),
+            help = "Maximum artifact age in days"
+        )]
         max_age_days: i64,
     },
 }
@@ -107,7 +159,8 @@ fn run_evidence_plan() -> Result<(), Box<dyn Error>> {
 
 fn run_evidence_status(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), Box<dyn Error>> {
     let report =
-        release_evidence_status_report(&evidence_dir, OffsetDateTime::now_utc(), max_age_days)?;
+        release_evidence_status_report(&evidence_dir, OffsetDateTime::now_utc(), max_age_days)
+            .map_err(release_evidence_cli_error)?;
     let ready = report.failures.is_empty();
     print_report(&report)?;
 
@@ -122,7 +175,8 @@ fn run_evidence_status(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), B
 }
 
 fn run_evidence_check(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), Box<dyn Error>> {
-    let report = check_release_evidence(&evidence_dir, OffsetDateTime::now_utc(), max_age_days)?;
+    let report = check_release_evidence(&evidence_dir, OffsetDateTime::now_utc(), max_age_days)
+        .map_err(release_evidence_cli_error)?;
     let ready = report.failures.is_empty();
     print_report(&report)?;
 
@@ -143,6 +197,15 @@ fn print_report<T: serde::Serialize>(report: &T) -> Result<(), Box<dyn Error>> {
 
 fn user_error(message: String) -> Box<dyn Error> {
     Box::new(io::Error::new(io::ErrorKind::InvalidInput, message))
+}
+
+fn release_evidence_cli_error(error: ReleaseEvidenceError) -> Box<dyn Error> {
+    match error {
+        ReleaseEvidenceError::NotDirectory(_) => {
+            user_error("release evidence path is not a directory".to_owned())
+        }
+        error => Box::new(error),
+    }
 }
 
 #[cfg(test)]
@@ -200,5 +263,31 @@ mod tests {
     #[test]
     fn rejects_missing_evidence_dir() {
         assert!(Cli::try_parse_from(["cairnid", "evidence", "check"]).is_err());
+    }
+
+    #[test]
+    fn rejects_max_age_days_outside_cli_range() {
+        assert!(
+            Cli::try_parse_from([
+                "cairnid",
+                "evidence",
+                "check",
+                "release-evidence",
+                "--max-age-days",
+                "0",
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "cairnid",
+                "evidence",
+                "check",
+                "release-evidence",
+                "--max-age-days",
+                "366",
+            ])
+            .is_err()
+        );
     }
 }

@@ -23,3 +23,37 @@ Available tools:
 Relative paths are resolved under the process working directory. Absolute paths are accepted only when their canonical path remains under that allowlisted root. Parent traversal with `..`, drive-relative paths, symlinked evidence directories, and symlink entries are rejected before the server calls the evidence checker.
 
 `evidence_status` and `evidence_check` do not return validator failure text, artifact JSON, resource links, logs, standard streams, or provider exports. Their MCP responses contain stable statuses, artifact names, file names, commands, check counts, failure counts, and failure-code counts. The server does not expose the scaffold initializer or any other write-capable release-evidence operation.
+
+## Evidence tool errors
+
+Request-level failures from `cairnid.evidence_status` and `cairnid.evidence_check` are returned as MCP tool results, not JSON-RPC protocol errors. The result has `isError: true`, and `structuredContent` contains this stable envelope:
+
+```json
+{
+  "error": {
+    "code": "empty_evidence_dir",
+    "message": "evidence_dir must be a non-empty path"
+  }
+}
+```
+
+The text content mirrors the same JSON envelope for clients that only display content text.
+
+Stable request error codes:
+
+- `invalid_evidence_dir`: `evidence_dir` is present but is not a string path.
+- `invalid_max_age_days`: `max_age_days` is present but is not an integer, or is outside 1 through 365.
+- `empty_evidence_dir`: `evidence_dir` is empty or whitespace.
+- `parent_traversal`: `evidence_dir` contains `..`.
+- `drive_relative_or_root_style_relative_path`: `evidence_dir` is a drive-relative path such as `C:release-evidence`, or a rooted relative path such as `\release-evidence`.
+- `outside_allowlisted_root`: the canonical evidence path resolves outside the process working directory.
+- `symlinked_evidence_dir`: the evidence directory itself is a symlink.
+- `symlink_entry`: an entry inside the evidence directory is a symlink.
+- `missing_evidence_dir`: the requested evidence directory does not exist.
+- `non_directory_evidence_dir`: the requested evidence path exists but is not a directory.
+- `evidence_read_failed`: the server could not inspect or read the evidence directory or scaffold files.
+- `invalid_evidence_json`: the operations validator returned a hard JSON processing error.
+- `evidence_contract_failed`: the operations validator returned a hard contract error.
+- `allowlist_root_unavailable`: the process working directory could not be inspected as the allowlisted root.
+
+Evidence validation failures that can be represented safely are not tool errors. For example, an invalid artifact JSON file returns `isError: false`, `status: "incomplete"`, and stable `failure_codes` such as `invalid_json`, `invalid_json_root`, `contract_mismatch`, `scaffold_contract`, `read_error`, or `symlink_entry`.

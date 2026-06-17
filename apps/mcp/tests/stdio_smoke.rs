@@ -2,7 +2,7 @@ use cairn_operations::init_release_evidence_directory;
 use serde_json::{Value, json};
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStderr, ChildStdin, Command, Stdio},
     sync::{Arc, Mutex, mpsc},
@@ -155,6 +155,143 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
     remove_temp_root(root);
 }
 
+#[test]
+fn stdio_evidence_status_returns_stable_tool_error_envelopes() {
+    let root = temp_root("stdio-errors");
+    let default_evidence_dir = root.join(DEFAULT_EVIDENCE_CHILD);
+    fs::create_dir_all(&default_evidence_dir).expect("create default evidence dir");
+    fs::write(root.join("not-directory"), "not a directory").expect("write non-directory");
+    let outside = temp_root("stdio-outside");
+    let symlink_entry_evidence_dir = root.join("symlink-entry-evidence");
+    fs::create_dir_all(&symlink_entry_evidence_dir).expect("create symlink evidence dir");
+    let symlink_target = root.join("symlink-target.json");
+    let symlink_link = symlink_entry_evidence_dir.join("operations-preflight.json");
+    fs::write(&symlink_target, "{}").expect("write symlink target");
+    let symlink_entry_supported = match create_file_symlink(&symlink_target, &symlink_link) {
+        Ok(()) => true,
+        Err(error) if symlink_unavailable(&error) => false,
+        Err(error) => panic!("create file symlink: {error}"),
+    };
+
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let mut cases = vec![
+        (json!({"evidence_dir": 123}), "invalid_evidence_dir"),
+        (json!({"evidence_dir": ""}), "empty_evidence_dir"),
+        (
+            json!({"evidence_dir": "../release-evidence"}),
+            "parent_traversal",
+        ),
+        (
+            json!({"evidence_dir": outside.to_string_lossy().to_string()}),
+            "outside_allowlisted_root",
+        ),
+        (
+            json!({"evidence_dir": "missing-evidence"}),
+            "missing_evidence_dir",
+        ),
+        (
+            json!({"evidence_dir": "not-directory"}),
+            "non_directory_evidence_dir",
+        ),
+        (
+            json!({"evidence_dir": DEFAULT_EVIDENCE_CHILD, "max_age_days": 0}),
+            "invalid_max_age_days",
+        ),
+        (
+            json!({"evidence_dir": DEFAULT_EVIDENCE_CHILD, "max_age_days": "0"}),
+            "invalid_max_age_days",
+        ),
+    ];
+
+    if symlink_entry_supported {
+        cases.push((
+            json!({"evidence_dir": "symlink-entry-evidence"}),
+            "symlink_entry",
+        ));
+    }
+
+    #[cfg(windows)]
+    {
+        cases.push((
+            json!({"evidence_dir": "C:release-evidence"}),
+            "drive_relative_or_root_style_relative_path",
+        ));
+        cases.push((
+            json!({"evidence_dir": "\\release-evidence"}),
+            "drive_relative_or_root_style_relative_path",
+        ));
+    }
+
+    let mut request_id = 2;
+    for (arguments, expected_code) in cases {
+        let result = call_evidence_status(&mut server, request_id, arguments);
+        assert_tool_error_code(&result, expected_code);
+        request_id += 1;
+    }
+
+    let result = call_evidence_check(&mut server, request_id, json!({"evidence_dir": 123}));
+    assert_tool_error_code(&result, "invalid_evidence_dir");
+
+    drop(server);
+    remove_temp_root(outside);
+    remove_temp_root(root);
+}
+
+#[test]
+fn stdio_invalid_evidence_json_remains_sanitized_validation_summary() {
+    let root = temp_root("stdio-invalid-json");
+    let evidence_dir = root.join(DEFAULT_EVIDENCE_CHILD);
+    init_release_evidence_directory(&evidence_dir, OffsetDateTime::now_utc(), false)
+        .expect("initialize evidence directory");
+    fs::write(
+        evidence_dir.join("dependency-policy-check.json"),
+        "{not json",
+    )
+    .expect("write invalid JSON artifact");
+
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let status = call_evidence_status(
+        &mut server,
+        2,
+        json!({
+            "evidence_dir": DEFAULT_EVIDENCE_CHILD
+        }),
+    );
+
+    assert_eq!(status["isError"].as_bool(), Some(false));
+    let structured = status["structuredContent"]
+        .as_object()
+        .expect("structured evidence status");
+    assert_allowed_keys(
+        "structured evidence status",
+        structured,
+        EVIDENCE_SUMMARY_KEYS,
+    );
+    assert_eq!(
+        structured.get("status").and_then(Value::as_str),
+        Some("incomplete")
+    );
+    assert_eq!(
+        structured
+            .get("failure_codes")
+            .and_then(Value::as_object)
+            .and_then(|codes| codes.get("invalid_json"))
+            .and_then(Value::as_u64),
+        Some(1)
+    );
+    assert!(
+        !status.to_string().contains("{not json"),
+        "MCP response exposed raw invalid artifact content: {status}"
+    );
+
+    drop(server);
+    remove_temp_root(root);
+}
+
 fn write_unsafe_artifact_shape(evidence_dir: &Path) {
     let artifact = json!({
         "status": "ok",
@@ -200,6 +337,94 @@ fn assert_allowed_keys(
     expected.sort_unstable();
 
     assert_eq!(actual, expected, "{context} keys changed");
+}
+
+fn initialize_mcp(server: &mut McpProcess) {
+    let initialize = server.request(
+        1,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "cairnid-mcp-stdio-smoke",
+                    "version": "0.0.0"
+                }
+            }
+        }),
+    );
+    assert_eq!(
+        initialize["serverInfo"]["name"].as_str(),
+        Some("cairnid-mcp")
+    );
+
+    server.notify(json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    }));
+}
+
+fn call_evidence_status(server: &mut McpProcess, id: u64, arguments: Value) -> Value {
+    call_evidence_tool(server, id, "cairnid.evidence_status", arguments)
+}
+
+fn call_evidence_check(server: &mut McpProcess, id: u64, arguments: Value) -> Value {
+    call_evidence_tool(server, id, "cairnid.evidence_check", arguments)
+}
+
+fn call_evidence_tool(
+    server: &mut McpProcess,
+    id: u64,
+    name: &'static str,
+    arguments: Value,
+) -> Value {
+    server.request(
+        id,
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": {
+                "name": name,
+                "arguments": arguments
+            }
+        }),
+    )
+}
+
+fn assert_tool_error_code(result: &Value, expected_code: &str) {
+    assert_eq!(result["isError"].as_bool(), Some(true));
+    let structured = result["structuredContent"]
+        .as_object()
+        .expect("structured tool error");
+    let error = structured
+        .get("error")
+        .and_then(Value::as_object)
+        .expect("structured error body");
+
+    assert_eq!(
+        error.get("code").and_then(Value::as_str),
+        Some(expected_code)
+    );
+    assert!(
+        error
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| !message.is_empty()),
+        "tool error message should be present: {result}"
+    );
+
+    let text = result["content"]
+        .as_array()
+        .and_then(|content| content.first())
+        .and_then(|content| content.get("text"))
+        .and_then(Value::as_str)
+        .expect("tool error text content");
+    let text_json = serde_json::from_str::<Value>(text).expect("tool error text is JSON");
+    assert_eq!(text_json, result["structuredContent"]);
 }
 
 struct McpProcess {
@@ -347,4 +572,24 @@ fn temp_root(name: &str) -> PathBuf {
 
 fn remove_temp_root(root: PathBuf) {
     let _remove_result = fs::remove_dir_all(root);
+}
+
+#[cfg(unix)]
+fn create_file_symlink(target: &Path, link: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn create_file_symlink(target: &Path, link: &Path) -> io::Result<()> {
+    std::os::windows::fs::symlink_file(target, link)
+}
+
+#[cfg(unix)]
+fn symlink_unavailable(_error: &io::Error) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn symlink_unavailable(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(1314)
 }
