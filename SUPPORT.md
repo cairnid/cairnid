@@ -4,7 +4,7 @@ Cairn Identity is an open-source project in pre-beta development. Support channe
 
 ## Questions and Usage
 
-Use GitHub Discussions when they are enabled. If Discussions are not enabled yet, open a question issue with:
+Open a repository issue for questions and usage reports. GitHub Discussions are not enabled for this repository. Include:
 
 - The version or commit you are running.
 - Deployment target: local, Docker Compose, Kubernetes, or another container environment.
@@ -19,4 +19,4 @@ Use the bug report issue template. Include reproduction steps, relevant logs wit
 
 ## Security
 
-Do not open public issues for vulnerabilities. Follow [SECURITY.md](SECURITY.md).
+Do not open public issues for vulnerabilities. Use GitHub private vulnerability reporting as described in [SECURITY.md](SECURITY.md).

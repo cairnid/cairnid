@@ -20,6 +20,6 @@ Cairn Identity is security-sensitive infrastructure. Project spaces should stay 
 
 ## Reporting
 
-For conduct concerns, contact the repository owner privately. For vulnerabilities, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
+For conduct concerns that can be handled without sharing private information, credentials, exploit details, or sensitive operational data, open a repository issue. For vulnerabilities, use GitHub private vulnerability reporting in [SECURITY.md](SECURITY.md) instead of opening a public issue.
 
 Maintainers may remove comments, close issues or pull requests, limit participation, or block accounts when behavior puts the project or community at risk.

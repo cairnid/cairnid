@@ -25,7 +25,7 @@ Out of scope:
 
 Do not create a public GitHub issue for a suspected vulnerability.
 
-Send a private report to the repository owner or through GitHub private vulnerability reporting when enabled. Include:
+Use GitHub private vulnerability reporting for this repository: https://github.com/cairnid/cairnid/security/advisories/new. Include:
 
 - Affected component.
 - Reproduction steps.
