@@ -13,13 +13,645 @@ use axum::{
     http::{Method, StatusCode, header},
 };
 use cairn_authn::hash_token;
+use cairn_database::Database;
 use cairn_domain::{
-    AuthorizationCode, ConsentGrantMode, ConsentPolicyTemplate, Membership, MembershipRole,
-    OidcClient, OidcClientStatus, OidcGrantType, RedirectUri, User,
+    AuditActorKind, AuthorizationCode, ConsentGrantMode, ConsentPolicyTemplate, Membership,
+    MembershipRole, OidcClient, OidcClientStatus, OidcGrantType, Organization, RedirectUri, User,
 };
 use serde_json::json;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
+
+struct AdminOidcClientTestContext {
+    database: Database,
+    state: AppState,
+    organization: Organization,
+    admin_user: User,
+    admin_session_id: Uuid,
+    now: OffsetDateTime,
+}
+
+async fn setup_admin_oidc_client_test(
+    slug_prefix: &str,
+) -> Result<Option<AdminOidcClientTestContext>, Box<dyn std::error::Error>> {
+    let Some(database) = api_test_database().await? else {
+        return Ok(None);
+    };
+    let now = OffsetDateTime::now_utc();
+    let organization = Organization::new(
+        format!("{slug_prefix}-{}", Uuid::new_v4()),
+        "API OIDC Client Test",
+    )?;
+    database.create_organization(&organization).await?;
+
+    let admin_group = bootstrap_admin_group(organization.id, now);
+    database.create_group(&admin_group).await?;
+    let admin_user = User::new(
+        organization.id,
+        format!("{slug_prefix}-admin-{}@example.com", Uuid::new_v4()),
+        "OIDC Client Admin",
+    )?;
+    database.create_user(&admin_user, None).await?;
+    database
+        .create_membership(&Membership {
+            organization_id: organization.id,
+            user_id: admin_user.id,
+            group_id: admin_group.id,
+            role: MembershipRole::Owner,
+            created_at: now,
+        })
+        .await?;
+
+    let admin_session = test_mfa_session(organization.id, admin_user.id, now);
+    database.create_auth_session(&admin_session).await?;
+    let state = AppState {
+        database: database.clone(),
+        organization_id: organization.id,
+        config: test_config(cairn_domain::Environment::Development),
+    };
+
+    Ok(Some(AdminOidcClientTestContext {
+        database,
+        state,
+        organization,
+        admin_user,
+        admin_session_id: admin_session.id,
+        now,
+    }))
+}
+
+#[tokio::test]
+async fn admin_client_detail_returns_sanitized_organization_owned_client()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(context) = setup_admin_oidc_client_test("api-client-detail").await? else {
+        return Ok(());
+    };
+    let other_organization = Organization::new(
+        format!("api-client-detail-other-{}", Uuid::new_v4()),
+        "API Client Detail Other",
+    )?;
+    context
+        .database
+        .create_organization(&other_organization)
+        .await?;
+    let client = OidcClient {
+        id: Uuid::new_v4(),
+        organization_id: context.organization.id,
+        client_id: format!("detail-client-{}", Uuid::new_v4()),
+        client_secret_hash: Some(hash_token("stored-detail-secret")),
+        consent_policy_template_id: None,
+        name: "Detail Client".to_owned(),
+        redirect_uris: vec![RedirectUri::parse("http://localhost:3000/callback")?],
+        post_logout_redirect_uris: vec![RedirectUri::parse("http://localhost:3000/signed-out")?],
+        allowed_scopes: vec!["openid".to_owned(), "email".to_owned()],
+        grant_types: vec![
+            OidcGrantType::AuthorizationCode,
+            OidcGrantType::RefreshToken,
+            OidcGrantType::ClientCredentials,
+        ],
+        public_client: false,
+        require_pkce: true,
+        status: OidcClientStatus::Active,
+        created_at: context.now,
+    };
+    let foreign_client = OidcClient {
+        id: Uuid::new_v4(),
+        organization_id: other_organization.id,
+        client_id: format!("detail-foreign-client-{}", Uuid::new_v4()),
+        client_secret_hash: None,
+        consent_policy_template_id: None,
+        name: "Foreign Detail Client".to_owned(),
+        redirect_uris: vec![RedirectUri::parse("http://localhost:3000/callback")?],
+        post_logout_redirect_uris: vec![],
+        allowed_scopes: vec!["openid".to_owned()],
+        grant_types: vec![OidcGrantType::AuthorizationCode],
+        public_client: true,
+        require_pkce: true,
+        status: OidcClientStatus::Active,
+        created_at: context.now,
+    };
+    context.database.create_oidc_client(&client).await?;
+    context.database.create_oidc_client(&foreign_client).await?;
+    let router = build_router(context.state);
+
+    let detail_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/v1/oidc/clients/{}", client.id))
+                .header(
+                    header::COOKIE,
+                    session_cookie(context.admin_session_id, None),
+                )
+                .body(axum::body::Body::empty())?,
+        )
+        .await?;
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_payload = response_json(detail_response).await?;
+    assert_eq!(detail_payload["id"], client.id.to_string());
+    assert_eq!(detail_payload["client_id"], client.client_id);
+    assert_eq!(detail_payload["name"], "Detail Client");
+    assert_eq!(detail_payload["has_client_secret"], json!(true));
+    assert!(detail_payload.get("client_secret_hash").is_none());
+    assert!(detail_payload.get("client_secret").is_none());
+
+    for unknown_client_id in [foreign_client.id, Uuid::new_v4()] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(format!("/api/v1/oidc/clients/{unknown_client_id}"))
+                    .header(
+                        header::COOKIE,
+                        session_cookie(context.admin_session_id, None),
+                    )
+                    .body(axum::body::Body::empty())?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            response_json(response).await?,
+            json!({ "error": "client not found" })
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn admin_client_update_replaces_editable_fields_and_audits()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(context) = setup_admin_oidc_client_test("api-client-update").await? else {
+        return Ok(());
+    };
+    let template = ConsentPolicyTemplate {
+        id: Uuid::new_v4(),
+        organization_id: context.organization.id,
+        slug: format!("client-update-template-{}", Uuid::new_v4()),
+        name: "Client Update Template".to_owned(),
+        grant_mode: ConsentGrantMode::AlwaysRequired,
+        created_at: context.now,
+    };
+    context
+        .database
+        .create_consent_policy_template(&template)
+        .await?;
+    let old_secret_hash = hash_token("immutable-client-secret");
+    let client = OidcClient {
+        id: Uuid::new_v4(),
+        organization_id: context.organization.id,
+        client_id: format!("update-client-{}", Uuid::new_v4()),
+        client_secret_hash: Some(old_secret_hash.clone()),
+        consent_policy_template_id: None,
+        name: "Original Client".to_owned(),
+        redirect_uris: vec![RedirectUri::parse("http://localhost:3000/callback")?],
+        post_logout_redirect_uris: vec![],
+        allowed_scopes: vec!["openid".to_owned(), "profile".to_owned()],
+        grant_types: vec![
+            OidcGrantType::AuthorizationCode,
+            OidcGrantType::RefreshToken,
+            OidcGrantType::ClientCredentials,
+        ],
+        public_client: false,
+        require_pkce: true,
+        status: OidcClientStatus::Active,
+        created_at: context.now,
+    };
+    context.database.create_oidc_client(&client).await?;
+    let payload = json!({
+        "name": "Updated Client",
+        "redirect_uris": ["http://localhost:3001/callback"],
+        "post_logout_redirect_uris": ["http://localhost:3001/signed-out"],
+        "allowed_scopes": ["openid", "email", "groups"],
+        "consent_policy_template_id": template.id,
+        "client_id": "must-not-change",
+        "public_client": true,
+        "grant_types": ["authorization_code"],
+        "require_pkce": false,
+        "status": "disabled",
+        "client_secret_hash": null
+    });
+    let router = build_router(context.state.clone());
+    let csrf = TEST_CSRF_TOKEN;
+
+    let update_response = router
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/v1/oidc/clients/{}", client.id))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::COOKIE,
+                    session_cookie(context.admin_session_id, Some(csrf)),
+                )
+                .header(CSRF_HEADER, csrf)
+                .body(axum::body::Body::from(payload.to_string()))?,
+        )
+        .await?;
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let update_payload = response_json(update_response).await?;
+    assert_eq!(update_payload["client"]["id"], client.id.to_string());
+    assert_eq!(update_payload["client"]["client_id"], client.client_id);
+    assert_eq!(update_payload["client"]["name"], "Updated Client");
+    assert_eq!(
+        update_payload["client"]["consent_policy_template_id"],
+        template.id.to_string()
+    );
+    assert_eq!(
+        update_payload["client"]["redirect_uris"][0]["value"],
+        "http://localhost:3001/callback"
+    );
+    assert_eq!(
+        update_payload["client"]["post_logout_redirect_uris"][0]["value"],
+        "http://localhost:3001/signed-out"
+    );
+    assert_eq!(
+        update_payload["client"]["allowed_scopes"],
+        json!(["openid", "email", "groups"])
+    );
+    assert_eq!(update_payload["client"]["public_client"], json!(false));
+    assert_eq!(update_payload["client"]["require_pkce"], json!(true));
+    assert_eq!(update_payload["client"]["status"], json!("active"));
+    assert_eq!(update_payload["client"]["has_client_secret"], json!(true));
+    assert!(update_payload["client"].get("client_secret_hash").is_none());
+    assert!(update_payload["client"].get("client_secret").is_none());
+    assert_eq!(update_payload["authorization_codes_invalidated"], json!(0));
+    assert_eq!(update_payload["access_tokens_revoked"], json!(0));
+    assert_eq!(update_payload["refresh_tokens_revoked"], json!(0));
+
+    let stored_client = context
+        .database
+        .get_oidc_client(client.id)
+        .await?
+        .expect("updated client exists");
+    assert_eq!(stored_client.client_id, client.client_id);
+    assert_eq!(stored_client.client_secret_hash, Some(old_secret_hash));
+    assert!(!stored_client.public_client);
+    assert!(stored_client.require_pkce);
+    assert_eq!(stored_client.grant_types, client.grant_types);
+    assert_eq!(stored_client.status, OidcClientStatus::Active);
+
+    let events = context
+        .database
+        .list_audit_events(context.organization.id, 10)
+        .await?;
+    let event = events
+        .iter()
+        .find(|event| event.action == "admin.client_updated")
+        .expect("client update audit event");
+    assert_eq!(event.actor_kind, AuditActorKind::User);
+    assert_eq!(event.actor_id, Some(context.admin_user.id));
+    assert_eq!(event.target, client.id.to_string());
+    assert_eq!(event.metadata["client_id"], json!(client.client_id));
+    assert_eq!(
+        event.metadata["changed_fields"],
+        json!([
+            "name",
+            "redirect_uris",
+            "post_logout_redirect_uris",
+            "allowed_scopes",
+            "consent_policy_template_id"
+        ])
+    );
+    assert_eq!(event.metadata["authorization_codes_invalidated"], json!(0));
+    assert_eq!(event.metadata["access_tokens_revoked"], json!(0));
+    assert!(event.metadata.get("client_secret_hash").is_none());
+    assert!(event.metadata.get("client_secret").is_none());
+    assert!(
+        !event
+            .metadata
+            .to_string()
+            .contains("immutable-client-secret")
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn admin_client_update_scope_change_revokes_runtime_credentials_and_invalidates_codes()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(context) = setup_admin_oidc_client_test("api-client-update-scope").await? else {
+        return Ok(());
+    };
+    let client = OidcClient {
+        id: Uuid::new_v4(),
+        organization_id: context.organization.id,
+        client_id: format!("update-scope-client-{}", Uuid::new_v4()),
+        client_secret_hash: None,
+        consent_policy_template_id: None,
+        name: "Scope Client".to_owned(),
+        redirect_uris: vec![RedirectUri::parse("http://localhost:3000/callback")?],
+        post_logout_redirect_uris: vec![],
+        allowed_scopes: vec![
+            "openid".to_owned(),
+            "profile".to_owned(),
+            "offline_access".to_owned(),
+        ],
+        grant_types: vec![
+            OidcGrantType::AuthorizationCode,
+            OidcGrantType::RefreshToken,
+        ],
+        public_client: true,
+        require_pkce: true,
+        status: OidcClientStatus::Active,
+        created_at: context.now,
+    };
+    context.database.create_oidc_client(&client).await?;
+    let raw_authorization_code = format!("update-scope-code-{}", Uuid::new_v4());
+    let authorization_code = AuthorizationCode {
+        code_hash: hash_token(&raw_authorization_code),
+        organization_id: context.organization.id,
+        user_id: context.admin_user.id,
+        session_id: context.admin_session_id,
+        client_id: client.id,
+        redirect_uri: "http://localhost:3000/callback".to_owned(),
+        scopes: vec!["openid".to_owned(), "profile".to_owned()],
+        nonce: Some("nonce-value".to_owned()),
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_owned(),
+        code_challenge_method: cairn_domain::PkceMethod::S256,
+        created_at: context.now,
+        expires_at: context.now + Duration::minutes(5),
+        used_at: None,
+    };
+    let raw_access_token = format!("update-scope-access-{}", Uuid::new_v4());
+    let raw_refresh_token = format!("update-scope-refresh-{}", Uuid::new_v4());
+    let family_id = Uuid::new_v4();
+    let access_token = test_access_token(
+        context.organization.id,
+        context.admin_user.id,
+        client.id,
+        &raw_access_token,
+        Some(family_id),
+        context.now,
+    );
+    let refresh_token = test_refresh_token(
+        context.organization.id,
+        context.admin_user.id,
+        client.id,
+        &raw_refresh_token,
+        family_id,
+        context.now,
+    );
+    context
+        .database
+        .insert_authorization_code(&authorization_code)
+        .await?;
+    context.database.insert_access_token(&access_token).await?;
+    context
+        .database
+        .insert_refresh_token(&refresh_token)
+        .await?;
+    let router = build_router(context.state);
+    let csrf = TEST_CSRF_TOKEN;
+
+    let non_security_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/v1/oidc/clients/{}", client.id))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::COOKIE,
+                    session_cookie(context.admin_session_id, Some(csrf)),
+                )
+                .header(CSRF_HEADER, csrf)
+                .body(axum::body::Body::from(
+                    json!({
+                        "name": "Scope Client Renamed",
+                        "redirect_uris": ["http://localhost:3000/callback"],
+                        "post_logout_redirect_uris": ["http://localhost:3000/signed-out"],
+                        "allowed_scopes": ["openid", "profile", "offline_access"],
+                        "consent_policy_template_id": null
+                    })
+                    .to_string(),
+                ))?,
+        )
+        .await?;
+    assert_eq!(non_security_response.status(), StatusCode::OK);
+    let non_security_payload = response_json(non_security_response).await?;
+    assert_eq!(
+        non_security_payload["authorization_codes_invalidated"],
+        json!(0)
+    );
+    assert_eq!(non_security_payload["access_tokens_revoked"], json!(0));
+    assert_eq!(non_security_payload["refresh_tokens_revoked"], json!(0));
+    assert!(
+        context
+            .database
+            .get_authorization_code(&authorization_code.code_hash)
+            .await?
+            .expect("authorization code exists")
+            .used_at
+            .is_none()
+    );
+    assert!(
+        context
+            .database
+            .get_access_token(&access_token.token_hash)
+            .await?
+            .expect("access token exists")
+            .revoked_at
+            .is_none()
+    );
+    assert!(
+        context
+            .database
+            .get_refresh_token(&refresh_token.token_hash)
+            .await?
+            .expect("refresh token exists")
+            .revoked_at
+            .is_none()
+    );
+
+    let scope_response = router
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/v1/oidc/clients/{}", client.id))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::COOKIE,
+                    session_cookie(context.admin_session_id, Some(csrf)),
+                )
+                .header(CSRF_HEADER, csrf)
+                .body(axum::body::Body::from(
+                    json!({
+                        "name": "Scope Client Renamed",
+                        "redirect_uris": ["http://localhost:3000/callback"],
+                        "post_logout_redirect_uris": ["http://localhost:3000/signed-out"],
+                        "allowed_scopes": ["openid", "email"],
+                        "consent_policy_template_id": null
+                    })
+                    .to_string(),
+                ))?,
+        )
+        .await?;
+    assert_eq!(scope_response.status(), StatusCode::OK);
+    let scope_payload = response_json(scope_response).await?;
+    assert_eq!(scope_payload["authorization_codes_invalidated"], json!(1));
+    assert_eq!(scope_payload["access_tokens_revoked"], json!(1));
+    assert_eq!(scope_payload["refresh_tokens_revoked"], json!(1));
+    assert_eq!(
+        scope_payload["client"]["allowed_scopes"],
+        json!(["openid", "email"])
+    );
+    assert!(
+        context
+            .database
+            .get_authorization_code(&authorization_code.code_hash)
+            .await?
+            .expect("authorization code exists")
+            .used_at
+            .is_some()
+    );
+    assert!(
+        context
+            .database
+            .get_access_token(&access_token.token_hash)
+            .await?
+            .expect("access token exists")
+            .revoked_at
+            .is_some()
+    );
+    assert!(
+        context
+            .database
+            .get_refresh_token(&refresh_token.token_hash)
+            .await?
+            .expect("refresh token exists")
+            .revoked_at
+            .is_some()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn admin_client_update_rejects_foreign_consent_policy_and_invalid_redirect()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(context) = setup_admin_oidc_client_test("api-client-update-reject").await? else {
+        return Ok(());
+    };
+    let other_organization = Organization::new(
+        format!("api-client-update-reject-other-{}", Uuid::new_v4()),
+        "API Client Update Reject Other",
+    )?;
+    context
+        .database
+        .create_organization(&other_organization)
+        .await?;
+    let foreign_template = ConsentPolicyTemplate {
+        id: Uuid::new_v4(),
+        organization_id: other_organization.id,
+        slug: format!("foreign-update-template-{}", Uuid::new_v4()),
+        name: "Foreign Update Template".to_owned(),
+        grant_mode: ConsentGrantMode::AlwaysRequired,
+        created_at: context.now,
+    };
+    context
+        .database
+        .create_consent_policy_template(&foreign_template)
+        .await?;
+    let client = OidcClient {
+        id: Uuid::new_v4(),
+        organization_id: context.organization.id,
+        client_id: format!("update-reject-client-{}", Uuid::new_v4()),
+        client_secret_hash: None,
+        consent_policy_template_id: None,
+        name: "Reject Client".to_owned(),
+        redirect_uris: vec![RedirectUri::parse("http://localhost:3000/callback")?],
+        post_logout_redirect_uris: vec![],
+        allowed_scopes: vec!["openid".to_owned()],
+        grant_types: vec![OidcGrantType::AuthorizationCode],
+        public_client: true,
+        require_pkce: true,
+        status: OidcClientStatus::Active,
+        created_at: context.now,
+    };
+    context.database.create_oidc_client(&client).await?;
+    let router = build_router(context.state);
+    let csrf = TEST_CSRF_TOKEN;
+
+    let foreign_template_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/v1/oidc/clients/{}", client.id))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::COOKIE,
+                    session_cookie(context.admin_session_id, Some(csrf)),
+                )
+                .header(CSRF_HEADER, csrf)
+                .body(axum::body::Body::from(
+                    json!({
+                        "name": "Reject Client Updated",
+                        "redirect_uris": ["http://localhost:3000/callback"],
+                        "post_logout_redirect_uris": [],
+                        "allowed_scopes": ["openid"],
+                        "consent_policy_template_id": foreign_template.id
+                    })
+                    .to_string(),
+                ))?,
+        )
+        .await?;
+    assert_eq!(foreign_template_response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        response_json(foreign_template_response).await?,
+        json!({ "error": "consent policy template not found" })
+    );
+
+    let invalid_redirect_response = router
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/v1/oidc/clients/{}", client.id))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::COOKIE,
+                    session_cookie(context.admin_session_id, Some(csrf)),
+                )
+                .header(CSRF_HEADER, csrf)
+                .body(axum::body::Body::from(
+                    json!({
+                        "name": "Reject Client Updated",
+                        "redirect_uris": ["http://evil.example/callback"],
+                        "post_logout_redirect_uris": [],
+                        "allowed_scopes": ["openid"],
+                        "consent_policy_template_id": null
+                    })
+                    .to_string(),
+                ))?,
+        )
+        .await?;
+    assert_eq!(invalid_redirect_response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response_json(invalid_redirect_response).await?,
+        json!({ "error": "redirect URI must use https, except localhost development URLs" })
+    );
+    let stored_client = context
+        .database
+        .get_oidc_client(client.id)
+        .await?
+        .expect("client still exists");
+    assert_eq!(stored_client.name, "Reject Client");
+    assert_eq!(stored_client.consent_policy_template_id, None);
+    assert_eq!(stored_client.redirect_uris, client.redirect_uris);
+
+    Ok(())
+}
 #[tokio::test]
 async fn admin_consent_policy_templates_can_be_created_listed_and_assigned_to_clients()
 -> Result<(), Box<dyn std::error::Error>> {

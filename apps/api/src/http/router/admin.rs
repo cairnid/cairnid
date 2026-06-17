@@ -11,9 +11,9 @@ use crate::http::{
         upsert_group_membership,
     },
     admin_oidc::{
-        create_client, create_consent_policy_template, list_client_consent_grants, list_clients,
-        list_consent_policy_templates, revoke_client_consent_grant, rotate_client_secret,
-        update_client_status,
+        create_client, create_consent_policy_template, get_client, list_client_consent_grants,
+        list_clients, list_consent_policy_templates, revoke_client_consent_grant,
+        rotate_client_secret, update_client, update_client_status,
     },
     admin_users::{
         create_user, list_admin_user_browser_sessions, list_admin_user_security_events, list_users,
@@ -63,6 +63,10 @@ pub(super) fn admin_routes() -> Router<AppState> {
         .route(
             "/api/v1/oidc/clients",
             get(list_clients).post(create_client),
+        )
+        .route(
+            "/api/v1/oidc/clients/{client_id}",
+            get(get_client).put(update_client),
         )
         .route(
             "/api/v1/oidc/clients/{client_id}/secret/rotate",

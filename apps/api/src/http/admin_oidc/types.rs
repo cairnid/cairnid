@@ -68,6 +68,14 @@ pub(in crate::http) struct UpdateOidcClientStatusResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub(in crate::http) struct UpdateOidcClientResponse {
+    pub(in crate::http::admin_oidc) client: AdminOidcClient,
+    pub(in crate::http::admin_oidc) authorization_codes_invalidated: u64,
+    pub(in crate::http::admin_oidc) access_tokens_revoked: u64,
+    pub(in crate::http::admin_oidc) refresh_tokens_revoked: u64,
+}
+
+#[derive(Debug, Serialize)]
 pub(in crate::http) struct AdminConsentGrantSummary {
     pub(in crate::http::admin_oidc) id: Uuid,
     organization_id: Uuid,
@@ -122,6 +130,16 @@ impl From<ConsentGrantRevocation> for AdminConsentGrantRevocationResponse {
 #[derive(Debug, Deserialize)]
 pub(in crate::http) struct UpdateClientStatusRequest {
     pub(in crate::http::admin_oidc) status: OidcClientStatus,
+}
+
+#[derive(Debug, Deserialize)]
+pub(in crate::http) struct UpdateClientRequest {
+    pub(in crate::http::admin_oidc) name: String,
+    pub(in crate::http::admin_oidc) redirect_uris: Vec<String>,
+    pub(in crate::http::admin_oidc) post_logout_redirect_uris: Vec<String>,
+    pub(in crate::http::admin_oidc) allowed_scopes: Vec<String>,
+    #[serde(default)]
+    pub(in crate::http::admin_oidc) consent_policy_template_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]

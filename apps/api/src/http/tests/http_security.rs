@@ -515,6 +515,11 @@ async fn api_v1_cross_origin_mutation_classes_are_rejected_before_handlers() {
             path: "/api/v1/oidc/clients".to_owned(),
         },
         MutationRoute {
+            name: "admin OIDC client update",
+            method: Method::PUT,
+            path: format!("/api/v1/oidc/clients/{client_id}"),
+        },
+        MutationRoute {
             name: "admin OIDC client secret rotation",
             method: Method::POST,
             path: format!("/api/v1/oidc/clients/{client_id}/secret/rotate"),

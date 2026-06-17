@@ -20,7 +20,10 @@ pub use self::filters::{
 pub use self::groups::{
     MembershipMutationOutcome, ScimGroupMember, ScimGroupMutationOutcome, ScimGroupReplaceInput,
 };
-pub use self::oidc::{OidcClientStatusMutation, OidcClientStatusMutationOutcome};
+pub use self::oidc::{
+    OidcClientDetailsMutation, OidcClientDetailsMutationOutcome, OidcClientDetailsUpdate,
+    OidcClientStatusMutation, OidcClientStatusMutationOutcome,
+};
 pub use self::passwords::{
     PasswordChangeInput, PasswordChangeMutation, PasswordChangeOutcome, PasswordRecoveryInput,
     PasswordRecoveryMutation, PasswordRecoveryOutcome,

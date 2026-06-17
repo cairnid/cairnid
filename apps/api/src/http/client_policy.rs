@@ -80,12 +80,14 @@ pub(super) async fn organization_client_by_id(
     state: &AppState,
     client_id: Uuid,
 ) -> Result<OidcClient, ApiError> {
-    let Some(client) = state.database.get_oidc_client(client_id).await? else {
+    let Some(client) = state
+        .database
+        .get_oidc_client_in_organization(state.organization_id, client_id)
+        .await?
+    else {
         return Err(ApiError::status(StatusCode::NOT_FOUND, "client not found"));
     };
-    if client.organization_id != state.organization_id {
-        return Err(ApiError::status(StatusCode::NOT_FOUND, "client not found"));
-    }
+
     Ok(client)
 }
 

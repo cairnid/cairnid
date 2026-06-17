@@ -5,7 +5,10 @@ use axum::{
 };
 use cairn_audit::AuditEventBuilder;
 use cairn_authn::generate_hashed_secret;
-use cairn_database::{ListCursor, OidcClientStatusMutationOutcome};
+use cairn_database::{
+    ListCursor, OidcClientDetailsMutationOutcome, OidcClientDetailsUpdate,
+    OidcClientStatusMutationOutcome,
+};
 use cairn_domain::{OidcClient, OidcClientStatus, OidcGrantType, RedirectUri};
 use secrecy::ExposeSecret;
 use serde_json::json;
@@ -22,7 +25,8 @@ use super::super::{
 };
 use super::types::{
     AdminOidcClient, CreateClientRequest, CreateOidcClientResponse, RotateClientSecretResponse,
-    UpdateClientStatusRequest, UpdateOidcClientStatusResponse, validate_allowed_client_scopes,
+    UpdateClientRequest, UpdateClientStatusRequest, UpdateOidcClientResponse,
+    UpdateOidcClientStatusResponse, validate_allowed_client_scopes,
 };
 
 pub(in crate::http) async fn list_clients(
@@ -53,6 +57,17 @@ pub(in crate::http) async fn list_clients(
         items: page.items.into_iter().map(AdminOidcClient::from).collect(),
         next_cursor: page.next_cursor,
     }))
+}
+
+pub(in crate::http) async fn get_client(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(client_id): Path<Uuid>,
+) -> Result<Json<AdminOidcClient>, ApiError> {
+    require_admin_session(&state, &headers).await?;
+    let client = organization_client_by_id(&state, client_id).await?;
+
+    Ok(Json(AdminOidcClient::from(client)))
 }
 
 pub(in crate::http) async fn create_client(
@@ -133,6 +148,73 @@ pub(in crate::http) async fn create_client(
                 .map(|secret| secret.value.expose_secret().to_owned()),
         }),
     ))
+}
+
+pub(in crate::http) async fn update_client(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(client_id): Path<Uuid>,
+    ApiJson(payload): ApiJson<UpdateClientRequest>,
+) -> Result<Json<UpdateOidcClientResponse>, ApiError> {
+    let actor = require_recent_admin_session(&state, &headers).await?;
+    require_csrf(&headers)?;
+    let allowed_scopes = validate_allowed_client_scopes(payload.allowed_scopes)?;
+    let consent_policy_template_id =
+        validate_consent_policy_template_assignment(&state, payload.consent_policy_template_id)
+            .await?;
+    let update = OidcClientDetailsUpdate {
+        name: payload.name,
+        redirect_uris: payload
+            .redirect_uris
+            .into_iter()
+            .map(RedirectUri::parse)
+            .collect::<Result<Vec<_>, _>>()?,
+        post_logout_redirect_uris: payload
+            .post_logout_redirect_uris
+            .into_iter()
+            .map(RedirectUri::parse)
+            .collect::<Result<Vec<_>, _>>()?,
+        allowed_scopes,
+        consent_policy_template_id,
+    };
+    let now = OffsetDateTime::now_utc();
+    let mutation = match state
+        .database
+        .update_oidc_client_details(state.organization_id, client_id, update, now)
+        .await?
+    {
+        OidcClientDetailsMutationOutcome::Applied(mutation) => *mutation,
+        OidcClientDetailsMutationOutcome::NotFound => {
+            return Err(ApiError::status(StatusCode::NOT_FOUND, "client not found"));
+        }
+    };
+
+    state
+        .database
+        .insert_audit_event(
+            &AuditEventBuilder::user(
+                state.organization_id,
+                actor.user_id,
+                "admin.client_updated",
+                mutation.client.id.to_string(),
+            )
+            .metadata(json!({
+                "client_id": mutation.client.client_id.clone(),
+                "changed_fields": mutation.changed_fields,
+                "authorization_codes_invalidated": mutation.authorization_codes_invalidated,
+                "access_tokens_revoked": mutation.access_tokens_revoked,
+                "refresh_tokens_revoked": mutation.refresh_tokens_revoked
+            }))
+            .build(),
+        )
+        .await?;
+
+    Ok(Json(UpdateOidcClientResponse {
+        client: AdminOidcClient::from(mutation.client),
+        authorization_codes_invalidated: mutation.authorization_codes_invalidated,
+        access_tokens_revoked: mutation.access_tokens_revoked,
+        refresh_tokens_revoked: mutation.refresh_tokens_revoked,
+    }))
 }
 
 pub(in crate::http) async fn rotate_client_secret(

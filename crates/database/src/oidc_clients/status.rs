@@ -1,4 +1,5 @@
 use crate::codec::oidc_client_status_to_str;
+use crate::oidc_clients::runtime_credentials::revoke_client_runtime_credentials;
 use crate::rows::OidcClientRow;
 use crate::{Database, DatabaseError, OidcClientStatusMutation, OidcClientStatusMutationOutcome};
 use cairn_domain::{ClientId, OidcClientStatus, OrganizationId};
@@ -53,54 +54,11 @@ impl Database {
         let mut refresh_tokens_revoked = 0;
 
         if status == OidcClientStatus::Disabled {
-            authorization_codes_invalidated = sqlx::query(
-                r#"
-                UPDATE authorization_codes
-                SET used_at = COALESCE(used_at, $1)
-                WHERE organization_id = $2
-                  AND client_id = $3
-                  AND used_at IS NULL
-                  AND expires_at > $1
-                "#,
-            )
-            .bind(at)
-            .bind(organization_id)
-            .bind(client_id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
-
-            access_tokens_revoked = sqlx::query(
-                r#"
-                UPDATE access_tokens
-                SET revoked_at = COALESCE(revoked_at, $1)
-                WHERE organization_id = $2
-                  AND client_id = $3
-                  AND revoked_at IS NULL
-                "#,
-            )
-            .bind(at)
-            .bind(organization_id)
-            .bind(client_id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
-
-            refresh_tokens_revoked = sqlx::query(
-                r#"
-                UPDATE refresh_tokens
-                SET revoked_at = COALESCE(revoked_at, $1)
-                WHERE organization_id = $2
-                  AND client_id = $3
-                  AND revoked_at IS NULL
-                "#,
-            )
-            .bind(at)
-            .bind(organization_id)
-            .bind(client_id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
+            let mutation =
+                revoke_client_runtime_credentials(&mut tx, organization_id, client_id, at).await?;
+            authorization_codes_invalidated = mutation.authorization_codes_invalidated;
+            access_tokens_revoked = mutation.access_tokens_revoked;
+            refresh_tokens_revoked = mutation.refresh_tokens_revoked;
         }
 
         tx.commit().await?;
