@@ -9,7 +9,9 @@ Cairn Identity is pre-beta. A release can be recommended for production use only
 | Source hygiene | `bun run check:public-surface` passes | CI-gated |
 | Dependency policy | `cargo deny check`, `cargo audit`, `bun run audit`, and `cairn-api operations dependency-policy-evidence` pass | CI-gated locally; release receipt required |
 | Rust quality | `cargo fmt`, `cargo check`, `cargo test`, and `cargo clippy -D warnings` pass | CI-gated |
+| MCP stdio and Windows behavior | `cargo test -p cairnid-mcp --locked` and `cargo clippy -p cairnid-mcp --locked --all-targets -- -D warnings` pass on Windows, including stdio initialize, `tools/list`, and sanitized `tools/call` coverage | CI-gated |
 | Frontend quality | `bun run check`, `bun run test`, `bun run build`, and `bun run test:e2e` pass | CI-gated |
+| Docs export | `bun run docs:site -- --out <temp-dir>` completes without committing generated output | CI-gated |
 | Database migrations | Postgres 17 migration tests pass against a disposable database | CI-gated |
 | Containers | Compose validates, API image builds, web image builds, and image-level smoke checks pass | CI-gated |
 | Deployed OIDC metadata | `cairn-api operations oidc-metadata-smoke` passes against the HTTPS API origin | Pending external evidence |

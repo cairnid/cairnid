@@ -107,6 +107,20 @@ jobs:
           ), report
           PY
 
+  mcp-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Show Rust version
+        run: |
+          rustc --version
+          cargo --version
+      - name: MCP tests
+        run: cargo test -p cairnid-mcp --locked
+      - name: MCP clippy
+        run: cargo clippy -p cairnid-mcp --locked --all-targets -- -D warnings
+
   dependency-security:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -197,6 +211,10 @@ jobs:
         run: bun run audit
       - name: Public surface check
         run: bun run check:public-surface
+      - name: Docs export check
+        run: |
+          docs_out="$(realpath -m --relative-to="$GITHUB_WORKSPACE" "$RUNNER_TEMP/site-docs-export-check")"
+          bun run docs:site -- --out "$docs_out"
       - name: Check
         run: bun run check
       - name: Unit tests

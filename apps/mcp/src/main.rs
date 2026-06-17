@@ -31,9 +31,16 @@ struct CairnIdMcpServer;
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 struct EvidenceDirectoryRequest {
-    #[schemars(description = "Optional evidence directory. Defaults to release-evidence.")]
+    #[schemars(
+        description = "Optional evidence directory. Defaults to release-evidence when omitted or null. Must be a non-empty relative path under the allowlisted evidence root, or an absolute path that resolves inside that root. Parent traversal (`..`), drive-relative paths, symlinked directories, and symlink entries are rejected.",
+        extend("default" = DEFAULT_EVIDENCE_CHILD)
+    )]
     evidence_dir: Option<String>,
-    #[schemars(description = "Optional artifact freshness window in days. Defaults to 30.")]
+    #[schemars(
+        description = "Optional artifact freshness window in days. Defaults to 30 when omitted or null. Must be an integer from 1 through 365 inclusive.",
+        range(min = 1, max = 365),
+        extend("default" = DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS)
+    )]
     max_age_days: Option<i64>,
 }
 
@@ -164,7 +171,7 @@ impl CairnIdMcpServer {
 
     #[tool(
         name = "cairnid.evidence_status",
-        description = "Validate release evidence and return sanitized status counts.",
+        description = "Progress/status view for release evidence validation; returns sanitized status counts without changing files.",
         annotations(
             title = "Evidence Status",
             read_only_hint = true,
@@ -183,7 +190,7 @@ impl CairnIdMcpServer {
 
     #[tool(
         name = "cairnid.evidence_check",
-        description = "Validate release evidence and return sanitized artifact counts.",
+        description = "Strict final-gate alias for release evidence validation; returns the same sanitized summary shape as evidence_status without changing files.",
         annotations(
             title = "Evidence Check",
             read_only_hint = true,
@@ -582,6 +589,7 @@ mod tests {
     use super::*;
     use cairn_operations::init_release_evidence_directory;
     use rmcp::ServerHandler;
+    use serde_json::{Value, json};
     use std::{
         io,
         time::{SystemTime, UNIX_EPOCH},
@@ -616,9 +624,41 @@ mod tests {
     }
 
     #[test]
-    fn evidence_status_and_check_tools_have_output_schemas() {
+    fn structured_evidence_tools_have_output_schemas() {
+        assert_output_schema_object(CairnIdMcpServer::evidence_plan_tool_attr().output_schema);
+        assert_output_schema_object(CairnIdMcpServer::evidence_manifest_tool_attr().output_schema);
         assert_output_schema_object(CairnIdMcpServer::evidence_status_tool_attr().output_schema);
         assert_output_schema_object(CairnIdMcpServer::evidence_check_tool_attr().output_schema);
+    }
+
+    #[test]
+    fn evidence_status_input_schema_exposes_enforced_request_contract() {
+        assert_evidence_directory_input_schema(
+            CairnIdMcpServer::evidence_status_tool_attr()
+                .input_schema
+                .as_ref(),
+        );
+    }
+
+    #[test]
+    fn evidence_check_input_schema_exposes_enforced_request_contract() {
+        assert_evidence_directory_input_schema(
+            CairnIdMcpServer::evidence_check_tool_attr()
+                .input_schema
+                .as_ref(),
+        );
+    }
+
+    #[test]
+    fn evidence_status_and_check_descriptions_distinguish_tool_roles() {
+        let status = CairnIdMcpServer::evidence_status_tool_attr();
+        let check = CairnIdMcpServer::evidence_check_tool_attr();
+        let status_description = status.description.expect("status description");
+        let check_description = check.description.expect("check description");
+
+        assert!(status_description.contains("Progress/status view"));
+        assert!(check_description.contains("Strict final-gate alias"));
+        assert!(check_description.contains("same sanitized summary shape"));
     }
 
     #[test]
@@ -777,6 +817,75 @@ mod tests {
             schema.get("type"),
             Some(&serde_json::Value::String("object".to_owned()))
         );
+    }
+
+    fn assert_evidence_directory_input_schema(input_schema: &rmcp::model::JsonObject) {
+        let schema = Value::Object(input_schema.clone());
+        let properties = schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .expect("input schema properties");
+        let evidence_dir = properties
+            .get("evidence_dir")
+            .expect("evidence_dir input schema");
+        let max_age_days = properties
+            .get("max_age_days")
+            .expect("max_age_days input schema");
+
+        assert_eq!(
+            evidence_dir.get("default"),
+            Some(&json!(DEFAULT_EVIDENCE_CHILD))
+        );
+        assert_description_contains(
+            evidence_dir,
+            &[
+                "Defaults to release-evidence",
+                "non-empty relative path",
+                "inside that root",
+                "Parent traversal (`..`)",
+                "drive-relative paths",
+                "symlinked directories",
+                "symlink entries",
+            ],
+        );
+
+        assert_eq!(max_age_days.get("minimum"), Some(&json!(1)));
+        assert_eq!(max_age_days.get("maximum"), Some(&json!(365)));
+        assert_eq!(
+            max_age_days.get("default"),
+            Some(&json!(DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS))
+        );
+        assert_description_contains(max_age_days, &["Defaults to 30", "1 through 365 inclusive"]);
+
+        let required = schema
+            .get("required")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(
+            !required
+                .iter()
+                .any(|value| value.as_str() == Some("evidence_dir"))
+        );
+        assert!(
+            !required
+                .iter()
+                .any(|value| value.as_str() == Some("max_age_days"))
+        );
+    }
+
+    fn assert_description_contains(schema: &Value, expected_fragments: &[&str]) {
+        let description = schema
+            .get("description")
+            .and_then(Value::as_str)
+            .expect("schema description");
+
+        for expected in expected_fragments {
+            assert!(
+                description.contains(expected),
+                "description {description:?} should contain {expected:?}"
+            );
+        }
     }
 
     fn write_email_provider_artifact_with_sentinel(evidence_dir: &Path) {
