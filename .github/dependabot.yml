@@ -11,6 +11,11 @@ updates:
           - "*"
         update-types:
           - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
 
   - package-ecosystem: "bun"
     directory: "/"
@@ -24,6 +29,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "docker"
     directory: "/"
@@ -37,6 +46,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "docker"
     directory: "/apps/web"
@@ -51,6 +64,9 @@ updates:
           - "minor"
           - "patch"
     ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
       - dependency-name: "node"
         versions:
           - ">=25"
@@ -71,6 +87,9 @@ updates:
           - "minor"
           - "patch"
     ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
       - dependency-name: "postgres"
         versions:
           - ">=18"
