@@ -27,6 +27,7 @@ skip = [
   { crate = "getrandom@0.3.4", reason = "rand 0.9 and aws-lc-rs use getrandom 0.3 while SQLx/uuid have moved to getrandom 0.4" },
   { crate = "hashbrown@0.16.1", reason = "SQLx 0.9 currently uses hashlink on hashbrown 0.16 and indexmap on hashbrown 0.17" },
   { crate = "hmac@0.12.1", reason = "totp-rs 5.7 uses hmac 0.12 while SQLx 0.9 uses hmac 0.13" },
+  { crate = "pastey@0.1.1", reason = "base64urlsafedata 0.5.5 in the webauthn-rs 0.5.5 graph pins pastey 0.1.1 while rmcp 1.7 uses pastey 0.2 for server/macros features" },
   { crate = "rand@0.10.1", reason = "SQLx 0.9 uses rand 0.10 while webauthn-rs and the service use rand 0.9" },
   { crate = "rand_core@0.6.4", reason = "RustCrypto 0.10 dependencies still use rand_core 0.6 while newer dependencies use rand_core 0.9/0.10" },
   { crate = "rand_core@0.10.1", reason = "SQLx 0.9 uses rand_core 0.10 while webauthn-rs and the service use rand_core 0.9" },

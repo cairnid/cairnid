@@ -2,7 +2,7 @@ use super::super::validation::{
     reject_forbidden_scim_connector_smoke_fields, reject_non_empty_array, require_bool,
     require_https_scim_smoke_base_url_at_path, require_non_empty_string_at_path,
     require_non_empty_string_at_path_dynamic, require_rfc3339_timestamp, require_string,
-    require_string_at_path, require_uuid_array_exact_len, require_uuid_at_path,
+    require_string_at_path_dynamic, require_uuid_array_exact_len, require_uuid_at_path,
 };
 use super::{
     REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS, connector_profile::expected_scim_connector_display_name,
@@ -87,7 +87,7 @@ pub(in crate::operations_evidence) fn validate_scim_connector_smoke(
                 "{path}.name must be a required connector smoke check name"
             )),
         }
-        require_string_at_path(check, &["status"], "passed", failures);
+        require_string_at_path_dynamic(check, &path, &["status"], "passed", failures);
         require_non_empty_string_at_path_dynamic(check, &path, &["detail"], failures);
     }
 

@@ -31,6 +31,21 @@ pub(in crate::operations_evidence) fn require_string_at_path(
     }
 }
 
+pub(in crate::operations_evidence) fn require_string_at_path_dynamic(
+    value: &Value,
+    prefix: &str,
+    path: &[&'static str],
+    expected: &str,
+    failures: &mut Vec<String>,
+) {
+    let field = format!("{prefix}.{}", path.join("."));
+    match value_at_path(value, path).and_then(Value::as_str) {
+        Some(actual) if actual == expected => {}
+        Some(actual) => failures.push(format!("{field} must be {expected}, got {actual}")),
+        None => failures.push(format!("{field} must be {expected}")),
+    }
+}
+
 pub(in crate::operations_evidence) fn validate_user_status_field(
     value: &Value,
     path: &[&'static str],

@@ -11,8 +11,9 @@ pub(super) use fields::{
     require_non_empty_string_at_path, require_non_empty_string_at_path_dynamic,
     require_object_array_contains_strings, require_scim_mapping, require_string,
     require_string_array_contains_all, require_string_array_contains_all_from_value,
-    require_string_array_contains_substrings, require_string_at_path, require_u64_at_path,
-    validate_optional_filter_string, validate_optional_membership_role, validate_user_status_field,
+    require_string_array_contains_substrings, require_string_at_path,
+    require_string_at_path_dynamic, require_u64_at_path, validate_optional_filter_string,
+    validate_optional_membership_role, validate_user_status_field,
 };
 pub(super) use forbidden_fields::{
     reject_forbidden_dependency_policy_fields, reject_forbidden_scim_connector_smoke_fields,
