@@ -20,6 +20,8 @@ Available tools:
 - `evidence_dir`: optional evidence directory. When omitted, the server uses `release-evidence` under the process working directory.
 - `max_age_days`: optional freshness window in days; defaults to the operations validator default.
 
+Unknown request arguments are rejected with `unknown_argument`; the input schema advertises a closed object contract with no additional properties.
+
 Relative paths are resolved under the process working directory. Absolute paths are accepted only when their canonical path remains under that allowlisted root. Parent traversal with `..`, drive-relative paths, symlinked evidence directories, and symlink entries are rejected before the server calls the evidence checker.
 
 `evidence_status` and `evidence_check` do not return validator failure text, artifact JSON, resource links, logs, standard streams, or provider exports. Their MCP responses contain stable statuses, artifact names, file names, commands, check counts, failure counts, and failure-code counts. The server does not expose the scaffold initializer or any other write-capable release-evidence operation.
@@ -41,6 +43,7 @@ The text content mirrors the same JSON envelope for clients that only display co
 
 Stable request error codes:
 
+- `unknown_argument`: a request includes an argument other than `evidence_dir` or `max_age_days`.
 - `invalid_evidence_dir`: `evidence_dir` is present but is not a string path.
 - `invalid_max_age_days`: `max_age_days` is present but is not an integer, or is outside 1 through 365.
 - `empty_evidence_dir`: `evidence_dir` is empty or whitespace.

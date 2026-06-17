@@ -203,6 +203,10 @@ impl McpEvidenceRequestError {
         "symlinked_evidence_dir",
         "evidence_dir must not be a symlink",
     );
+    const UNKNOWN_ARGUMENT: Self = Self::new(
+        "unknown_argument",
+        "only evidence_dir and max_age_days are accepted",
+    );
 
     const fn new(code: &'static str, message: &'static str) -> Self {
         Self { code, message }
@@ -230,7 +234,15 @@ enum EvidenceDirectoryKind {
 }
 
 fn evidence_directory_input_schema() -> std::sync::Arc<JsonObject> {
-    rmcp::handler::server::common::schema_for_type::<EvidenceDirectoryRequest>()
+    let mut schema = rmcp::handler::server::common::schema_for_type::<EvidenceDirectoryRequest>()
+        .as_ref()
+        .clone();
+    schema.insert(
+        "additionalProperties".to_owned(),
+        serde_json::Value::Bool(false),
+    );
+
+    std::sync::Arc::new(schema)
 }
 
 #[tool_router]
@@ -395,6 +407,9 @@ fn parse_evidence_directory_request(
         arguments.remove("max_age_days"),
         McpEvidenceRequestError::INVALID_MAX_AGE_DAYS,
     )?;
+    if !arguments.is_empty() {
+        return Err(McpEvidenceRequestError::UNKNOWN_ARGUMENT);
+    }
 
     Ok(EvidenceDirectoryRequest {
         evidence_dir,
@@ -1039,6 +1054,8 @@ mod tests {
             Some(&json!(DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS))
         );
         assert_description_contains(max_age_days, &["Defaults to 30", "1 through 365 inclusive"]);
+
+        assert_eq!(schema.get("additionalProperties"), Some(&json!(false)));
 
         let required = schema
             .get("required")
