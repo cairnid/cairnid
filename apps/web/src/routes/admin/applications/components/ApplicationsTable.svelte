@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Ban, CircleCheck, Eye, KeyRound, Trash2 } from '@lucide/svelte';
+  import { Ban, CircleCheck, Eye, KeyRound, Pencil, Trash2 } from '@lucide/svelte';
   import type {
     ConsentGrant,
     ConsentPolicyTemplate,
@@ -15,6 +15,8 @@
   export let revokingConsentGrantId: string | null = null;
   export let rotatingSecretClientId: string | null = null;
   export let updatingStatusClientId: string | null = null;
+  export let editingClientId: string | null = null;
+  export let onEditClient: (client: OidcClient) => void;
   export let onRotateSecret: (client: OidcClient) => void | Promise<void>;
   export let onUpdateClientStatus: (
     client: OidcClient,
@@ -28,7 +30,7 @@
 </script>
 
 <section class="panel panel-spaced">
-  <table class="data-table">
+  <table class="data-table responsive-table">
     <thead>
       <tr>
         <th>Client ID</th>
@@ -43,18 +45,21 @@
         <th>Status</th>
         <th>Secret</th>
         <th>Consent</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
       {#each clients as client}
         <tr>
-          <td>{client.client_id}</td>
-          <td>{client.name}</td>
-          <td>{client.redirect_uris.map((uri) => uri.value).join(', ')}</td>
-          <td>{client.post_logout_redirect_uris.map((uri) => uri.value).join(', ')}</td>
-          <td>{client.grant_types.join(', ')}</td>
-          <td>{client.allowed_scopes.join(', ')}</td>
-          <td>
+          <td data-label="Client ID">{client.client_id}</td>
+          <td data-label="Name">{client.name}</td>
+          <td data-label="Redirect URIs">{client.redirect_uris.map((uri) => uri.value).join(', ')}</td>
+          <td data-label="Post-Logout URIs">
+            {client.post_logout_redirect_uris.map((uri) => uri.value).join(', ')}
+          </td>
+          <td data-label="Grants">{client.grant_types.join(', ')}</td>
+          <td data-label="Scopes">{client.allowed_scopes.join(', ')}</td>
+          <td data-label="Claims">
             <div class="chip-list">
               {#each claimPreview(client.allowed_scopes) as claim}
                 <span class="chip">{claim}</span>
@@ -63,9 +68,9 @@
               {/each}
             </div>
           </td>
-          <td>{policyLabelForClient(client, consentPolicyTemplates)}</td>
-          <td>{client.public_client ? 'Public' : 'Confidential'}</td>
-          <td>
+          <td data-label="Policy">{policyLabelForClient(client, consentPolicyTemplates)}</td>
+          <td data-label="Type">{client.public_client ? 'Public' : 'Confidential'}</td>
+          <td data-label="Status">
             <div class="status-actions">
               <span
                 class={[
@@ -101,7 +106,7 @@
               {/if}
             </div>
           </td>
-          <td>
+          <td data-label="Secret">
             {#if client.public_client}
               <span class="muted">None</span>
             {:else}
@@ -119,7 +124,7 @@
               </div>
             {/if}
           </td>
-          <td>
+          <td data-label="Consent">
             <button
               class="icon-button"
               title={`Review consent for ${client.client_id}`}
@@ -166,6 +171,19 @@
                 {/each}
               </div>
             {/if}
+          </td>
+          <td data-label="">
+            <div class="table-actions">
+              <button
+                class="icon-button"
+                title={`Edit client ${client.client_id}`}
+                aria-label={`Edit client ${client.client_id}`}
+                disabled={editingClientId === client.id}
+                onclick={() => onEditClient(client)}
+              >
+                <Pencil size={17} />
+              </button>
+            </div>
           </td>
         </tr>
       {/each}

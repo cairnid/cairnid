@@ -5,6 +5,7 @@
   import {
     api,
     apiList,
+    clientDetailsUpdateSchema,
     clientSecretRotationSchema,
     clientStatusUpdateSchema,
     clientSchema,
@@ -21,6 +22,7 @@
   import ApplicationFilters from './components/ApplicationFilters.svelte';
   import ApplicationsTable from './components/ApplicationsTable.svelte';
   import ClientCreatePanel from './components/ClientCreatePanel.svelte';
+  import ClientEditPanel from './components/ClientEditPanel.svelte';
   import ConsentPoliciesPanel from './components/ConsentPoliciesPanel.svelte';
   import type {
     ClientStatusFilter,
@@ -53,6 +55,16 @@
   let rotatedSecret = '';
   let updatingStatusClientId: string | null = null;
   let message = '';
+  let editingClientId: string | null = null;
+  let editName = '';
+  let editRedirectUris = '';
+  let editPostLogoutRedirectUris = '';
+  let editScopes = '';
+  let editConsentPolicyTemplateId = '';
+  let updatingClientId: string | null = null;
+  let editMessage = '';
+
+  $: editingClient = clients.find((client) => client.id === editingClientId) ?? null;
 
   async function load() {
     const [nextClients, nextTemplates] = await Promise.all([
@@ -67,6 +79,12 @@
       !consentPolicyTemplates.some((template) => template.id === selectedConsentPolicyTemplateId)
     ) {
       selectedConsentPolicyTemplateId = '';
+    }
+    if (editConsentPolicyTemplateId && !consentPolicyTemplates.some((template) => template.id === editConsentPolicyTemplateId)) {
+      editConsentPolicyTemplateId = '';
+    }
+    if (editingClientId && !nextClients.some((client) => client.id === editingClientId)) {
+      clearClientEdit();
     }
   }
 
@@ -117,6 +135,67 @@
       await load();
     } catch (error) {
       message = error instanceof Error ? error.message : 'Create failed';
+    }
+  }
+
+  function editClient(client: OidcClient) {
+    message = '';
+    createdSecret = '';
+    rotatedSecret = '';
+    editMessage = '';
+    editingClientId = client.id;
+    setEditFormFromClient(client);
+  }
+
+  function clearClientEdit() {
+    editingClientId = null;
+    editName = '';
+    editRedirectUris = '';
+    editPostLogoutRedirectUris = '';
+    editScopes = '';
+    editConsentPolicyTemplateId = '';
+    editMessage = '';
+  }
+
+  async function updateClientDetails() {
+    if (!editingClientId) {
+      return;
+    }
+
+    editMessage = '';
+    message = '';
+    createdSecret = '';
+    rotatedSecret = '';
+    updatingClientId = editingClientId;
+    try {
+      const response = await api(
+        `/api/v1/oidc/clients/${editingClientId}`,
+        clientDetailsUpdateSchema,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: editName,
+            redirect_uris: formList(editRedirectUris),
+            post_logout_redirect_uris: formList(editPostLogoutRedirectUris),
+            allowed_scopes: formList(editScopes),
+            consent_policy_template_id: editConsentPolicyTemplateId || null
+          })
+        }
+      );
+      clients = clients.map((candidate) =>
+        candidate.id === response.client.id ? response.client : candidate
+      );
+      editingClientId = response.client.id;
+      setEditFormFromClient(response.client);
+      editMessage =
+        `Client updated for ${response.client.client_id}; ` +
+        `authorization codes invalidated: ${response.authorization_codes_invalidated}; ` +
+        `access tokens revoked: ${response.access_tokens_revoked}; ` +
+        `refresh tokens revoked: ${response.refresh_tokens_revoked}`;
+    } catch (error) {
+      editMessage = error instanceof Error ? error.message : 'Client update failed';
+    } finally {
+      updatingClientId = null;
     }
   }
 
@@ -243,6 +322,20 @@
     }
   }
 
+  function setEditFormFromClient(client: OidcClient) {
+    editName = client.name;
+    editRedirectUris = client.redirect_uris.map((uri) => uri.value).join('\n');
+    editPostLogoutRedirectUris = client.post_logout_redirect_uris
+      .map((uri) => uri.value)
+      .join('\n');
+    editScopes = client.allowed_scopes.join(' ');
+    editConsentPolicyTemplateId = client.consent_policy_template_id ?? '';
+  }
+
+  function formList(value: string): string[] {
+    return value.split(/\s+/).filter(Boolean);
+  }
+
   onMount(() => void load().catch((error) => (message = error.message)));
 </script>
 
@@ -287,6 +380,20 @@
     onCreate={create}
   />
 
+  <ClientEditPanel
+    client={editingClient}
+    {consentPolicyTemplates}
+    bind:name={editName}
+    bind:redirectUris={editRedirectUris}
+    bind:postLogoutRedirectUris={editPostLogoutRedirectUris}
+    bind:scopes={editScopes}
+    bind:selectedConsentPolicyTemplateId={editConsentPolicyTemplateId}
+    updating={updatingClientId === editingClientId}
+    message={editMessage}
+    onSave={updateClientDetails}
+    onCancel={clearClientEdit}
+  />
+
   <ApplicationsTable
     {clients}
     {consentPolicyTemplates}
@@ -295,6 +402,8 @@
     {revokingConsentGrantId}
     {rotatingSecretClientId}
     {updatingStatusClientId}
+    {editingClientId}
+    onEditClient={editClient}
     onRotateSecret={rotateSecret}
     onUpdateClientStatus={updateClientStatus}
     onReviewConsent={reviewConsent}

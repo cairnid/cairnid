@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, apiList, resetCsrfTokenForTests, userSchema } from './api';
+import { api, apiList, clientDetailsUpdateSchema, resetCsrfTokenForTests, userSchema } from './api';
 
 const originalFetch = globalThis.fetch;
 const csrfToken = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg';
@@ -24,6 +24,33 @@ describe('api schemas', () => {
     });
 
     expect(parsed.email).toBe('admin@example.com');
+  });
+
+  it('validates OIDC client details update responses with side-effect counts', () => {
+    const parsed = clientDetailsUpdateSchema.parse({
+      client: {
+        id: '11111111-1111-4111-8111-111111111102',
+        organization_id: '11111111-1111-4111-8111-111111111001',
+        client_id: 'target-service',
+        consent_policy_template_id: null,
+        name: 'Target Service Updated',
+        redirect_uris: [{ value: 'https://service.example.com/callback' }],
+        post_logout_redirect_uris: [{ value: 'https://service.example.com/signed-out' }],
+        allowed_scopes: ['openid', 'email', 'groups'],
+        grant_types: ['authorization_code', 'refresh_token', 'client_credentials'],
+        public_client: false,
+        require_pkce: true,
+        status: 'active',
+        has_client_secret: true,
+        created_at: '2026-06-07T00:01:00Z'
+      },
+      authorization_codes_invalidated: 2,
+      access_tokens_revoked: 1,
+      refresh_tokens_revoked: 0
+    });
+
+    expect(parsed.client.name).toBe('Target Service Updated');
+    expect(parsed.refresh_tokens_revoked).toBe(0);
   });
 
   it('adds CSRF headers for unsafe browser API requests', async () => {

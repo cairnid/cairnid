@@ -443,6 +443,7 @@ test('admin applications page filters OIDC clients through the list API', async 
   let clientCreateRequests = 0;
   let policyListRequests = 0;
   let policyCreateRequests = 0;
+  let clientUpdateRequests = 0;
   let secretRotationRequests = 0;
   let statusUpdateRequests = 0;
   let consentReviewRequests = 0;
@@ -526,6 +527,51 @@ test('admin applications page filters OIDC clients through the list API', async 
         created_at: '2026-06-07T00:03:00Z'
       };
       await fulfillJson(route, { client: createdClient });
+      return;
+    }
+
+    if (
+      url.pathname === `/api/v1/oidc/clients/${confidentialClient.id}` &&
+      request.method() === 'PUT'
+    ) {
+      expect(request.headers()['x-cairn-csrf']).toBe(csrfToken);
+      const payload = request.postDataJSON() as Record<string, unknown>;
+      expect(Object.keys(payload).sort()).toEqual([
+        'allowed_scopes',
+        'consent_policy_template_id',
+        'name',
+        'post_logout_redirect_uris',
+        'redirect_uris'
+      ]);
+      expect(payload.name).toBe('Target Service Updated');
+      expect(payload.redirect_uris).toEqual(['https://service.example.com/callback-updated']);
+      expect(payload.post_logout_redirect_uris).toEqual([
+        'https://service.example.com/signed-out-updated'
+      ]);
+      expect(payload.allowed_scopes).toEqual(['openid', 'email', 'groups']);
+      expect(payload.consent_policy_template_id).toBe(consentPolicyTemplate.id);
+      expect(payload.client_id).toBeUndefined();
+      expect(payload.public_client).toBeUndefined();
+      expect(payload.grant_types).toBeUndefined();
+      expect(payload.require_pkce).toBeUndefined();
+      expect(payload.status).toBeUndefined();
+      expect(payload.has_client_secret).toBeUndefined();
+      expect(payload.client_secret_hash).toBeUndefined();
+      clientUpdateRequests += 1;
+      confidentialClient = {
+        ...confidentialClient,
+        consent_policy_template_id: consentPolicyTemplate.id,
+        name: 'Target Service Updated',
+        redirect_uris: [{ value: 'https://service.example.com/callback-updated' }],
+        post_logout_redirect_uris: [{ value: 'https://service.example.com/signed-out-updated' }],
+        allowed_scopes: ['openid', 'email', 'groups']
+      };
+      await fulfillJson(route, {
+        client: confidentialClient,
+        authorization_codes_invalidated: 2,
+        access_tokens_revoked: 1,
+        refresh_tokens_revoked: 0
+      });
       return;
     }
 
@@ -661,6 +707,46 @@ test('admin applications page filters OIDC clients through the list API', async 
   await expect(page.getByRole('row').filter({ hasText: 'public-web' })).toHaveCount(0);
   await expect(page.getByText('email_verified')).toBeVisible();
 
+  await targetRow.getByRole('button', { name: 'Edit client target-service' }).click();
+  const editPanel = page.getByRole('region', { name: 'Edit application' });
+  await expect(editPanel.getByText('target-service / Confidential / Active')).toBeVisible();
+  await expect(editPanel.getByLabel('Edit client name')).toHaveValue('Target Service');
+  await expect(editPanel.getByLabel('Edit authorization redirect URIs')).toHaveValue(
+    'https://service.example.com/callback'
+  );
+  await expect(editPanel.getByLabel('Edit post-logout redirect URIs')).toHaveValue(
+    'https://service.example.com/signed-out'
+  );
+  await expect(editPanel.getByLabel('Edit scopes')).toHaveValue('openid email');
+  await expect(editPanel.getByLabel('Edit consent policy')).toHaveValue('');
+  await expect(editPanel.getByLabel('Edit client ID')).toHaveCount(0);
+  await expect(editPanel.getByLabel('Public client')).toHaveCount(0);
+  await expect(editPanel.getByLabel('Grant types')).toHaveCount(0);
+  await expect(editPanel.getByLabel('PKCE')).toHaveCount(0);
+  await expect(editPanel.getByLabel('Status')).toHaveCount(0);
+  await expect(editPanel.getByLabel('Secret')).toHaveCount(0);
+
+  await editPanel.getByLabel('Edit client name').fill('Target Service Updated');
+  await editPanel
+    .getByLabel('Edit authorization redirect URIs')
+    .fill('https://service.example.com/callback-updated');
+  await editPanel
+    .getByLabel('Edit post-logout redirect URIs')
+    .fill('https://service.example.com/signed-out-updated');
+  await editPanel.getByLabel('Edit scopes').fill('openid email groups');
+  await editPanel.getByLabel('Edit consent policy').selectOption(consentPolicyTemplate.id);
+  await editPanel.getByRole('button', { name: 'Save changes' }).click();
+  await expect(
+    editPanel.getByText(
+      'Client updated for target-service; authorization codes invalidated: 2; access tokens revoked: 1; refresh tokens revoked: 0'
+    )
+  ).toBeVisible();
+  await expect(targetRow.getByText('Target Service Updated')).toBeVisible();
+  await expect(targetRow.getByText('https://service.example.com/callback-updated')).toBeVisible();
+  await expect(targetRow.getByText('https://service.example.com/signed-out-updated')).toBeVisible();
+  await expect(targetRow.getByRole('cell', { name: 'openid, email, groups' })).toBeVisible();
+  await expect(targetRow.getByText('Sensitive Claims (Always required)')).toBeVisible();
+
   page.once('dialog', async (dialog) => {
     expect(dialog.message()).toContain('target-service');
     await dialog.accept();
@@ -698,6 +784,7 @@ test('admin applications page filters OIDC clients through the list API', async 
   expect(clientCreateRequests).toBe(1);
   expect(policyListRequests).toBe(4);
   expect(policyCreateRequests).toBe(1);
+  expect(clientUpdateRequests).toBe(1);
   expect(secretRotationRequests).toBe(1);
   expect(statusUpdateRequests).toBe(2);
   expect(consentReviewRequests).toBe(2);

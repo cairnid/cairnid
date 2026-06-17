@@ -87,6 +87,13 @@ export const clientStatusUpdateSchema = z.object({
   refresh_tokens_revoked: z.number().int().nonnegative()
 });
 
+export const clientDetailsUpdateSchema = z.object({
+  client: clientSchema,
+  authorization_codes_invalidated: z.number().int().nonnegative(),
+  access_tokens_revoked: z.number().int().nonnegative(),
+  refresh_tokens_revoked: z.number().int().nonnegative()
+});
+
 export const consentGrantModeSchema = z.enum(['required_once', 'always_required']);
 
 export const consentPolicyTemplateSchema = z.object({
@@ -163,6 +170,7 @@ export type OidcGrantType = z.infer<typeof oidcGrantTypeSchema>;
 export type OidcClient = z.infer<typeof clientSchema>;
 export type ClientSecretRotation = z.infer<typeof clientSecretRotationSchema>;
 export type ClientStatusUpdate = z.infer<typeof clientStatusUpdateSchema>;
+export type ClientDetailsUpdate = z.infer<typeof clientDetailsUpdateSchema>;
 export type ConsentGrantMode = z.infer<typeof consentGrantModeSchema>;
 export type ConsentPolicyTemplate = z.infer<typeof consentPolicyTemplateSchema>;
 export type AuditEvent = z.infer<typeof auditEventSchema>;
