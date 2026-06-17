@@ -133,6 +133,45 @@ jobs:
       - name: CLI tests
         run: cargo test -p cairnid --locked
 
+  cli-distribution-smoke:
+    name: CLI distribution smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_os: ubuntu
+            binary_path: target/release/cairnid
+          - os: windows-latest
+            artifact_os: windows
+            binary_path: target\release\cairnid.exe
+    steps:
+      - uses: actions/checkout@v6
+      - name: Show Rust version
+        run: |
+          rustc --version
+          cargo --version
+      - name: Build release CLI
+        run: cargo build --release -p cairnid --locked
+      - name: Smoke release CLI on Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          target/release/cairnid --version
+          target/release/cairnid evidence --help
+      - name: Smoke release CLI on Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          & "target\release\cairnid.exe" --version
+          & "target\release\cairnid.exe" evidence --help
+      - name: Upload CI rehearsal CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cairnid-cli-ci-rehearsal-${{ matrix.artifact_os }}-${{ github.sha }}
+          path: ${{ matrix.binary_path }}
+          if-no-files-found: error
+
   dependency-security:
     runs-on: ubuntu-latest
     timeout-minutes: 45
