@@ -447,6 +447,20 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
         .expect("email smoke artifact");
     assert!(email_smoke.touches_external_provider);
     assert!(!email_smoke.writes_application_state);
+
+    let lifecycle_email_smoke = manifest
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "lifecycle_email_smoke")
+        .expect("lifecycle email smoke artifact");
+    assert_eq!(
+        lifecycle_email_smoke.command,
+        "cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json"
+    );
+    assert_eq!(lifecycle_email_smoke.validator, "lifecycle_email_smoke");
+    assert!(!lifecycle_email_smoke.contains_secrets);
+    assert!(lifecycle_email_smoke.writes_application_state);
+    assert!(lifecycle_email_smoke.touches_external_provider);
 }
 
 #[test]
@@ -551,6 +565,21 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
             .operator_notes
             .iter()
             .any(|note| note.contains("external provisioning client"))
+    );
+
+    let lifecycle_email_smoke = report
+        .steps
+        .iter()
+        .find(|step| step.name == "lifecycle_email_smoke")
+        .expect("lifecycle email smoke step");
+    assert_eq!(lifecycle_email_smoke.status, "ready");
+    assert!(lifecycle_email_smoke.writes_application_state);
+    assert!(lifecycle_email_smoke.touches_external_provider);
+    assert!(
+        lifecycle_email_smoke
+            .operator_notes
+            .iter()
+            .any(|note| note.contains("state-changing release smoke"))
     );
 }
 

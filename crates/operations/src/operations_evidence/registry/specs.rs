@@ -168,8 +168,8 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
         validator: EvidenceValidator::LifecycleEmailSmoke,
         contains_secrets: false,
         requires_production_like_environment: true,
-        writes_application_state: false,
-        touches_external_provider: false,
+        writes_application_state: true,
+        touches_external_provider: true,
     },
     EvidenceSpec {
         name: "restore_drill",
