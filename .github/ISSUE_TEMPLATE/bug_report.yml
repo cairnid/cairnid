@@ -67,3 +67,12 @@ body:
       label: Sanitized logs
       description: Paste only logs with secrets removed.
       render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I have not included secrets, bearer tokens, authorization codes, private keys, cookies, database URLs, sensitive logs, private deployment data, or vulnerability details.
+          required: true
+        - label: This is not a public vulnerability disclosure and does not include exploit details or active abuse evidence.
+          required: true

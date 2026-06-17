@@ -3,6 +3,10 @@ description: Propose a product, protocol, deployment, or operations improvement.
 title: "[Feature]: "
 labels: ["enhancement", "needs-triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, bearer tokens, authorization codes, private keys, cookies, database URLs, sensitive release evidence, or vulnerability details. Report vulnerabilities through SECURITY.md instead of this template.
   - type: textarea
     id: problem
     attributes:
@@ -38,3 +42,12 @@ body:
     attributes:
       label: Tradeoffs and compatibility
       description: Include expected migration, security, or compatibility concerns.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I have not included secrets, bearer tokens, authorization codes, private keys, cookies, database URLs, sensitive logs, private deployment data, or vulnerability details.
+          required: true
+        - label: This is not a public vulnerability disclosure and does not include exploit details or active abuse evidence.
+          required: true

@@ -187,6 +187,8 @@ impl McpEvidenceRequestError {
         "non_directory_evidence_dir",
         "evidence_dir must be a directory",
     );
+    const NO_ARGUMENTS_ACCEPTED: Self =
+        Self::new("unknown_argument", "this tool does not accept arguments");
     const OUTSIDE_ALLOWLISTED_ROOT: Self = Self::new(
         "outside_allowlisted_root",
         "evidence_dir must resolve inside the allowlisted evidence root",
@@ -245,11 +247,30 @@ fn evidence_directory_input_schema() -> std::sync::Arc<JsonObject> {
     std::sync::Arc::new(schema)
 }
 
+fn closed_empty_input_schema() -> std::sync::Arc<JsonObject> {
+    let mut schema = JsonObject::new();
+    schema.insert(
+        "type".to_owned(),
+        serde_json::Value::String("object".to_owned()),
+    );
+    schema.insert(
+        "properties".to_owned(),
+        serde_json::Value::Object(JsonObject::new()),
+    );
+    schema.insert(
+        "additionalProperties".to_owned(),
+        serde_json::Value::Bool(false),
+    );
+
+    std::sync::Arc::new(schema)
+}
+
 #[tool_router]
 impl CairnIdMcpServer {
     #[tool(
         name = "cairnid.evidence_plan",
         description = "Return the release evidence capture plan.",
+        input_schema = closed_empty_input_schema(),
         annotations(
             title = "Evidence Plan",
             read_only_hint = true,
@@ -258,7 +279,11 @@ impl CairnIdMcpServer {
             open_world_hint = false
         )
     )]
-    fn evidence_plan(&self) -> Result<Json<McpEvidencePlan>, String> {
+    fn evidence_plan(
+        &self,
+        arguments: JsonObject,
+    ) -> Result<Json<McpEvidencePlan>, CallToolResult> {
+        parse_empty_arguments(arguments)?;
         let report = release_evidence_capture_plan(
             OffsetDateTime::now_utc(),
             |name| matches!(env::var(name), Ok(value) if !value.trim().is_empty()),
@@ -270,6 +295,7 @@ impl CairnIdMcpServer {
     #[tool(
         name = "cairnid.evidence_manifest",
         description = "Return the release evidence artifact manifest.",
+        input_schema = closed_empty_input_schema(),
         annotations(
             title = "Evidence Manifest",
             read_only_hint = true,
@@ -278,7 +304,11 @@ impl CairnIdMcpServer {
             open_world_hint = false
         )
     )]
-    fn evidence_manifest(&self) -> Result<Json<McpEvidenceManifest>, String> {
+    fn evidence_manifest(
+        &self,
+        arguments: JsonObject,
+    ) -> Result<Json<McpEvidenceManifest>, CallToolResult> {
+        parse_empty_arguments(arguments)?;
         Ok(Json(mcp_evidence_manifest(release_evidence_manifest(
             OffsetDateTime::now_utc(),
         ))))
@@ -415,6 +445,14 @@ fn parse_evidence_directory_request(
         evidence_dir,
         max_age_days,
     })
+}
+
+fn parse_empty_arguments(arguments: JsonObject) -> Result<(), McpEvidenceRequestError> {
+    if arguments.is_empty() {
+        Ok(())
+    } else {
+        Err(McpEvidenceRequestError::NO_ARGUMENTS_ACCEPTED)
+    }
 }
 
 fn optional_string_argument(
@@ -830,6 +868,24 @@ mod tests {
     }
 
     #[test]
+    fn evidence_plan_input_schema_is_closed_empty() {
+        assert_closed_empty_input_schema(
+            CairnIdMcpServer::evidence_plan_tool_attr()
+                .input_schema
+                .as_ref(),
+        );
+    }
+
+    #[test]
+    fn evidence_manifest_input_schema_is_closed_empty() {
+        assert_closed_empty_input_schema(
+            CairnIdMcpServer::evidence_manifest_tool_attr()
+                .input_schema
+                .as_ref(),
+        );
+    }
+
+    #[test]
     fn evidence_status_input_schema_exposes_enforced_request_contract() {
         assert_evidence_directory_input_schema(
             CairnIdMcpServer::evidence_status_tool_attr()
@@ -1015,6 +1071,25 @@ mod tests {
             schema.get("type"),
             Some(&serde_json::Value::String("object".to_owned()))
         );
+    }
+
+    fn assert_closed_empty_input_schema(input_schema: &rmcp::model::JsonObject) {
+        let schema = Value::Object(input_schema.clone());
+        let properties = schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .expect("input schema properties");
+
+        assert_eq!(schema.get("type"), Some(&json!("object")));
+        assert!(properties.is_empty());
+        assert_eq!(schema.get("additionalProperties"), Some(&json!(false)));
+
+        let required = schema
+            .get("required")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        assert!(required.is_empty());
     }
 
     fn assert_evidence_directory_input_schema(input_schema: &rmcp::model::JsonObject) {

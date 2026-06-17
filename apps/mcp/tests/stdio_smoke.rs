@@ -270,6 +270,30 @@ fn stdio_evidence_status_returns_stable_tool_error_envelopes() {
 }
 
 #[test]
+fn stdio_no_argument_evidence_tools_reject_stray_arguments() {
+    let root = temp_root("stdio-no-arg-errors");
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let plan = call_evidence_plan(&mut server, 2, json!({"unexpected": SENTINEL}));
+    assert_tool_error_code(&plan, "unknown_argument");
+    assert!(
+        !plan.to_string().contains(SENTINEL),
+        "unknown argument value was echoed: {plan}"
+    );
+
+    let manifest = call_evidence_manifest(&mut server, 3, json!({"unexpected": SENTINEL}));
+    assert_tool_error_code(&manifest, "unknown_argument");
+    assert!(
+        !manifest.to_string().contains(SENTINEL),
+        "unknown argument value was echoed: {manifest}"
+    );
+
+    drop(server);
+    remove_temp_root(root);
+}
+
+#[test]
 fn stdio_invalid_evidence_json_remains_sanitized_validation_summary() {
     let root = temp_root("stdio-invalid-json");
     let evidence_dir = root.join(DEFAULT_EVIDENCE_CHILD);
@@ -403,6 +427,14 @@ fn call_evidence_status(server: &mut McpProcess, id: u64, arguments: Value) -> V
 
 fn call_evidence_check(server: &mut McpProcess, id: u64, arguments: Value) -> Value {
     call_evidence_tool(server, id, "cairnid.evidence_check", arguments)
+}
+
+fn call_evidence_plan(server: &mut McpProcess, id: u64, arguments: Value) -> Value {
+    call_evidence_tool(server, id, "cairnid.evidence_plan", arguments)
+}
+
+fn call_evidence_manifest(server: &mut McpProcess, id: u64, arguments: Value) -> Value {
+    call_evidence_tool(server, id, "cairnid.evidence_manifest", arguments)
 }
 
 fn call_evidence_tool(
