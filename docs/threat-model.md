@@ -53,4 +53,4 @@ Update this document when a change adds or changes authentication, authorization
 
 ## Release Blockers
 
-The current pre-beta blockers are listed in [release-gates.md](release-gates.md). The short version: pass CI, publish OIDC conformance evidence, run public HTTPS smoke checks, validate SCIM/email/restore/key/audit drills, and pass `cairn-api operations evidence-check`.
+The current pre-beta blockers are listed in [release-gates.md](release-gates.md). The short version: pass CI, publish OIDC conformance evidence, run public HTTPS smoke checks, validate SCIM/email/restore/key/audit drills, and pass `cairnid evidence check`.

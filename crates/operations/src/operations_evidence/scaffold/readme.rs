@@ -18,9 +18,7 @@ pub(super) fn release_evidence_readme(manifest: &ReleaseEvidenceManifest) -> Str
     readme.push_str("## Workflow\n\n");
     readme.push_str("1. Produce each artifact with the command in the checklist.\n");
     readme.push_str("2. Keep state-changing drills on a production-like environment only.\n");
-    readme.push_str(
-        "3. Run `cairn-api operations evidence-check <evidence-dir>` before public beta.\n",
-    );
+    readme.push_str("3. Run `cairnid evidence check <evidence-dir>` before public beta.\n");
     readme.push_str("4. Do not commit the evidence artifacts.\n\n");
     readme.push_str(
         "5. Do not add screenshots, raw provider exports, logs, or extra files to this directory.\n\n",

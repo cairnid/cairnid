@@ -37,7 +37,7 @@ fn scaffold_readme_contains_required_operator_guidance_and_artifact_table() {
     let readme = release_evidence_readme(&release_evidence_manifest(generated_at()));
 
     assert!(readme.contains("Do not commit the evidence artifacts"));
-    assert!(readme.contains("cairn-api operations evidence-check <evidence-dir>"));
+    assert!(readme.contains("cairnid evidence check <evidence-dir>"));
     assert!(readme.contains("Do not add screenshots, raw provider exports"));
     assert!(readme.contains("| `operations-preflight.json` |"));
     assert!(readme.contains("| `cairn-oidcc-static.json` |"));

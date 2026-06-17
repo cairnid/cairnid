@@ -88,7 +88,7 @@ The output has this shape:
 }
 ```
 
-The OIDF runner reads the suite fields in this JSON, while `operations evidence-check` also requires the root `generated_at` timestamp to be fresh. Keep this file out of source control because it contains client secrets.
+The OIDF runner reads the suite fields in this JSON, while `cairnid evidence check` also requires the root `generated_at` timestamp to be fresh. Keep this file out of source control because it contains client secrets.
 
 Run these OIDF plan names against that JSON:
 
@@ -108,7 +108,7 @@ cairn-api conformance oidcc-result-template config-op > openid-config-op-result.
 cairn-api conformance oidcc-result-template basic-op > openid-basic-op-result.template.json
 ```
 
-After the matching OIDF suite run is complete, save the final normalized files as `openid-config-op-result.json` and `openid-basic-op-result.json`. Replace the placeholder completion timestamp and official result URL, set `status="FINISHED"`, and set `result` to `PASSED` or `WARNING` only when the OIDF result supports that value. Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized result summaries; `operations evidence-check` rejects secret-bearing field names in normalized OpenID result JSON.
+After the matching OIDF suite run is complete, save the final normalized files as `openid-config-op-result.json` and `openid-basic-op-result.json`. Replace the placeholder completion timestamp and official result URL, set `status="FINISHED"`, and set `result` to `PASSED` or `WARNING` only when the OIDF result supports that value. Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized result summaries; `cairnid evidence check` rejects secret-bearing field names in normalized OpenID result JSON.
 
 ## Evidence Gate
 
@@ -136,5 +136,5 @@ The release evidence checker validates the generated static registration report 
 It rejects generic success-shaped JSON, wrong plan names, failed or unknown results, unfinished tests, untouched templates with `status="template"`, secret-bearing result fields in either accepted format, and non-empty root `failures` or `errors` arrays:
 
 ```powershell
-cairn-api operations evidence-check <evidence-dir>
+cairnid evidence check <evidence-dir>
 ```

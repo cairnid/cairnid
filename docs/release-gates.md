@@ -24,18 +24,18 @@ Cairn Identity is pre-beta. A release can be recommended for production use only
 | Key operations | Signing-key rotation and KEK re-encryption receipts pass evidence validation | Pending external evidence |
 | Emergency access | Break-glass admin recovery drill passes and records audit evidence | Pending external evidence |
 | Audit operations | NDJSON archive and retention purge receipts pass evidence validation | Pending external evidence |
-| Final release evidence | `cairn-api operations evidence-check <evidence-dir>` passes with fresh artifacts and no unexpected files | Pending external evidence |
+| Final release evidence | `cairnid evidence check <evidence-dir>` passes with fresh artifacts and no unexpected files | Pending external evidence |
 
 ## Evidence Workflow
 
 ```powershell
-cairn-api operations evidence-plan
-cairn-api operations evidence-init <evidence-dir>
-cairn-api operations evidence-status <evidence-dir>
-cairn-api operations evidence-check <evidence-dir>
+cairnid evidence plan
+cairnid evidence init <evidence-dir>
+cairnid evidence status <evidence-dir>
+cairnid evidence check <evidence-dir>
 ```
 
-`evidence-plan` confirms that required environment variable names are present without printing values. `evidence-init` creates the guarded evidence directory. `evidence-status` shows missing or failed artifacts while evidence is being collected. `evidence-check` is the final local release gate.
+`cairnid evidence plan` confirms that required environment variable names are present without printing values. `cairnid evidence init` creates the guarded evidence directory. `cairnid evidence status` shows missing or failed artifacts while evidence is being collected. `cairnid evidence check` is the final local release gate.
 
 Do not commit release evidence directories. They can include operational context and must stay in controlled storage.
 

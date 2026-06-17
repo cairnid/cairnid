@@ -43,7 +43,7 @@ pub(super) fn openid_conformance_result_template(
         ],
         operator_notes: vec![
             "This template is not release evidence until the external OIDF suite run is complete.",
-            "operations evidence-check rejects status=\"template\", result=\"pending\", placeholder timestamps, and non-official result URLs.",
+            "cairnid evidence check rejects status=\"template\", result=\"pending\", placeholder timestamps, and non-official result URLs.",
             "Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized result summaries.",
         ],
     })

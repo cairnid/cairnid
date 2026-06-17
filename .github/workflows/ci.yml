@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           evidence_dir="$(mktemp -d)"
           trap 'rm -rf "$evidence_dir"' EXIT
-          cargo run -p cairn-api --locked -- operations evidence-plan > evidence-plan.json
+          cargo run -p cairnid --locked -- evidence plan > evidence-plan.json
           python - <<'PY'
           import json
           from pathlib import Path
@@ -67,7 +67,7 @@ jobs:
           assert report["manual_artifact_count"] == 4, report
           assert report["missing_environment"] == [], report
           PY
-          cargo run -p cairn-api --locked -- operations evidence-init "$evidence_dir" > evidence-init.json
+          cargo run -p cairnid --locked -- evidence init "$evidence_dir" > evidence-init.json
           python - <<'PY'
           import json
           from pathlib import Path
@@ -82,7 +82,7 @@ jobs:
           ], report
           PY
           set +e
-          cargo run -p cairn-api --locked -- operations evidence-status "$evidence_dir" > evidence-status.json
+          cargo run -p cairnid --locked -- evidence status "$evidence_dir" > evidence-status.json
           status=$?
           set -e
           test "$status" -ne 0

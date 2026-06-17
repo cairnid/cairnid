@@ -46,7 +46,7 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
                 let expected = serde_json::to_value(release_evidence_manifest(generated_at))?;
                 if manifest != expected {
                     failures.push(format!(
-                        "{RELEASE_EVIDENCE_MANIFEST_FILE}: scaffold manifest must match the current release-evidence artifact contract; rerun evidence-init with --force"
+                        "{RELEASE_EVIDENCE_MANIFEST_FILE}: scaffold manifest must match the current release-evidence artifact contract; rerun cairnid evidence init <evidence-dir> --force"
                     ));
                 }
             }
@@ -55,7 +55,7 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
             )),
         },
         Err(error) if error.kind() == io::ErrorKind::NotFound => failures.push(format!(
-            "{RELEASE_EVIDENCE_MANIFEST_FILE}: scaffold manifest is missing; run cairn-api operations evidence-init <evidence-dir>"
+            "{RELEASE_EVIDENCE_MANIFEST_FILE}: scaffold manifest is missing; run cairnid evidence init <evidence-dir>"
         )),
         Err(error) => return Err(error.into()),
     }
@@ -64,7 +64,7 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
     match fs::read_to_string(&readme_path) {
         Ok(contents) => {
             if !contents.contains("Do not commit the evidence artifacts")
-                || !contents.contains("cairn-api operations evidence-check")
+                || !contents.contains("cairnid evidence check")
                 || !contents.contains("Do not add screenshots, raw provider exports")
             {
                 failures.push(format!(
@@ -73,7 +73,7 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
             }
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => failures.push(format!(
-            "{RELEASE_EVIDENCE_README_FILE}: scaffold README is missing; run cairn-api operations evidence-init <evidence-dir>"
+            "{RELEASE_EVIDENCE_README_FILE}: scaffold README is missing; run cairnid evidence init <evidence-dir>"
         )),
         Err(error) => return Err(error.into()),
     }
@@ -88,7 +88,7 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
             }
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => failures.push(format!(
-            "{RELEASE_EVIDENCE_GITIGNORE_FILE}: scaffold gitignore is missing; run cairn-api operations evidence-init <evidence-dir>"
+            "{RELEASE_EVIDENCE_GITIGNORE_FILE}: scaffold gitignore is missing; run cairnid evidence init <evidence-dir>"
         )),
         Err(error) => return Err(error.into()),
     }

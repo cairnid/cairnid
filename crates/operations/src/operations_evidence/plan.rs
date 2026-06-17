@@ -86,7 +86,7 @@ where
         notes: vec![
             "This plan only reports whether required command inputs are present; it never prints environment values.",
             "Run public-beta evidence with CAIRN_ENV=production and production-like HTTPS origins.",
-            "A ready plan is not release approval; collect artifacts and run evidence-check.",
+            "A ready plan is not release approval; collect artifacts and run cairnid evidence check.",
         ],
     }
 }

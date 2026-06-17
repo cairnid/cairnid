@@ -107,48 +107,50 @@ When those explicit smoke origins are absent, the command uses `CAIRN_ISSUER` an
 
 ## Release Evidence Check
 
-Before public beta, verify the release capture environment without printing secret values:
+Before public beta, use `cairnid evidence` as the public release-evidence control surface. It plans, initializes, summarizes, and checks the evidence directory; artifact-producing receipts remain the `cairn-api operations`, `cairn-api conformance`, `cairn-api scim`, `cairn-api email-outbox`, signing-key, key-encryption, admin, and audit commands listed in the plan.
+
+Verify the release capture environment without printing secret values:
 
 ```powershell
-cairn-api operations evidence-plan
+cairnid evidence plan
 ```
 
-The plan reports every required artifact, command, validator, safety flag, required environment variable names, and missing capture inputs. It exits non-zero until required variable names are present. It does not validate secret values or deployed behavior; `operations preflight`, the smoke commands, external conformance results, and `evidence-check` still own those checks.
+The plan reports every required artifact, command, validator, safety flag, required environment variable names, and missing capture inputs. It exits non-zero until required variable names are present. It does not validate secret values or deployed behavior; `cairn-api operations preflight`, the smoke commands, external conformance results, and `cairnid evidence check` still own those checks.
 
 Then initialize an access-controlled evidence directory:
 
 ```powershell
-cairn-api operations evidence-init .\release-evidence
+cairnid evidence init .\release-evidence
 ```
 
-The initializer creates `release-evidence-manifest.json`, `README.md`, and a `.gitignore` that keeps evidence artifacts out of source control by default. `evidence-check` rejects missing, stale, or tampered scaffold files, so run the initializer before collecting artifacts. It refuses to replace an existing scaffold unless `--force` is passed:
+The initializer creates `release-evidence-manifest.json`, `README.md`, and a `.gitignore` that keeps evidence artifacts out of source control by default. `cairnid evidence check` rejects missing, stale, or tampered scaffold files, so run the initializer before collecting artifacts. It refuses to replace an existing scaffold unless `--force` is passed:
 
 ```powershell
-cairn-api operations evidence-init .\release-evidence --force
+cairnid evidence init .\release-evidence --force
 ```
 
-The manifest is a checklist, not proof that artifacts have been produced. It is generated from the same artifact specification as `evidence-plan` and `evidence-check`, and the checker requires it to match the current artifact contract so stale evidence directories cannot pass after release gates change. You can also print the token-free manifest without writing files:
+The manifest is a checklist, not proof that artifacts have been produced. It is generated from the same artifact specification as `cairnid evidence plan` and `cairnid evidence check`, and the checker requires it to match the current artifact contract so stale evidence directories cannot pass after release gates change. You can also print the token-free manifest without writing files:
 
 ```powershell
-cairn-api operations evidence-manifest > release-evidence-manifest.json
+cairnid evidence manifest > release-evidence-manifest.json
 ```
 
 Collect only the required JSON artifacts into the initialized directory and run:
 
 ```powershell
-cairn-api operations evidence-status <evidence-dir>
-cairn-api operations evidence-check <evidence-dir>
+cairnid evidence status <evidence-dir>
+cairnid evidence check <evidence-dir>
 ```
 
-`evidence-status` runs the same validators as `evidence-check`, then emits a smaller JSON summary with passed, missing, and failed artifact counts plus the next command for every artifact that still needs work. It exits non-zero while the evidence set is incomplete. `evidence-check` remains the release gate and emits the full per-artifact check/failure detail. Both commands reject unexpected files, directories, symlinks, screenshots, logs, raw provider exports, and forbidden secret-bearing field names in token-free artifacts; failure text redacts obvious secret-looking values before printing.
+`cairnid evidence status` runs the same validators as `cairnid evidence check`, then emits a smaller JSON summary with passed, missing, and failed artifact counts plus the next command for every artifact that still needs work. It exits non-zero while the evidence set is incomplete. `cairnid evidence check` remains the release gate and emits the full per-artifact check/failure detail. Both commands reject unexpected files, directories, symlinks, screenshots, logs, raw provider exports, and forbidden secret-bearing field names in token-free artifacts; failure text redacts obvious secret-looking values before printing.
 
 The same read-only evidence plan, manifest, status, and check operations are available through the local `cairnid-mcp` stdio server. MCP status and check responses return sanitized counts and failure codes, not validator failure text. See [mcp.md](mcp.md) for tool names and path restrictions.
 
 By default, artifact files, generated static OpenID artifact `generated_at` timestamps, receipt `completed_at` timestamps, and OpenID conformance-suite `exportedAt` timestamps must be no more than 30 days old. Timestamped artifacts more than five minutes in the future are also rejected, which catches clock or copy/paste mistakes before a public-beta gate is marked ready. Override the age window only for an explicitly approved release process:
 
 ```powershell
-cairn-api operations evidence-status <evidence-dir> --max-age-days 14
-cairn-api operations evidence-check <evidence-dir> --max-age-days 14
+cairnid evidence status <evidence-dir> --max-age-days 14
+cairnid evidence check <evidence-dir> --max-age-days 14
 ```
 
 The command validates these required artifact names:
@@ -208,7 +210,7 @@ The command records whether each template included an action URL, but does not s
 }
 ```
 
-`evidence-check` prints a token-free JSON report with per-artifact status, modified timestamps, checks, failures, and the command that should produce missing evidence. It exits non-zero until the scaffold is current, the directory contains no unapproved entries, token-free artifacts avoid forbidden secret-bearing field names, and every artifact passes. Failure text redacts obvious secret-looking echoed values, but malformed evidence files should still be treated as sensitive during cleanup. The only required artifact that is expected to contain secrets is `cairn-oidcc-static.json`; keep the evidence directory access-controlled and out of source control.
+`cairnid evidence check` prints a token-free JSON report with per-artifact status, modified timestamps, checks, failures, and the command that should produce missing evidence. It exits non-zero until the scaffold is current, the directory contains no unapproved entries, token-free artifacts avoid forbidden secret-bearing field names, and every artifact passes. Failure text redacts obvious secret-looking echoed values, but malformed evidence files should still be treated as sensitive during cleanup. The only required artifact that is expected to contain secrets is `cairn-oidcc-static.json`; keep the evidence directory access-controlled and out of source control.
 
 ## OpenID Conformance Preparation
 
@@ -221,7 +223,7 @@ cairn-api conformance oidcc-result-template config-op > openid-config-op-result.
 cairn-api conformance oidcc-result-template basic-op > openid-basic-op-result.template.json
 ```
 
-`oidcc-static-registration` emits the exact callback URLs and static-client settings for the configured suite alias. `oidcc-static-config` emits the JSON shape used by the OIDF Config OP and Basic OP static-client plans. Both commands include a root `generated_at` timestamp for release evidence and require an HTTPS `CAIRN_ISSUER`; the registration command also requires `CAIRN_CONFORMANCE_SUITE_BASE_URL`. `oidcc-result-template` emits normalized result-summary templates that cannot pass unchanged because `operations evidence-check` rejects `status="template"`, `result="pending"`, placeholder timestamps, placeholder official result URLs, and secret-bearing field names in normalized OpenID result JSON. Run `cairn-api operations preflight` first to confirm the issuer posture and identify missing `CAIRN_CONFORMANCE_*` variables without printing secret values. See [openid-conformance.md](openid-conformance.md) for the full environment contract and evidence gate.
+`oidcc-static-registration` emits the exact callback URLs and static-client settings for the configured suite alias. `oidcc-static-config` emits the JSON shape used by the OIDF Config OP and Basic OP static-client plans. Both commands include a root `generated_at` timestamp for release evidence and require an HTTPS `CAIRN_ISSUER`; the registration command also requires `CAIRN_CONFORMANCE_SUITE_BASE_URL`. `oidcc-result-template` emits normalized result-summary templates that cannot pass unchanged because `cairnid evidence check` rejects `status="template"`, `result="pending"`, placeholder timestamps, placeholder official result URLs, and secret-bearing field names in normalized OpenID result JSON. Run `cairn-api operations preflight` first to confirm the issuer posture and identify missing `CAIRN_CONFORMANCE_*` variables without printing secret values. See [openid-conformance.md](openid-conformance.md) for the full environment contract and evidence gate.
 
 ## SCIM Provisioning
 
@@ -243,7 +245,7 @@ cairn-api scim connector-profile okta
 cairn-api scim connector-profile entra
 ```
 
-For release evidence, save those reports as `scim-generic-connector-profile.json`, `scim-okta-connector-profile.json`, and `scim-entra-connector-profile.json`. The reports are token-free, but `operations evidence-check` still requires fresh `generated_at` timestamps and validates the provider-specific mapping and smoke guidance before accepting SCIM smoke evidence.
+For release evidence, save those reports as `scim-generic-connector-profile.json`, `scim-okta-connector-profile.json`, and `scim-entra-connector-profile.json`. The reports are token-free, but `cairnid evidence check` still requires fresh `generated_at` timestamps and validates the provider-specific mapping and smoke guidance before accepting SCIM smoke evidence.
 
 Generate token-free templates for the external connector summaries before running the provider smokes:
 
@@ -252,7 +254,7 @@ cairn-api scim connector-smoke-template okta > scim-okta-connector-smoke.templat
 cairn-api scim connector-smoke-template entra > scim-entra-connector-smoke.template.json
 ```
 
-The templates preserve the exact field names and required check names expected by `operations evidence-check`. They are not release evidence until the external connector run is complete, `status` is changed to `ok`, placeholders are replaced, and every required check is marked `passed`.
+The templates preserve the exact field names and required check names expected by `cairnid evidence check`. They are not release evidence until the external connector run is complete, `status` is changed to `ok`, placeholders are replaced, and every required check is marked `passed`.
 
 Smoke-test the endpoint:
 
@@ -280,9 +282,9 @@ $env:CAIRN_SCIM_REJECTED_BEARER_TOKEN="<old-or-invalid-token>"
 cairn-api scim smoke
 ```
 
-The command verifies metadata, optional secondary-token acceptance, optional rejected-token `401` behavior, User and Group create, exact-filter lookup, SearchRequest lookup, bounded projection, bounded PATCH including group member value paths, dependency-aware Bulk with forward `bulkId:` references, full replacement, soft user deprovisioning, group deletion, and response content types. For public-beta release evidence, run it with both `CAIRN_SCIM_SECONDARY_BEARER_TOKEN` and `CAIRN_SCIM_REJECTED_BEARER_TOKEN`; `operations evidence-check` requires both token checks, the RFC3339 completion timestamp, created-user cleanup evidence, deleted-group evidence, and every required SCIM smoke check.
+The command verifies metadata, optional secondary-token acceptance, optional rejected-token `401` behavior, User and Group create, exact-filter lookup, SearchRequest lookup, bounded projection, bounded PATCH including group member value paths, dependency-aware Bulk with forward `bulkId:` references, full replacement, soft user deprovisioning, group deletion, and response content types. For public-beta release evidence, run it with both `CAIRN_SCIM_SECONDARY_BEARER_TOKEN` and `CAIRN_SCIM_REJECTED_BEARER_TOKEN`; `cairnid evidence check` requires both token checks, the RFC3339 completion timestamp, created-user cleanup evidence, deleted-group evidence, and every required SCIM smoke check.
 
-After the built-in public-surface smoke passes, run controlled Okta and Microsoft Entra provisioning-client smokes against the same production-like HTTPS deployment. Save token-free normalized summaries as `scim-okta-connector-smoke.json` and `scim-entra-connector-smoke.json`. Each summary must use `source="external-scim-connector"`, include the provider, display name, HTTPS `scim_base_url`, `completed_at`, connector application/job IDs, secondary-token and retired-token checks, two created User UUIDs, the deactivated User UUID, the deleted Group UUID, and passed named checks for connector enablement, ServiceProviderConfig, User create/filter/SearchRequest/projection/PATCH/replace/deactivation, Group create/filter/SearchRequest/projection/member PATCH/replace/delete, Bulk forward-reference behavior, token-rotation acceptance, and retired-token rejection. Do not archive raw bearer tokens, authorization headers, provider credentials, screenshots, passwords, or client secrets in these JSON files. `operations evidence-check` rejects untouched templates with `status="template"` so placeholder files cannot pass the gate by mistake.
+After the built-in public-surface smoke passes, run controlled Okta and Microsoft Entra provisioning-client smokes against the same production-like HTTPS deployment. Save token-free normalized summaries as `scim-okta-connector-smoke.json` and `scim-entra-connector-smoke.json`. Each summary must use `source="external-scim-connector"`, include the provider, display name, HTTPS `scim_base_url`, `completed_at`, connector application/job IDs, secondary-token and retired-token checks, two created User UUIDs, the deactivated User UUID, the deleted Group UUID, and passed named checks for connector enablement, ServiceProviderConfig, User create/filter/SearchRequest/projection/PATCH/replace/deactivation, Group create/filter/SearchRequest/projection/member PATCH/replace/delete, Bulk forward-reference behavior, token-rotation acceptance, and retired-token rejection. Do not archive raw bearer tokens, authorization headers, provider credentials, screenshots, passwords, or client secrets in these JSON files. `cairnid evidence check` rejects untouched templates with `status="template"` so placeholder files cannot pass the gate by mistake.
 
 SCIM deprovisioning is soft: `DELETE /scim/v2/Users/{id}` suspends the user and revokes browser sessions, access tokens, and refresh tokens. Setting `active=false` through PUT or PATCH uses the same revocation path. It does not delete audit history, memberships, consent grants, or the user record.
 

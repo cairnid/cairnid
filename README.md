@@ -85,6 +85,7 @@ bun run dev
 
 ```text
 apps/api          Rust Axum API and OIDC provider
+apps/cli          Operator CLI for release-evidence plan, manifest, init, status, and check
 apps/web          SvelteKit admin, login, consent, and user UI
 apps/mcp          Local stdio MCP server for read-only release-evidence inspection
 crates/audit      Audit event builders and redaction

@@ -31,7 +31,7 @@ pub(in crate::operations_evidence) fn release_evidence_manifest_from_specs(
         notes: vec![
             "Store release evidence in an access-controlled directory.",
             "Do not commit cairn-oidcc-static.json because it contains OIDC client secrets.",
-            "Run evidence-check against the completed directory before public beta.",
+            "Run cairnid evidence check against the completed directory before public beta.",
         ],
     }
 }

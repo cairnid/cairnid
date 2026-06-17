@@ -575,11 +575,7 @@ fn release_evidence_init_writes_guarded_scaffold() {
             ".gitignore".to_owned()
         ]
     );
-    assert!(
-        report
-            .next_command
-            .contains("cairn-api operations evidence-check")
-    );
+    assert!(report.next_command.contains("cairnid evidence check"));
 
     let manifest_json = fs::read_to_string(root.join("release-evidence-manifest.json"))
         .expect("read generated manifest");

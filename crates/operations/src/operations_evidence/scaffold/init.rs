@@ -72,9 +72,6 @@ pub(in crate::operations_evidence) fn init_release_evidence_directory(
             .filter(|artifact| artifact.touches_external_provider)
             .count(),
         files_written,
-        next_command: format!(
-            "cairn-api operations evidence-check {}",
-            evidence_dir.to_string_lossy()
-        ),
+        next_command: format!("cairnid evidence check {}", evidence_dir.to_string_lossy()),
     })
 }
