@@ -1,9 +1,14 @@
 [package]
 name = "cairnid"
 version = "0.1.0"
+description = "Operator CLI for Cairn Identity release evidence workflows."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+publish.workspace = true
 
 [[bin]]
 name = "cairnid"

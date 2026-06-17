@@ -1,9 +1,14 @@
 [package]
 name = "cairn-oidc"
 version = "0.1.0"
+description = "OIDC and OAuth policy, discovery, claims, and signing support for Cairn Identity."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+publish.workspace = true
 
 [dependencies]
 aes-gcm.workspace = true

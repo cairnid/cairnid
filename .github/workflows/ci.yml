@@ -137,39 +137,236 @@ jobs:
     name: CLI distribution smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    env:
+      CAIRN_ENV: production
+      DATABASE_URL: postgres://CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE@example.invalid/cairn_identity
+      CAIRN_ISSUER: https://id.example.com
+      CAIRN_PUBLIC_WEB_ORIGIN: https://app.example.com
+      CAIRN_BOOTSTRAP_SETUP_SECRET: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
+      CAIRN_KEY_ENCRYPTION_KEY: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
+      CAIRN_EMAIL_PROVIDER: command
+      CAIRN_EMAIL_COMMAND_PATH: /usr/local/bin/cairn-send-email
+      CAIRN_CONFORMANCE_ALIAS: cairn-ci
+      CAIRN_CONFORMANCE_CLIENT_ID: client-one
+      CAIRN_CONFORMANCE_CLIENT_SECRET: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
+      CAIRN_CONFORMANCE_CLIENT2_ID: client-two
+      CAIRN_CONFORMANCE_CLIENT2_SECRET: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
+      CAIRN_CONFORMANCE_SUITE_BASE_URL: https://www.certification.openid.net/
+      CAIRN_SCIM_BEARER_TOKEN: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
+      CAIRN_SCIM_SECONDARY_BEARER_TOKEN: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
+      CAIRN_SCIM_REJECTED_BEARER_TOKEN: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
+      CAIRN_BREAK_GLASS_CONFIRM: grant-admin-owner
+      CAIRN_OLD_KEY_ENCRYPTION_KEY: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
+      CAIRN_NEW_KEY_ENCRYPTION_KEY: CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             artifact_os: ubuntu
-            binary_path: target/release/cairnid
+            cli_binary_path: target/release/cairnid
+            mcp_binary_path: target/release/cairnid-mcp
           - os: windows-latest
             artifact_os: windows
-            binary_path: target\release\cairnid.exe
+            cli_binary_path: target\release\cairnid.exe
+            mcp_binary_path: target\release\cairnid-mcp.exe
     steps:
       - uses: actions/checkout@v6
       - name: Show Rust version
         run: |
           rustc --version
           cargo --version
-      - name: Build release CLI
-        run: cargo build --release -p cairnid --locked
-      - name: Smoke release CLI on Linux
-        if: matrix.os == 'ubuntu-latest'
+      - name: Build release CLI and MCP
+        run: cargo build --release -p cairnid -p cairnid-mcp --locked
+      - name: Smoke release CLI
+        env:
+          CLI_BINARY: ${{ matrix.cli_binary_path }}
+        shell: python
         run: |
-          target/release/cairnid --version
-          target/release/cairnid evidence --help
-      - name: Smoke release CLI on Windows
-        if: matrix.os == 'windows-latest'
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          SENTINEL = "CAIRNID_DISTRIBUTION_SMOKE_SECRET_DO_NOT_EXPOSE"
+          cli = Path(os.environ["CLI_BINARY"]).resolve()
+          outputs = []
+
+          def run_cli(*args, expect_success=True):
+              result = subprocess.run(
+                  [str(cli), *args],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              outputs.extend([result.stdout, result.stderr])
+              if expect_success and result.returncode != 0:
+                  raise SystemExit(f"{' '.join(args)} failed with exit code {result.returncode}: {result.stderr}")
+              if not expect_success and result.returncode == 0:
+                  raise SystemExit(f"{' '.join(args)} unexpectedly succeeded")
+              return result
+
+          with tempfile.TemporaryDirectory(prefix="cairnid-distribution-") as root:
+              evidence_dir = Path(root) / "release-evidence"
+              run_cli("--version")
+              run_cli("evidence", "--help")
+              plan = json.loads(run_cli("evidence", "plan").stdout)
+              manifest = json.loads(run_cli("evidence", "manifest").stdout)
+              init = json.loads(run_cli("evidence", "init", str(evidence_dir)).stdout)
+              status = json.loads(
+                  run_cli("evidence", "status", str(evidence_dir), expect_success=False).stdout
+              )
+              check = json.loads(
+                  run_cli("evidence", "check", str(evidence_dir), expect_success=False).stdout
+              )
+
+              if SENTINEL in "\n".join(outputs):
+                  raise SystemExit("release CLI smoke output leaked sentinel")
+              for path in evidence_dir.rglob("*"):
+                  if path.is_file() and SENTINEL.encode() in path.read_bytes():
+                      raise SystemExit(f"release evidence scaffold leaked sentinel in {path.name}")
+
+          assert plan["status"] == "ready", plan
+          assert plan["artifact_count"] == 23, plan
+          assert plan["missing_environment"] == [], plan
+
+          assert manifest["status"] == "ok", manifest
+          assert manifest["artifact_count"] == 23, manifest
+
+          assert init["status"] == "initialized", init
+          assert init["artifact_count"] == 23, init
+          assert init["files_written"] == [
+              "release-evidence-manifest.json",
+              "README.md",
+              ".gitignore",
+          ], init
+
+          assert status["status"] == "incomplete", status
+          assert status["artifact_count"] == 23, status
+          assert status["missing_artifact_count"] == 23, status
+
+          assert check["status"] == "incomplete", check
+          assert len(check["artifacts"]) == 23, check
+          assert check["failures"], check
+      - name: Smoke release MCP stdio
+        env:
+          MCP_BINARY: ${{ matrix.mcp_binary_path }}
+        shell: python
         run: |
-          & "target\release\cairnid.exe" --version
-          & "target\release\cairnid.exe" evidence --help
+          import json
+          import os
+          import queue
+          import subprocess
+          import tempfile
+          import threading
+          import time
+
+          expected_tools = [
+              "cairnid.evidence_check",
+              "cairnid.evidence_manifest",
+              "cairnid.evidence_plan",
+              "cairnid.evidence_status",
+          ]
+
+          binary = os.path.abspath(os.environ["MCP_BINARY"])
+          with tempfile.TemporaryDirectory(prefix="cairnid-mcp-distribution-") as root:
+              process = subprocess.Popen(
+                  [binary],
+                  cwd=root,
+                  env={**os.environ, "RUST_LOG": "off"},
+                  stdin=subprocess.PIPE,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  text=True,
+              )
+              responses = queue.Queue()
+              stderr_lines = []
+
+              def read_stdout():
+                  for line in process.stdout:
+                      if line.strip():
+                          responses.put(line)
+
+              def read_stderr():
+                  for line in process.stderr:
+                      stderr_lines.append(line)
+
+              threading.Thread(target=read_stdout, daemon=True).start()
+              threading.Thread(target=read_stderr, daemon=True).start()
+
+              def write(message):
+                  process.stdin.write(json.dumps(message) + "\n")
+                  process.stdin.flush()
+
+              def request(request_id, message):
+                  write(message)
+                  deadline = time.monotonic() + 10
+                  while True:
+                      remaining = deadline - time.monotonic()
+                      if remaining <= 0:
+                          raise SystemExit(
+                              f"timed out waiting for MCP response {request_id}; stderr: {''.join(stderr_lines)}"
+                          )
+                      try:
+                          line = responses.get(timeout=remaining)
+                      except queue.Empty:
+                          raise SystemExit(
+                              f"timed out waiting for MCP response {request_id}; stderr: {''.join(stderr_lines)}"
+                          ) from None
+                      response = json.loads(line)
+                      if response.get("id") != request_id:
+                          continue
+                      if "error" in response:
+                          raise SystemExit(f"MCP response {request_id} returned error: {response}")
+                      return response["result"]
+
+              try:
+                  initialize = request(
+                      1,
+                      {
+                          "jsonrpc": "2.0",
+                          "id": 1,
+                          "method": "initialize",
+                          "params": {
+                              "protocolVersion": "2025-11-25",
+                              "capabilities": {},
+                              "clientInfo": {
+                                  "name": "cairnid-mcp-distribution-smoke",
+                                  "version": "0.0.0",
+                              },
+                          },
+                      },
+                  )
+                  assert initialize["serverInfo"]["name"] == "cairnid-mcp", initialize
+                  assert isinstance(initialize["capabilities"]["tools"], dict), initialize
+                  write({"jsonrpc": "2.0", "method": "notifications/initialized"})
+                  tools = request(
+                      2,
+                      {
+                          "jsonrpc": "2.0",
+                          "id": 2,
+                          "method": "tools/list",
+                          "params": {},
+                      },
+                  )
+                  names = sorted(tool["name"] for tool in tools["tools"])
+                  assert names == expected_tools, names
+              finally:
+                  if process.poll() is None:
+                      process.kill()
+                      process.wait(timeout=5)
       - name: Upload CI rehearsal CLI artifact
         uses: actions/upload-artifact@v4
         with:
           name: cairnid-cli-ci-rehearsal-${{ matrix.artifact_os }}-${{ github.sha }}
-          path: ${{ matrix.binary_path }}
+          path: ${{ matrix.cli_binary_path }}
+          if-no-files-found: error
+      - name: Upload CI rehearsal MCP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cairnid-mcp-ci-rehearsal-${{ matrix.artifact_os }}-${{ github.sha }}
+          path: ${{ matrix.mcp_binary_path }}
           if-no-files-found: error
 
   dependency-security:

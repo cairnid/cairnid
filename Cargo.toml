@@ -16,6 +16,10 @@ members = [
 edition = "2024"
 license = "Apache-2.0"
 rust-version = "1.94"
+repository = "https://github.com/cairnid/cairnid"
+homepage = "https://cairnid.com"
+readme = "README.md"
+publish = false
 
 [workspace.dependencies]
 aes-gcm = { version = "0.10.3", features = ["std", "getrandom"] }
