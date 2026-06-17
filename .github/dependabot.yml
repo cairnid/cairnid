@@ -5,45 +5,75 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      cargo-dependencies:
+      cargo-patch:
+        applies-to: "version-updates"
         patterns:
           - "*"
+        update-types:
+          - "patch"
 
   - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "weekly"
     groups:
-      bun-dependencies:
+      bun-minor-patch:
+        applies-to: "version-updates"
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
     groups:
-      docker-images:
+      docker-minor-patch:
+        applies-to: "version-updates"
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "docker"
     directory: "/apps/web"
     schedule:
       interval: "weekly"
     groups:
-      docker-images:
+      web-bun-images:
+        applies-to: "version-updates"
         patterns:
-          - "*"
+          - "oven/bun"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "node"
+        versions:
+          - ">=25"
+      - dependency-name: "oven/bun"
+        versions:
+          - ">=2"
 
   - package-ecosystem: "docker-compose"
     directory: "/infra"
     schedule:
       interval: "weekly"
     groups:
-      docker-compose-images:
+      docker-compose-minor-patch:
+        applies-to: "version-updates"
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "postgres"
+        versions:
+          - ">=18"
 
   - package-ecosystem: "github-actions"
     directory: "/"
