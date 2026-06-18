@@ -570,6 +570,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm pkg-config libssl-dev
       - name: Database integration tests
         run: cargo test -p cairn-database --tests --locked
+      - name: OIDC public flow API integration test
+        timeout-minutes: 15
+        run: cargo test -p cairn-api oidc_public_flow --locked
 
   web:
     runs-on: ubuntu-latest
