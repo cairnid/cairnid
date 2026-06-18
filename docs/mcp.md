@@ -109,7 +109,7 @@ If `--evidence-root <DIR>` is supplied and the root cannot be inspected, is not 
 
 Every tool advertises an MCP `outputSchema` for `structuredContent`. Successful structured results and tool-error envelopes include this root metadata field:
 
-- `schema_version`: currently `cairnid.mcp.evidence.v1`.
+- `schema_version`: required and advertised with `const: "cairnid.mcp.evidence.v1"`.
 
 The version identifies the MCP evidence result contract, not the evidence artifact format. Additive fields may be added within the same version. Removing or renaming fields, changing field meaning, changing failure-code semantics, or exposing previously sanitized validator details requires a new schema version.
 

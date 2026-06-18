@@ -969,15 +969,6 @@ fn assert_tools_list_output_schemas(tools: &[Value]) {
             .and_then(Value::as_array)
             .unwrap_or_else(|| panic!("tool {name} outputSchema oneOf"));
         assert_eq!(variants.len(), 2, "tool {name} outputSchema variants");
-        assert!(
-            variants.iter().all(schema_requires_schema_version),
-            "tool {name} outputSchema variants should require schema_version"
-        );
-        assert!(
-            variants.iter().any(schema_has_error_property),
-            "tool {name} outputSchema should include error envelope"
-        );
-
         let success_collection = match name {
             "cairnid.evidence_plan" => "steps",
             "cairnid.evidence_manifest" | "cairnid.evidence_status" | "cairnid.evidence_check" => {
@@ -986,6 +977,16 @@ fn assert_tools_list_output_schemas(tools: &[Value]) {
             _ => unreachable!("unexpected evidence tool {name}"),
         };
         let success_schema = success_output_schema(name, variants);
+        assert_schema_pins_schema_version_const(
+            success_schema,
+            &format!("tool {name} success outputSchema"),
+        );
+        let error_schema = error_output_schema(name, variants);
+        assert_schema_pins_schema_version_const(
+            error_schema,
+            &format!("tool {name} error outputSchema"),
+        );
+
         assert_schema_array_items_require_release_gate(
             schema_value,
             success_schema,
@@ -994,11 +995,7 @@ fn assert_tools_list_output_schemas(tools: &[Value]) {
         );
 
         if name == "cairnid.evidence_check" {
-            assert_error_summary_artifacts_require_release_gate(
-                name,
-                schema_value,
-                error_output_schema(name, variants),
-            );
+            assert_error_summary_artifacts_require_release_gate(name, schema_value, error_schema);
         }
     }
 }
@@ -1125,15 +1122,22 @@ fn schema_requires_property(schema: &Value, property: &str) -> bool {
         })
 }
 
-fn schema_requires_schema_version(schema: &Value) -> bool {
-    schema
-        .get("required")
-        .and_then(Value::as_array)
-        .is_some_and(|required| {
-            required
-                .iter()
-                .any(|field| field.as_str() == Some("schema_version"))
-        })
+fn assert_schema_pins_schema_version_const(schema: &Value, context: &str) {
+    assert!(
+        schema_requires_property(schema, "schema_version"),
+        "{context} should require schema_version"
+    );
+
+    let schema_version = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .and_then(|properties| properties.get("schema_version"))
+        .unwrap_or_else(|| panic!("{context} should advertise schema_version"));
+    assert_eq!(
+        schema_version.get("const").and_then(Value::as_str),
+        Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION),
+        "{context} should pin schema_version const"
+    );
 }
 
 fn schema_has_error_property(schema: &Value) -> bool {
