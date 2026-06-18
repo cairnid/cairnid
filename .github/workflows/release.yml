@@ -238,14 +238,14 @@ jobs:
                       raise SystemExit(f"release evidence scaffold leaked sentinel in {path.name}")
 
           assert plan["status"] == "ready", plan
-          assert plan["artifact_count"] == 23, plan
+          assert plan["artifact_count"] == 24, plan
           assert plan["missing_environment"] == [], plan
 
           assert manifest["status"] == "ok", manifest
-          assert manifest["artifact_count"] == 23, manifest
+          assert manifest["artifact_count"] == 24, manifest
 
           assert init["status"] == "initialized", init
-          assert init["artifact_count"] == 23, init
+          assert init["artifact_count"] == 24, init
           assert init["files_written"] == [
               "release-evidence-manifest.json",
               "README.md",
@@ -253,11 +253,11 @@ jobs:
           ], init
 
           assert status["status"] == "incomplete", status
-          assert status["artifact_count"] == 23, status
-          assert status["missing_artifact_count"] == 23, status
+          assert status["artifact_count"] == 24, status
+          assert status["missing_artifact_count"] == 24, status
 
           assert check["status"] == "incomplete", check
-          assert len(check["artifacts"]) == 23, check
+          assert len(check["artifacts"]) == 24, check
           assert check["failures"], check
 
       - name: Smoke release MCP stdio

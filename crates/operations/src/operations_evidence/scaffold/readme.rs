@@ -4,7 +4,7 @@ pub(super) fn release_evidence_readme(manifest: &ReleaseEvidenceManifest) -> Str
     let mut readme = String::new();
     readme.push_str("# Cairn Identity Release Evidence\n\n");
     readme.push_str(
-        "This directory is for public-beta release evidence. Keep it access-controlled. ",
+        "This directory is for first-public-RC and public-release evidence. Keep it access-controlled. ",
     );
     readme.push_str(
         "The generated `.gitignore` keeps evidence artifacts out of source control by default.\n\n",
@@ -18,17 +18,18 @@ pub(super) fn release_evidence_readme(manifest: &ReleaseEvidenceManifest) -> Str
     readme.push_str("## Workflow\n\n");
     readme.push_str("1. Produce each artifact with the command in the checklist.\n");
     readme.push_str("2. Keep state-changing drills on a production-like environment only.\n");
-    readme.push_str("3. Run `cairnid evidence check <evidence-dir>` before public beta.\n");
+    readme.push_str("3. Run `cairnid evidence check <evidence-dir>` before the first public RC and each public release.\n");
     readme.push_str("4. Do not commit the evidence artifacts.\n\n");
     readme.push_str(
         "5. Do not add screenshots, raw provider exports, logs, or extra files to this directory.\n\n",
     );
     readme.push_str("## Required Artifacts\n\n");
-    readme.push_str("| File | Command | Secrets | Mutates | External Provider |\n");
-    readme.push_str("| --- | --- | --- | --- | --- |\n");
+    readme.push_str("| Release Gate | File | Command | Secrets | Mutates | External Provider |\n");
+    readme.push_str("| --- | --- | --- | --- | --- | --- |\n");
     for artifact in &manifest.artifacts {
         readme.push_str(&format!(
-            "| `{}` | `{}` | {} | {} | {} |\n",
+            "| {} | `{}` | `{}` | {} | {} | {} |\n",
+            artifact.release_gate,
             artifact.file_name,
             artifact.command,
             yes_no(artifact.contains_secrets),

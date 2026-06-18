@@ -109,6 +109,78 @@ pub(super) fn dependency_policy_check() -> Value {
     })
 }
 
+pub(super) fn release_assets_verification() -> Value {
+    let tag = "v0.1.0-rc.1";
+    json!({
+        "status": "ok",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "release_tag": tag,
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "release_url": "https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1",
+        "run_url": "https://github.com/cairnid/cairnid/actions/runs/123456789",
+        "checksums": {
+            "file_name": "SHA256SUMS.txt",
+            "algorithm": "SHA-256",
+            "present": true,
+            "verified": true
+        },
+        "release_manifest": {
+            "file_name": "release-manifest.json",
+            "present": true,
+            "sha256_verified": true
+        },
+        "attestations": {
+            "signer_workflow": "cairnid/cairnid/.github/workflows/release.yml",
+            "source_ref": "refs/tags/v0.1.0-rc.1",
+            "provenance_verified": true,
+            "sbom_attestations_verified": true
+        },
+        "archives": [
+            release_archive("cairnid", tag, "x86_64-unknown-linux-gnu", "tar.gz"),
+            release_archive("cairnid", tag, "x86_64-pc-windows-msvc", "zip"),
+            release_archive("cairnid-mcp", tag, "x86_64-unknown-linux-gnu", "tar.gz"),
+            release_archive("cairnid-mcp", tag, "x86_64-pc-windows-msvc", "zip")
+        ],
+        "sboms": [
+            release_sbom("cairnid", tag, "x86_64-unknown-linux-gnu"),
+            release_sbom("cairnid", tag, "x86_64-pc-windows-msvc"),
+            release_sbom("cairnid-mcp", tag, "x86_64-unknown-linux-gnu"),
+            release_sbom("cairnid-mcp", tag, "x86_64-pc-windows-msvc")
+        ],
+        "failures": []
+    })
+}
+
+fn release_archive(binary: &str, tag: &str, target: &str, archive_format: &str) -> Value {
+    json!({
+        "file_name": format!("{binary}-{tag}-{target}.{archive_format}"),
+        "binary": binary,
+        "target": target,
+        "archive_format": archive_format,
+        "present": true,
+        "sha256": "a".repeat(64),
+        "sha256_verified": true,
+        "manifest_entry_present": true,
+        "github_attestation_verified": true,
+        "sbom_file_name": format!("{binary}-{tag}-{target}.sbom.cdx.json"),
+        "sbom_attestation_verified": true
+    })
+}
+
+fn release_sbom(binary: &str, tag: &str, target: &str) -> Value {
+    json!({
+        "file_name": format!("{binary}-{tag}-{target}.sbom.cdx.json"),
+        "binary": binary,
+        "target": target,
+        "format": "CycloneDX JSON",
+        "present": true,
+        "sha256": "b".repeat(64),
+        "sha256_verified": true,
+        "manifest_entry_present": true,
+        "github_attestation_verified": true
+    })
+}
+
 pub(super) fn openid_static_registration_report() -> Value {
     json!({
         "generated_at": "2026-06-07T12:00:00Z",

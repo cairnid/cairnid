@@ -122,6 +122,7 @@ pub fn summarize_release_evidence(report: &ReleaseEvidenceReport) -> ReleaseEvid
         .map(|artifact| ReleaseEvidenceNextAction {
             name: artifact.name,
             file_name: artifact.file_name,
+            release_gate: artifact.release_gate,
             status: artifact.status,
             command: artifact.command,
             failures: artifact.failures.clone(),

@@ -44,8 +44,11 @@ fn scaffold_readme_contains_required_operator_guidance_and_artifact_table() {
     assert!(readme.contains("Do not commit the evidence artifacts"));
     assert!(readme.contains("cairnid evidence check <evidence-dir>"));
     assert!(readme.contains("Do not add screenshots, raw provider exports"));
-    assert!(readme.contains("| `operations-preflight.json` |"));
-    assert!(readme.contains("| `cairn-oidcc-static.json` |"));
+    assert!(readme.contains("| Release Gate | File | Command |"));
+    assert!(readme.contains("`operations-preflight.json`"));
+    assert!(readme.contains("CLI/MCP public release assets"));
+    assert!(readme.contains("`release-assets-verification.json`"));
+    assert!(readme.contains("`cairn-oidcc-static.json`"));
 }
 
 #[test]

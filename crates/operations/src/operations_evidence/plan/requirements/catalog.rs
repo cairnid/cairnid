@@ -8,6 +8,7 @@ pub(super) fn evidence_environment_requirements(
 ) -> Vec<ReleaseEvidenceEnvironmentRequirement> {
     match validator {
         EvidenceValidator::DependencyPolicyCheck => Vec::new(),
+        EvidenceValidator::ReleaseAssetsVerification => Vec::new(),
         EvidenceValidator::OperationsPreflight => vec![
             env_req(vec![vec!["CAIRN_ENV"]], "production-mode preflight", false),
             env_req(vec![vec!["DATABASE_URL"]], "database connectivity", true),

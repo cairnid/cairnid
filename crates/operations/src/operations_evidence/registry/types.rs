@@ -2,6 +2,7 @@
 pub(in crate::operations_evidence) enum EvidenceValidator {
     OperationsPreflight,
     DependencyPolicyCheck,
+    ReleaseAssetsVerification,
     OpenIdStaticRegistration,
     OpenIdStaticConfig,
     OidcMetadataSmoke,
@@ -29,6 +30,7 @@ pub(in crate::operations_evidence) enum EvidenceValidator {
 pub(in crate::operations_evidence) struct EvidenceSpec {
     pub(in crate::operations_evidence) name: &'static str,
     pub(in crate::operations_evidence) file_name: &'static str,
+    pub(in crate::operations_evidence) release_gate: &'static str,
     pub(in crate::operations_evidence) command: &'static str,
     pub(in crate::operations_evidence) validator: EvidenceValidator,
     pub(in crate::operations_evidence) contains_secrets: bool,

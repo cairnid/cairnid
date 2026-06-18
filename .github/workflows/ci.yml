@@ -62,9 +62,9 @@ jobs:
               raise SystemExit("evidence-plan leaked a placeholder secret value")
           report = json.loads(raw)
           assert report["status"] == "ready", report
-          assert report["artifact_count"] == 23, report
+          assert report["artifact_count"] == 24, report
           assert report["ready_artifact_count"] == 19, report
-          assert report["manual_artifact_count"] == 4, report
+          assert report["manual_artifact_count"] == 5, report
           assert report["missing_environment"] == [], report
           PY
           cargo run -p cairnid --locked -- evidence init "$evidence_dir" > evidence-init.json
@@ -74,7 +74,7 @@ jobs:
 
           report = json.loads(Path("evidence-init.json").read_text())
           assert report["status"] == "initialized", report
-          assert report["artifact_count"] == 23, report
+          assert report["artifact_count"] == 24, report
           assert report["files_written"] == [
               "release-evidence-manifest.json",
               "README.md",
@@ -92,9 +92,9 @@ jobs:
 
           report = json.loads(Path("evidence-status.json").read_text())
           assert report["status"] == "incomplete", report
-          assert report["artifact_count"] == 23, report
-          assert report["missing_artifact_count"] == 23, report
-          assert len(report["next_actions"]) == 23, report
+          assert report["artifact_count"] == 24, report
+          assert report["missing_artifact_count"] == 24, report
+          assert len(report["next_actions"]) == 24, report
           assert any(
               action["file_name"] == "dependency-policy-check.json"
               and "dependency-policy-evidence" in action["command"]
@@ -228,14 +228,14 @@ jobs:
                       raise SystemExit(f"release evidence scaffold leaked sentinel in {path.name}")
 
           assert plan["status"] == "ready", plan
-          assert plan["artifact_count"] == 23, plan
+          assert plan["artifact_count"] == 24, plan
           assert plan["missing_environment"] == [], plan
 
           assert manifest["status"] == "ok", manifest
-          assert manifest["artifact_count"] == 23, manifest
+          assert manifest["artifact_count"] == 24, manifest
 
           assert init["status"] == "initialized", init
-          assert init["artifact_count"] == 23, init
+          assert init["artifact_count"] == 24, init
           assert init["files_written"] == [
               "release-evidence-manifest.json",
               "README.md",
@@ -243,11 +243,11 @@ jobs:
           ], init
 
           assert status["status"] == "incomplete", status
-          assert status["artifact_count"] == 23, status
-          assert status["missing_artifact_count"] == 23, status
+          assert status["artifact_count"] == 24, status
+          assert status["missing_artifact_count"] == 24, status
 
           assert check["status"] == "incomplete", check
-          assert len(check["artifacts"]) == 23, check
+          assert len(check["artifacts"]) == 24, check
           assert check["failures"], check
       - name: Smoke release MCP stdio
         env:

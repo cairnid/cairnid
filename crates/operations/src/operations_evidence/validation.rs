@@ -2,6 +2,7 @@ mod fields;
 mod forbidden_fields;
 mod ids;
 mod path;
+mod release_assets;
 mod timestamps;
 mod urls;
 
@@ -20,6 +21,7 @@ pub(super) use forbidden_fields::{
 };
 pub(super) use ids::{require_uuid_array_exact_len, require_uuid_at_path, validate_optional_uuid};
 pub(super) use path::{non_empty_string_at_path, value_at_path};
+pub(super) use release_assets::validate_release_assets_verification;
 pub(super) use timestamps::{
     require_openid_export_timestamp_at_path, require_rfc3339_timestamp,
     require_rfc3339_timestamp_at_path, validate_optional_filter_timestamp,

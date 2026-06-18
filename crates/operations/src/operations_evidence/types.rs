@@ -20,6 +20,7 @@ pub struct ReleaseEvidenceReport {
 pub struct ReleaseEvidenceArtifactReport {
     pub name: &'static str,
     pub file_name: &'static str,
+    pub release_gate: &'static str,
     pub status: &'static str,
     pub command: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,6 +46,7 @@ pub struct ReleaseEvidenceManifest {
 pub struct ReleaseEvidenceManifestArtifact {
     pub name: &'static str,
     pub file_name: &'static str,
+    pub release_gate: &'static str,
     pub command: &'static str,
     pub validator: &'static str,
     pub contains_secrets: bool,
@@ -91,6 +93,7 @@ pub struct ReleaseEvidencePlanReport {
 pub struct ReleaseEvidencePlanStep {
     pub name: &'static str,
     pub file_name: &'static str,
+    pub release_gate: &'static str,
     pub command: &'static str,
     pub validator: &'static str,
     pub status: &'static str,
@@ -133,6 +136,7 @@ pub struct ReleaseEvidenceStatusReport {
 pub struct ReleaseEvidenceNextAction {
     pub name: &'static str,
     pub file_name: &'static str,
+    pub release_gate: &'static str,
     pub status: &'static str,
     pub command: &'static str,
     pub failures: Vec<String>,

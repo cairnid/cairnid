@@ -5,6 +5,7 @@ pub(super) fn evidence_capture_is_manual(validator: EvidenceValidator) -> bool {
         validator,
         EvidenceValidator::OpenIdConfigOpConformance
             | EvidenceValidator::OpenIdBasicOpConformance
+            | EvidenceValidator::ReleaseAssetsVerification
             | EvidenceValidator::ScimOktaConnectorSmoke
             | EvidenceValidator::ScimEntraConnectorSmoke
     )
@@ -25,6 +26,10 @@ pub(super) fn evidence_operator_notes(spec: &EvidenceSpec) -> Vec<&'static str> 
             notes.push("Use `cairn-api conformance oidcc-result-template <config-op|basic-op>` to generate the token-free normalized published-result shape when archiving an official result URL instead of a full suite export.");
             notes.push("Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized OpenID result summaries.");
         }
+        EvidenceValidator::ReleaseAssetsVerification => {
+            notes.push("Verify the published GitHub Release assets, checksum file, release manifest, CycloneDX SBOMs, and GitHub provenance plus SBOM attestations before saving this token-free receipt.");
+            notes.push("Do not archive gh debug logs, request headers, cookies, tokens, or raw attestation payloads in this JSON artifact.");
+        }
         EvidenceValidator::ScimOktaConnectorSmoke | EvidenceValidator::ScimEntraConnectorSmoke => {
             notes.push("Record a normalized connector smoke summary after the external provisioning client completes the required provider-emitted SCIM create, update, deactivation, deletion, and token-rotation checks.");
             notes.push("Keep SCIM Bulk proof in the built-in scim-smoke.json evidence; Okta and Microsoft Entra connector summaries do not require provider-emitted Bulk.");
@@ -34,7 +39,7 @@ pub(super) fn evidence_operator_notes(spec: &EvidenceSpec) -> Vec<&'static str> 
         _ => {}
     }
     if matches!(spec.validator, EvidenceValidator::ScimSmoke) {
-        notes.push("Public-beta SCIM evidence requires primary, secondary, and rejected token checks even though the smoke command can run without optional rotation variables.");
+        notes.push("First-public-RC SCIM evidence requires primary, secondary, and rejected token checks even though the smoke command can run without optional rotation variables.");
     }
     if matches!(spec.validator, EvidenceValidator::EmailProviderSmoke) {
         notes.push("The smoke-provider command also requires a controlled recipient email argument; the plan does not record mailbox addresses.");
@@ -64,6 +69,9 @@ mod tests {
         ));
         assert!(evidence_capture_is_manual(
             EvidenceValidator::ScimEntraConnectorSmoke
+        ));
+        assert!(evidence_capture_is_manual(
+            EvidenceValidator::ReleaseAssetsVerification
         ));
         assert!(!evidence_capture_is_manual(EvidenceValidator::ScimSmoke));
         assert!(!evidence_capture_is_manual(

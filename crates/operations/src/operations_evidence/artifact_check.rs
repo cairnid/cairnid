@@ -31,6 +31,7 @@ pub(super) fn check_artifact(
         return Ok(ReleaseEvidenceArtifactReport {
             name: spec.name,
             file_name: spec.file_name,
+            release_gate: spec.release_gate,
             status: "missing",
             command: spec.command,
             modified_at: None,
@@ -91,6 +92,7 @@ pub(super) fn check_artifact(
     Ok(ReleaseEvidenceArtifactReport {
         name: spec.name,
         file_name: spec.file_name,
+        release_gate: spec.release_gate,
         status: if failures.is_empty() {
             "passed"
         } else {
@@ -110,6 +112,7 @@ fn failed_artifact_report(
     ReleaseEvidenceArtifactReport {
         name: spec.name,
         file_name: spec.file_name,
+        release_gate: spec.release_gate,
         status: "failed",
         command: spec.command,
         modified_at: None,
@@ -153,6 +156,7 @@ mod tests {
         EvidenceSpec {
             name: "test_artifact",
             file_name: "artifact.json",
+            release_gate: "Test gate",
             command: "capture artifact",
             validator: EvidenceValidator::OperationsPreflight,
             contains_secrets,

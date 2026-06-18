@@ -1,6 +1,6 @@
 use super::{
     email_evidence, oidc, operations_drill, operations_readiness, public_surface,
-    registry::EvidenceValidator, scim,
+    registry::EvidenceValidator, scim, validation::validate_release_assets_verification,
 };
 use serde_json::Value;
 
@@ -16,6 +16,9 @@ pub(super) fn validate_artifact(
         }
         EvidenceValidator::DependencyPolicyCheck => {
             operations_readiness::validate_dependency_policy_check(value, checks, failures);
+        }
+        EvidenceValidator::ReleaseAssetsVerification => {
+            validate_release_assets_verification(value, checks, failures);
         }
         EvidenceValidator::OpenIdStaticRegistration => {
             oidc::validate_openid_static_registration(value, checks, failures);
