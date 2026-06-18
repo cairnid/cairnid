@@ -14,6 +14,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
       - name: Install native dependencies
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm pkg-config libssl-dev
       - name: Show Rust version
@@ -24,6 +27,8 @@ jobs:
         run: cargo check --workspace --locked
       - name: Test
         run: cargo test --workspace --locked
+      - name: Web/API contract check
+        run: bun run check:web-api-contract
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Release evidence tooling smoke
@@ -573,6 +578,9 @@ jobs:
       - name: OIDC public flow API integration test
         timeout-minutes: 15
         run: cargo test -p cairn-api oidc_public_flow --locked
+      - name: Admin groups API integration test
+        timeout-minutes: 15
+        run: cargo test -p cairn-api admin_groups --locked
 
   web:
     runs-on: ubuntu-latest

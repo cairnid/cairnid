@@ -17,6 +17,7 @@
     "build": "bun run --cwd apps/web build",
     "check": "bun run --cwd apps/web check",
     "check:public-surface": "bun infra/scripts/check-public-surface.ts",
+    "check:web-api-contract": "bun infra/scripts/check-web-api-contract.ts",
     "docs:site": "bun infra/scripts/generate-site-docs.ts",
     "test": "bun run --cwd apps/web test",
     "test:e2e": "bun run --cwd apps/web test:e2e",

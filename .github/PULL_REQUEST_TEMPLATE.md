@@ -7,6 +7,7 @@
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo check --workspace --locked`
 - [ ] `cargo test --workspace --locked`
+- [ ] `bun run check:web-api-contract`
 - [ ] `cargo clippy --workspace --all-targets --locked -- -D warnings`
 - [ ] `cargo deny check`
 - [ ] `cargo audit`
