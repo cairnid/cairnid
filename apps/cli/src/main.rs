@@ -3,7 +3,7 @@
 use cairn_operations::{
     DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseAssetsVerificationError,
     ReleaseAssetsVerificationOptions, ReleaseEvidenceError, check_release_evidence,
-    init_release_evidence_directory, release_assets_verification_receipt,
+    init_release_evidence_directory, release_assets_verification_report,
     release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
 };
 use clap::{CommandFactory, Parser, Subcommand};
@@ -271,7 +271,7 @@ fn run_release_assets(command: ReleaseAssetsCommand) -> Result<(), CliError> {
             provenance_attestations_verified,
             sbom_attestations_verified,
         } => {
-            let receipt = release_assets_verification_receipt(
+            let report = release_assets_verification_report(
                 &ReleaseAssetsVerificationOptions {
                     release_dir,
                     release_tag: tag,
@@ -284,7 +284,16 @@ fn run_release_assets(command: ReleaseAssetsCommand) -> Result<(), CliError> {
                 OffsetDateTime::now_utc(),
             )
             .map_err(release_assets_cli_error)?;
-            print_report(&receipt)
+            let ready = report.status == "ok" && report.failures.is_empty();
+            print_report(&report)?;
+
+            if ready {
+                Ok(())
+            } else {
+                Err(CliError::gate_failed(release_assets_failure_message(
+                    &report.failures,
+                )))
+            }
         }
     }
 }
@@ -391,6 +400,17 @@ fn release_assets_cli_error(error: ReleaseAssetsVerificationError) -> CliError {
         ReleaseAssetsVerificationError::Io(_) | ReleaseAssetsVerificationError::Json(_) => {
             CliError::internal(error)
         }
+    }
+}
+
+fn release_assets_failure_message(failures: &[String]) -> String {
+    if failures.is_empty() {
+        "release assets verification failed".to_owned()
+    } else {
+        format!(
+            "release assets verification failed: {}",
+            failures.join("; ")
+        )
     }
 }
 

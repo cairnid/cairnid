@@ -25,6 +25,7 @@ use self::registry::EVIDENCE_SPECS;
 pub use self::release_assets::{
     ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions,
     ReleaseAssetsVerificationReceipt, release_assets_verification_receipt,
+    release_assets_verification_report,
 };
 pub use self::types::{
     RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidenceArtifactReport,

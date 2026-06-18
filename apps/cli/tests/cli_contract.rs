@@ -315,6 +315,48 @@ fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
 }
 
 #[test]
+fn release_assets_verify_emits_failed_json_for_hash_mismatch() {
+    let release_dir = fake_release_assets_dir("verify-hash-mismatch");
+    let tampered_archive = format!("cairnid-{RELEASE_ASSET_TAG}-x86_64-unknown-linux-gnu.tar.gz");
+    fs::write(
+        release_dir.join(&tampered_archive),
+        format!("tampered archive {SECRET_SENTINEL}"),
+    )
+    .expect("tamper archive");
+
+    let output = run_release_assets_verify(&release_dir);
+
+    assert_failed_release_assets_stdout(
+        &output,
+        &format!("SHA256SUMS.txt hash mismatch for {tampered_archive}"),
+    );
+}
+
+#[test]
+fn release_assets_verify_emits_failed_json_for_missing_manifest() {
+    let release_dir = fake_release_assets_dir("verify-missing-manifest");
+    fs::remove_file(release_dir.join("release-manifest.json")).expect("remove release manifest");
+
+    let output = run_release_assets_verify(&release_dir);
+
+    assert_failed_release_assets_stdout(&output, "release-manifest.json must be present");
+}
+
+#[test]
+fn release_assets_verify_emits_failed_json_for_malformed_manifest() {
+    let release_dir = fake_release_assets_dir("verify-malformed-manifest");
+    fs::write(
+        release_dir.join("release-manifest.json"),
+        format!("{{ not valid JSON {SECRET_SENTINEL}"),
+    )
+    .expect("write malformed release manifest");
+
+    let output = run_release_assets_verify(&release_dir);
+
+    assert_failed_release_assets_stdout(&output, "release-manifest.json must contain valid JSON");
+}
+
+#[test]
 fn release_assets_verify_rejects_missing_url_and_attestation_flags() {
     let no_url = run_cairnid([
         "release-assets",
@@ -589,6 +631,23 @@ fn run_cairnid<const N: usize>(args: [&str; N]) -> Output {
     command(args).output().expect("run cairnid")
 }
 
+fn run_release_assets_verify(release_dir: &Path) -> Output {
+    let release_dir_arg = release_dir.to_string_lossy().into_owned();
+    run_cairnid([
+        "release-assets",
+        "verify",
+        &release_dir_arg,
+        "--tag",
+        RELEASE_ASSET_TAG,
+        "--source-commit",
+        RELEASE_ASSET_SOURCE_COMMIT,
+        "--run-url",
+        RELEASE_ASSET_RUN_URL,
+        "--provenance-attestations-verified",
+        "--sbom-attestations-verified",
+    ])
+}
+
 fn run_cairnid_with_plan_environment<const N: usize>(args: [&str; N]) -> Output {
     let mut command = command(args);
     for name in PLAN_ENVIRONMENT {
@@ -635,6 +694,29 @@ fn assert_exit_code(output: &Output, code: i32) {
         "expected exit code {code}\nstdout:\n{}\nstderr:\n{}",
         stdout(output),
         stderr(output)
+    );
+}
+
+fn assert_failed_release_assets_stdout(output: &Output, expected_failure: &str) {
+    assert_exit_code(output, 3);
+    let stdout = stdout(output);
+    assert!(!stdout.contains(SECRET_SENTINEL));
+    assert!(!stderr(output).contains(SECRET_SENTINEL));
+
+    let report: Value = serde_json::from_slice(&output.stdout).expect("valid failed report JSON");
+    assert_eq!(report["status"], "failed");
+    let failures = report["failures"]
+        .as_array()
+        .expect("failed report failures array");
+    assert!(
+        !failures.is_empty(),
+        "failed report should include failures"
+    );
+    assert!(
+        failures.iter().any(|failure| failure
+            .as_str()
+            .is_some_and(|failure| failure.contains(expected_failure))),
+        "{failures:?}"
     );
 }
 

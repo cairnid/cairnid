@@ -3,8 +3,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use super::{
-    SCIM_BULK_REQUEST_SCHEMA, SCIM_BULK_RESPONSE_SCHEMA, SCIM_GROUP_SCHEMA, SCIM_PATCH_OP_SCHEMA,
-    SCIM_USER_SCHEMA, ScimSmokeError, ScimSmokeRun,
+    CHECK_BULK_MUTATIONS, SCIM_BULK_REQUEST_SCHEMA, SCIM_BULK_RESPONSE_SCHEMA, SCIM_GROUP_SCHEMA,
+    SCIM_PATCH_OP_SCHEMA, SCIM_USER_SCHEMA, ScimSmokeError, ScimSmokeRun,
     helpers::{
         expect_bool, expect_bulk_operation, expect_bulk_response, expect_member_set, expect_str,
         resource_id,
@@ -134,7 +134,7 @@ impl ScimSmokeRun {
         self.created_group_id = None;
 
         self.pass(
-            "bulk_mutations",
+            CHECK_BULK_MUTATIONS,
             format!(
                 "created, patched, and cleaned up SCIM Bulk user {user_id} and group {group_id} with forward bulkId references"
             ),

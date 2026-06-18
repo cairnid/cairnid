@@ -4,11 +4,13 @@ use super::{
     DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION,
     ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions, ReleaseEvidenceError,
     check_release_evidence, init_release_evidence_directory, release_assets_verification_receipt,
-    release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
+    release_assets_verification_report, release_evidence_capture_plan, release_evidence_manifest,
+    release_evidence_status_report,
 };
 use fixtures::*;
 use serde_json::{Value, json};
-use std::fs;
+use sha2::{Digest, Sha256};
+use std::{fs, path::Path};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -845,6 +847,49 @@ fn release_evidence_rejects_invalid_release_assets_verification() {
 }
 
 #[test]
+fn release_evidence_rejects_failed_release_assets_verification_report() {
+    let release = fake_release_assets_dir("failed-release-assets-saved");
+    let tampered_archive = format!("cairnid-{}-x86_64-unknown-linux-gnu.tar.gz", release.tag);
+    fs::write(release.root.join(&tampered_archive), "tampered archive").expect("tamper archive");
+    let failed_report = release_assets_verification_report(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("failed release assets report");
+    assert_eq!(failed_report.status, "failed");
+    assert!(!failed_report.failures.is_empty());
+
+    let root = temp_evidence_dir("failed-release-assets-report");
+    write_json(
+        &root,
+        "release-assets-verification.json",
+        serde_json::to_value(&failed_report).expect("failed report JSON"),
+    );
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "release_assets_verification")
+        .expect("release assets artifact");
+    assert_eq!(artifact.status, "failed");
+    assert!(
+        artifact
+            .failures
+            .iter()
+            .any(|failure| failure.contains("status must be ok"))
+    );
+    assert!(
+        artifact
+            .failures
+            .iter()
+            .any(|failure| failure.contains("failures must be empty"))
+    );
+}
+
+#[test]
 fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
     let release = fake_release_assets_dir("receipt-happy");
     let receipt = release_assets_verification_receipt(
@@ -939,6 +984,84 @@ fn release_assets_receipt_generation_rejects_hash_mismatch_and_missing_asset() {
             .any(|failure| failure.contains(&format!("missing release asset {missing_sbom}"))),
         "{failures:?}"
     );
+}
+
+#[test]
+fn release_assets_report_returns_failed_json_for_hash_mismatch_and_missing_asset() {
+    let tampered = fake_release_assets_dir("report-hash-mismatch");
+    let tampered_archive = format!("cairnid-{}-x86_64-unknown-linux-gnu.tar.gz", tampered.tag);
+    fs::write(tampered.root.join(&tampered_archive), "tampered archive").expect("tamper archive");
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&tampered),
+        release_evidence_now(),
+    )
+    .expect("hash mismatch report");
+    assert_failed_release_assets_report(&report, &format!("hash mismatch for {tampered_archive}"));
+
+    let missing = fake_release_assets_dir("report-missing-asset");
+    let missing_sbom = format!(
+        "cairnid-mcp-{}-x86_64-pc-windows-msvc.sbom.cdx.json",
+        missing.tag
+    );
+    fs::remove_file(missing.root.join(&missing_sbom)).expect("remove SBOM");
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&missing),
+        release_evidence_now(),
+    )
+    .expect("missing asset report");
+    assert_failed_release_assets_report(&report, &format!("missing release asset {missing_sbom}"));
+}
+
+#[test]
+fn release_assets_report_returns_failed_json_for_missing_manifest_and_malformed_assets() {
+    let missing_manifest = fake_release_assets_dir("report-missing-manifest");
+    fs::remove_file(missing_manifest.root.join("release-manifest.json"))
+        .expect("remove release manifest");
+    let report = release_assets_verification_report(
+        &release_assets_options(&missing_manifest),
+        release_evidence_now(),
+    )
+    .expect("missing manifest report");
+    assert_failed_release_assets_report(&report, "release-manifest.json must be present");
+    assert!(!report.release_manifest.present);
+
+    let malformed_archive = fake_release_assets_dir("report-malformed-archive");
+    let archive_name = format!(
+        "cairnid-{}-x86_64-pc-windows-msvc.zip",
+        malformed_archive.tag
+    );
+    fs::write(
+        malformed_archive.root.join(&archive_name),
+        "not a zip archive",
+    )
+    .expect("write malformed archive");
+    rewrite_checksum_for_file(&malformed_archive.root, &archive_name);
+    let report = release_assets_verification_report(
+        &release_assets_options(&malformed_archive),
+        release_evidence_now(),
+    )
+    .expect("malformed archive report");
+    assert_failed_release_assets_report(&report, "archive structure could not be read");
+
+    let malformed_sbom = fake_release_assets_dir("report-malformed-sbom");
+    let sbom_name = format!(
+        "cairnid-{}-x86_64-pc-windows-msvc.sbom.cdx.json",
+        malformed_sbom.tag
+    );
+    fs::write(
+        malformed_sbom.root.join(&sbom_name),
+        "{ not valid CycloneDX JSON",
+    )
+    .expect("write malformed SBOM");
+    rewrite_checksum_for_file(&malformed_sbom.root, &sbom_name);
+    let report = release_assets_verification_report(
+        &release_assets_options(&malformed_sbom),
+        release_evidence_now(),
+    )
+    .expect("malformed SBOM report");
+    assert_failed_release_assets_report(&report, "must contain valid JSON");
 }
 
 #[test]
@@ -2535,8 +2658,65 @@ fn release_assets_options(release: &FakeReleaseAssets) -> ReleaseAssetsVerificat
     }
 }
 
+fn assert_failed_release_assets_report(
+    report: &super::ReleaseAssetsVerificationReceipt,
+    expected_failure: &str,
+) {
+    assert_eq!(report.status, "failed");
+    assert!(
+        !report.failures.is_empty(),
+        "failed report should include failures"
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains(expected_failure)),
+        "{:?}",
+        report.failures
+    );
+    let value = serde_json::to_value(report).expect("failed report JSON");
+    assert_eq!(value["status"], json!("failed"));
+    assert!(
+        !value["failures"]
+            .as_array()
+            .expect("report failures array")
+            .is_empty()
+    );
+}
+
 fn release_assets_failures(error: &ReleaseAssetsVerificationError) -> &[String] {
     error.failures().expect("verification failures")
+}
+
+fn rewrite_checksum_for_file(root: &Path, file_name: &str) {
+    let checksum_path = root.join("SHA256SUMS.txt");
+    let replacement_hash = sha256_test_file(&root.join(file_name));
+    let checksum_text = fs::read_to_string(&checksum_path).expect("read checksums");
+    let mut replaced = false;
+    let updated = checksum_text
+        .lines()
+        .map(|line| {
+            let mut parts = line.split_whitespace();
+            let _digest = parts.next();
+            let entry_file = parts.next().map(|entry| entry.trim_start_matches('*'));
+            if entry_file == Some(file_name) {
+                replaced = true;
+                format!("{replacement_hash}  {file_name}")
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    assert!(replaced, "checksum entry missing for {file_name}");
+    fs::write(checksum_path, updated).expect("rewrite checksums");
+}
+
+fn sha256_test_file(path: &Path) -> String {
+    let bytes = fs::read(path).expect("read file for sha256");
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 #[test]

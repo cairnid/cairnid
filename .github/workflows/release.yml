@@ -687,6 +687,79 @@ jobs:
                   raise SystemExit(f"{label} {' '.join(args)} wrote stderr: {result.stderr}")
               return result
 
+          def initialize_evidence_dir(cli, root):
+              evidence_dir = root / "release-evidence"
+              result = run_binary(
+                  "archive CLI",
+                  cli,
+                  "evidence",
+                  "init",
+                  str(evidence_dir),
+                  require_empty_stderr=True,
+              )
+              init = json.loads(result.stdout)
+              if init.get("status") != "initialized":
+                  raise SystemExit(f"archive CLI evidence init returned unexpected JSON: {init}")
+              return evidence_dir
+
+          def assert_tools_list_output_schemas(tools):
+              if not isinstance(tools, list):
+                  raise SystemExit(f"archive MCP tools/list did not return a tools array: {tools}")
+              tools_by_name = {tool.get("name"): tool for tool in tools if isinstance(tool, dict)}
+              for name in expected_tools:
+                  tool = tools_by_name.get(name)
+                  if tool is None:
+                      raise SystemExit(f"archive MCP tools/list omitted {name}: {tools}")
+                  schema = tool.get("outputSchema")
+                  if not isinstance(schema, dict):
+                      raise SystemExit(f"archive MCP tool {name} omitted outputSchema: {tool}")
+                  if schema.get("type") != "object":
+                      raise SystemExit(f"archive MCP tool {name} outputSchema is not an object schema: {schema}")
+                  variants = schema.get("oneOf")
+                  if not isinstance(variants, list) or len(variants) != 2:
+                      raise SystemExit(f"archive MCP tool {name} outputSchema should expose success and error variants: {schema}")
+                  encoded_schema = json.dumps(schema, sort_keys=True)
+                  if "schema_version" not in encoded_schema:
+                      raise SystemExit(f"archive MCP tool {name} outputSchema omits schema_version: {schema}")
+
+          def assert_structured_content_matches_text(result, label):
+              content = result.get("structuredContent")
+              if not isinstance(content, dict):
+                  raise SystemExit(f"{label} did not return structured content: {result}")
+              text_items = result.get("content")
+              if not isinstance(text_items, list) or not text_items:
+                  raise SystemExit(f"{label} did not return text content: {result}")
+              first_text = text_items[0]
+              if not isinstance(first_text, dict) or first_text.get("type") != "text":
+                  raise SystemExit(f"{label} content[0] was not text: {result}")
+              text = first_text.get("text")
+              if not isinstance(text, str):
+                  raise SystemExit(f"{label} content[0].text was not a string: {result}")
+              try:
+                  text_json = json.loads(text)
+              except json.JSONDecodeError as exc:
+                  raise SystemExit(f"{label} content[0].text was not JSON: {text!r}") from exc
+              if text_json != content:
+                  raise SystemExit(
+                      f"{label} content[0].text did not mirror structuredContent: "
+                      f"text={text_json}; structured={content}"
+                  )
+              return content
+
+          def assert_tool_success(result, label):
+              if result.get("isError") is not False:
+                  raise SystemExit(f"{label} returned tool error: {result}")
+              return assert_structured_content_matches_text(result, label)
+
+          def missing_evidence_count(summary):
+              failure_codes = summary.get("failure_codes")
+              if not isinstance(failure_codes, dict):
+                  raise SystemExit(f"missing failure_codes in summary: {summary}")
+              count = failure_codes.get("missing_evidence")
+              if not isinstance(count, int) or count <= 0:
+                  raise SystemExit(f"missing_evidence was not counted: {summary}")
+              return count
+
           def smoke_mcp_stdio(binary, root):
               process = subprocess.Popen(
                   [str(binary)],
@@ -758,6 +831,20 @@ jobs:
                           raise SystemExit(f"archive MCP response {request_id} returned error: {response}")
                       return response["result"]
 
+              def call_tool(request_id, name, arguments):
+                  return request(
+                      request_id,
+                      {
+                          "jsonrpc": "2.0",
+                          "id": request_id,
+                          "method": "tools/call",
+                          "params": {
+                              "name": name,
+                              "arguments": arguments,
+                          },
+                      },
+                  )
+
               try:
                   initialize = request(
                       1,
@@ -789,6 +876,50 @@ jobs:
                   )
                   names = sorted(tool["name"] for tool in tools["tools"])
                   assert names == expected_tools, names
+                  assert_tools_list_output_schemas(tools["tools"])
+
+                  plan = call_tool(3, "cairnid.evidence_plan", {})
+                  plan_content = assert_tool_success(plan, "archive MCP evidence_plan")
+                  assert plan_content["schema_version"] == "cairnid.mcp.evidence.v1", plan_content
+                  assert plan_content["status"] == "ready", plan_content
+                  if not plan_content.get("steps"):
+                      raise SystemExit(f"archive MCP evidence_plan omitted steps: {plan_content}")
+
+                  manifest = call_tool(4, "cairnid.evidence_manifest", {})
+                  manifest_content = assert_tool_success(manifest, "archive MCP evidence_manifest")
+                  assert manifest_content["schema_version"] == "cairnid.mcp.evidence.v1", manifest_content
+                  if not manifest_content.get("artifacts"):
+                      raise SystemExit(f"archive MCP evidence_manifest omitted artifacts: {manifest_content}")
+
+                  status = call_tool(
+                      5,
+                      "cairnid.evidence_status",
+                      {"evidence_dir": "release-evidence"},
+                  )
+                  status_content = assert_tool_success(status, "archive MCP evidence_status")
+                  assert status_content["schema_version"] == "cairnid.mcp.evidence.v1", status_content
+                  assert status_content["status"] == "incomplete", status_content
+                  missing_evidence_count(status_content)
+
+                  check = call_tool(
+                      6,
+                      "cairnid.evidence_check",
+                      {"evidence_dir": "release-evidence"},
+                  )
+                  if check.get("isError") is not True:
+                      raise SystemExit(f"archive MCP evidence_check unexpectedly succeeded: {check}")
+                  check_content = assert_structured_content_matches_text(
+                      check,
+                      "archive MCP evidence_check",
+                  )
+                  assert check_content["schema_version"] == "cairnid.mcp.evidence.v1", check_content
+                  error = check_content.get("error")
+                  if not isinstance(error, dict):
+                      raise SystemExit(f"archive MCP evidence_check missing structured error: {check}")
+                  assert error["code"] == "release_evidence_incomplete", error
+                  assert error["failure_code"] == "missing_evidence", error
+                  assert error["summary"]["status"] == "incomplete", error
+                  missing_evidence_count(error)
 
                   time.sleep(0.2)
                   extra_stdout = []
@@ -807,7 +938,15 @@ jobs:
                                   f"archive MCP wrote non-JSON stdout: {line!r}; "
                                   f"stderr={safe_stderr(stderr_lines)}"
                               ) from exc
-                      raise SystemExit(f"archive MCP wrote unexpected stdout after tools/list: {extra_stdout}")
+                      raise SystemExit(f"archive MCP wrote unexpected stdout after tools/call: {extra_stdout}")
+                  if len(stdout_lines) != len(observed_responses):
+                      raise SystemExit(
+                          "archive MCP wrote stdout outside JSON-RPC responses: "
+                          f"stdout={stdout_lines!r}; responses={observed_responses!r}"
+                      )
+                  for line in stdout_lines:
+                      if not line.endswith("\n"):
+                          raise SystemExit(f"archive MCP wrote stdout without newline delimiter: {line!r}")
                   assert_no_sentinel(
                       "archive MCP stdio smoke",
                       "".join(stdout_lines),
@@ -827,6 +966,7 @@ jobs:
               mcp = extract_archive("cairnid-mcp", root)
               run_binary("archive CLI", cli, "--version")
               run_binary("archive CLI", cli, "--help")
+              initialize_evidence_dir(cli, root)
               run_binary("archive MCP", mcp, "--version", require_empty_stderr=True)
               run_binary("archive MCP", mcp, "--help", require_empty_stderr=True)
               smoke_mcp_stdio(mcp, root)

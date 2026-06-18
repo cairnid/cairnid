@@ -2,7 +2,7 @@ use reqwest::{Method, StatusCode};
 use serde_json::Value;
 
 use super::super::{
-    ScimSmokeCheck, ScimSmokeError,
+    REQUIRED_SCIM_SMOKE_CHECKS, ScimSmokeCheck, ScimSmokeError,
     http::{ScimHttpRequest, scim_request},
 };
 use super::ScimSmokeRun;
@@ -51,6 +51,10 @@ impl ScimSmokeRun {
     }
 
     pub(in crate::scim_smoke) fn pass(&mut self, name: &'static str, detail: impl Into<String>) {
+        debug_assert!(
+            REQUIRED_SCIM_SMOKE_CHECKS.contains(&name),
+            "unknown SCIM smoke check name: {name}"
+        );
         self.checks.push(ScimSmokeCheck {
             name,
             status: "passed",

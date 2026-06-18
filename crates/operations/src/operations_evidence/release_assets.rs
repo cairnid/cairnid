@@ -12,6 +12,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use time::OffsetDateTime;
+use url::Url;
 use zip::ZipArchive;
 
 pub(in crate::operations_evidence) const CHECKSUM_FILE_NAME: &str = "SHA256SUMS.txt";
@@ -192,6 +193,20 @@ pub fn release_assets_verification_receipt(
     options: &ReleaseAssetsVerificationOptions,
     completed_at: OffsetDateTime,
 ) -> Result<ReleaseAssetsVerificationReceipt, ReleaseAssetsVerificationError> {
+    let receipt = release_assets_verification_report(options, completed_at)?;
+    if receipt.status == "ok" && receipt.failures.is_empty() {
+        Ok(receipt)
+    } else {
+        Err(ReleaseAssetsVerificationError::VerificationFailed(
+            receipt.failures,
+        ))
+    }
+}
+
+pub fn release_assets_verification_report(
+    options: &ReleaseAssetsVerificationOptions,
+    completed_at: OffsetDateTime,
+) -> Result<ReleaseAssetsVerificationReceipt, ReleaseAssetsVerificationError> {
     if !options.release_dir.is_dir() {
         return Err(ReleaseAssetsVerificationError::NotDirectory);
     }
@@ -288,27 +303,28 @@ pub fn release_assets_verification_receipt(
         }
     }
 
-    if !failures.is_empty() {
-        return Err(ReleaseAssetsVerificationError::VerificationFailed(failures));
-    }
-
-    let receipt = ReleaseAssetsVerificationReceipt {
-        status: "ok",
+    let mut receipt = ReleaseAssetsVerificationReceipt {
+        status: if failures.is_empty() { "ok" } else { "failed" },
         completed_at,
         release_tag: options.release_tag.clone(),
         source_commit: options.source_commit.clone(),
-        release_url: non_empty_option(&options.release_url),
-        run_url: non_empty_option(&options.run_url),
+        release_url: safe_public_github_url(&options.release_url, "/cairnid/cairnid/releases/tag/"),
+        run_url: safe_public_github_url(&options.run_url, "/cairnid/cairnid/actions/runs/"),
         checksums: ReleaseAssetChecksumsReceipt {
             file_name: CHECKSUM_FILE_NAME,
             algorithm: "SHA-256",
-            present: true,
-            verified: true,
+            present: options.release_dir.join(CHECKSUM_FILE_NAME).is_file(),
+            verified: !failures
+                .iter()
+                .any(|failure| failure.starts_with(CHECKSUM_FILE_NAME)),
         },
         release_manifest: ReleaseAssetManifestReceipt {
             file_name: RELEASE_MANIFEST_FILE_NAME,
-            present: true,
-            sha256_verified: true,
+            present: options
+                .release_dir
+                .join(RELEASE_MANIFEST_FILE_NAME)
+                .is_file(),
+            sha256_verified: release_manifest_sha256.is_some(),
         },
         attestations: ReleaseAssetAttestationsReceipt {
             signer_workflow: SIGNER_WORKFLOW,
@@ -318,20 +334,21 @@ pub fn release_assets_verification_receipt(
         },
         archives,
         sboms,
-        failures: Vec::new(),
+        failures,
     };
 
-    let mut contract_checks = Vec::new();
-    let mut contract_failures = Vec::new();
-    let value = serde_json::to_value(&receipt).map_err(ReleaseAssetsVerificationError::Json)?;
-    validate_release_assets_verification(&value, &mut contract_checks, &mut contract_failures);
-    if contract_failures.is_empty() {
-        Ok(receipt)
-    } else {
-        Err(ReleaseAssetsVerificationError::VerificationFailed(
-            contract_failures,
-        ))
+    if receipt.failures.is_empty() {
+        let mut contract_checks = Vec::new();
+        let mut contract_failures = Vec::new();
+        let value = serde_json::to_value(&receipt).map_err(ReleaseAssetsVerificationError::Json)?;
+        validate_release_assets_verification(&value, &mut contract_checks, &mut contract_failures);
+        if !contract_failures.is_empty() {
+            receipt.status = "failed";
+            receipt.failures = contract_failures;
+        }
     }
+
+    Ok(receipt)
 }
 
 pub(in crate::operations_evidence) fn archive_file_name(
@@ -382,7 +399,16 @@ fn read_checksums(
         return Ok(BTreeMap::new());
     }
 
-    let text = fs::read_to_string(path).map_err(ReleaseAssetsVerificationError::Io)?;
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            failures.push(format!(
+                "{CHECKSUM_FILE_NAME} could not be read: {}",
+                safe_io_error(&error)
+            ));
+            return Ok(BTreeMap::new());
+        }
+    };
     let mut entries = BTreeMap::new();
     for (index, line) in text.lines().enumerate() {
         let trimmed = line.trim();
@@ -438,7 +464,16 @@ fn read_json_file(
         return Ok(None);
     }
 
-    let bytes = fs::read(path).map_err(ReleaseAssetsVerificationError::Io)?;
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            failures.push(format!(
+                "{file_name} could not be read: {}",
+                safe_io_error(&error)
+            ));
+            return Ok(None);
+        }
+    };
     match serde_json::from_slice::<Value>(&bytes) {
         Ok(value) => Ok(Some(value)),
         Err(_) => {
@@ -462,7 +497,16 @@ fn verify_file_sha256(
         failures.push(format!("{CHECKSUM_FILE_NAME} is missing {file_name}"));
         return Ok(None);
     };
-    let actual_hash = sha256_file(&path)?;
+    let actual_hash = match sha256_file(&path) {
+        Ok(hash) => hash,
+        Err(error) => {
+            failures.push(format!(
+                "{file_name} could not be read for SHA-256: {}",
+                safe_io_error(&error)
+            ));
+            return Ok(None);
+        }
+    };
     if actual_hash != *expected_hash {
         failures.push(format!(
             "{CHECKSUM_FILE_NAME} hash mismatch for {file_name}"
@@ -899,14 +943,12 @@ fn value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
     Some(current)
 }
 
-fn sha256_file(path: &Path) -> Result<String, ReleaseAssetsVerificationError> {
-    let mut file = fs::File::open(path).map_err(ReleaseAssetsVerificationError::Io)?;
+fn sha256_file(path: &Path) -> Result<String, std::io::Error> {
+    let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 8192];
     loop {
-        let bytes_read = file
-            .read(&mut buffer)
-            .map_err(ReleaseAssetsVerificationError::Io)?;
+        let bytes_read = file.read(&mut buffer)?;
         if bytes_read == 0 {
             break;
         }
@@ -919,9 +961,39 @@ fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.chars().all(|character| character.is_ascii_hexdigit())
 }
 
+fn safe_public_github_url(value: &Option<String>, path_prefix: &str) -> Option<String> {
+    let value = value.as_ref()?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let url = Url::parse(value).ok()?;
+    if url.scheme() == "https"
+        && url.host_str() == Some("github.com")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && url.path().starts_with(path_prefix)
+    {
+        Some(value.to_owned())
+    } else {
+        None
+    }
+}
+
 fn non_empty_option(value: &Option<String>) -> Option<String> {
     value
         .as_ref()
         .filter(|value| !value.trim().is_empty())
         .cloned()
+}
+
+fn safe_io_error(error: &std::io::Error) -> &'static str {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => "not found",
+        std::io::ErrorKind::PermissionDenied => "permission denied",
+        std::io::ErrorKind::InvalidData => "invalid data",
+        std::io::ErrorKind::UnexpectedEof => "unexpected EOF",
+        _ => "I/O error",
+    }
 }

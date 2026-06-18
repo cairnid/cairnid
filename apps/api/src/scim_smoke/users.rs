@@ -3,6 +3,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use super::{
+    CHECK_USER_CREATE, CHECK_USER_DELETE, CHECK_USER_FILTER, CHECK_USER_PATCH,
+    CHECK_USER_PROJECTION, CHECK_USER_REPLACE, CHECK_USER_SEARCH_REQUEST, CHECK_USER_SOFT_DELETE,
     SCIM_PATCH_OP_SCHEMA, SCIM_SEARCH_REQUEST_SCHEMA, SCIM_USER_SCHEMA, ScimSmokeError,
     ScimSmokeRun,
     helpers::{
@@ -45,7 +47,7 @@ impl ScimSmokeRun {
         expect_bool(&resource, "/active", true)?;
         let user_id = resource_id(&resource)?;
         self.created_user_ids.push(user_id);
-        self.pass("user_create", format!("created SCIM user {user_id}"));
+        self.pass(CHECK_USER_CREATE, format!("created SCIM user {user_id}"));
         Ok(user_id)
     }
 
@@ -60,7 +62,7 @@ impl ScimSmokeRun {
             .await?;
         expect_list_response_id(&response, &user_id.to_string())?;
         self.pass(
-            "user_filter",
+            CHECK_USER_FILTER,
             format!("exact userName filter returned SCIM user {user_id}"),
         );
         Ok(())
@@ -83,7 +85,7 @@ impl ScimSmokeRun {
             .await?;
         expect_list_response_id(&response, &user_id.to_string())?;
         self.pass(
-            "user_search_request",
+            CHECK_USER_SEARCH_REQUEST,
             format!("SearchRequest userName filter returned SCIM user {user_id}"),
         );
         Ok(())
@@ -111,7 +113,7 @@ impl ScimSmokeRun {
         expect_missing(&resource, "/externalId")?;
         expect_missing(&resource, "/active")?;
         self.pass(
-            "user_projection",
+            CHECK_USER_PROJECTION,
             format!("SCIM user {user_id} returned only requested attributes"),
         );
         Ok(())
@@ -134,7 +136,7 @@ impl ScimSmokeRun {
             .request_ok(Method::PATCH, &format!("Users/{user_id}"), &[], Some(body))
             .await?;
         expect_str(&resource, "/displayName", display_name)?;
-        self.pass("user_patch", format!("patched SCIM user {user_id}"));
+        self.pass(CHECK_USER_PATCH, format!("patched SCIM user {user_id}"));
         Ok(())
     }
 
@@ -164,7 +166,7 @@ impl ScimSmokeRun {
         expect_str(&resource, "/displayName", display_name)?;
         expect_bool(&resource, "/active", true)?;
         self.pass(
-            "user_replace",
+            CHECK_USER_REPLACE,
             format!("fully replaced SCIM user {user_id}"),
         );
         Ok(())
@@ -180,7 +182,10 @@ impl ScimSmokeRun {
             StatusCode::NO_CONTENT,
         )
         .await?;
-        self.pass("user_delete", format!("soft-deleted SCIM user {user_id}"));
+        self.pass(
+            CHECK_USER_DELETE,
+            format!("soft-deleted SCIM user {user_id}"),
+        );
         Ok(())
     }
 
@@ -193,7 +198,7 @@ impl ScimSmokeRun {
             .await?;
         expect_bool(&resource, "/active", false)?;
         self.pass(
-            "user_soft_delete",
+            CHECK_USER_SOFT_DELETE,
             format!("SCIM user {user_id} is inactive after DELETE"),
         );
         Ok(())
