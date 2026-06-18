@@ -407,6 +407,8 @@ fn evidence_result_output_schema<T: JsonSchema + 'static>() -> std::sync::Arc<Js
     let mut error = rmcp::handler::server::common::schema_for_type::<McpEvidenceErrorEnvelope>()
         .as_ref()
         .clone();
+    pin_schema_version_const(&mut success);
+    pin_schema_version_const(&mut error);
     let mut definitions = JsonObject::new();
     hoist_schema_definitions(&mut success, &mut definitions);
     hoist_schema_definitions(&mut error, &mut definitions);
@@ -428,6 +430,22 @@ fn evidence_result_output_schema<T: JsonSchema + 'static>() -> std::sync::Arc<Js
     }
 
     std::sync::Arc::new(schema)
+}
+
+fn pin_schema_version_const(schema: &mut JsonObject) {
+    let properties = schema
+        .get_mut("properties")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("MCP output schema should advertise properties");
+    let schema_version = properties
+        .get_mut("schema_version")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("MCP output schema should advertise schema_version");
+
+    schema_version.insert(
+        "const".to_owned(),
+        serde_json::Value::String(MCP_EVIDENCE_RESULT_SCHEMA_VERSION.to_owned()),
+    );
 }
 
 fn hoist_schema_definitions(schema: &mut JsonObject, definitions: &mut JsonObject) {
@@ -1504,10 +1522,17 @@ mod tests {
             .and_then(Value::as_array)
             .expect("output schema oneOf variants");
         assert_eq!(variants.len(), 2);
-        assert!(variants.iter().all(schema_requires_schema_version));
-        assert!(variants.iter().any(schema_has_error_property));
-
         let success_schema = success_output_schema(tool_name, variants);
+        assert_schema_pins_schema_version_const(
+            success_schema,
+            &format!("{tool_name} success outputSchema"),
+        );
+        let error_schema = error_output_schema(tool_name, variants);
+        assert_schema_pins_schema_version_const(
+            error_schema,
+            &format!("{tool_name} error outputSchema"),
+        );
+
         assert_schema_array_items_require_release_gate(
             &schema,
             success_schema,
@@ -1516,11 +1541,7 @@ mod tests {
         );
 
         if expect_error_summary {
-            assert_error_summary_artifacts_require_release_gate(
-                tool_name,
-                &schema,
-                error_output_schema(tool_name, variants),
-            );
+            assert_error_summary_artifacts_require_release_gate(tool_name, &schema, error_schema);
         }
     }
 
@@ -1646,15 +1667,22 @@ mod tests {
             })
     }
 
-    fn schema_requires_schema_version(schema: &Value) -> bool {
-        schema
-            .get("required")
-            .and_then(Value::as_array)
-            .is_some_and(|required| {
-                required
-                    .iter()
-                    .any(|field| field.as_str() == Some("schema_version"))
-            })
+    fn assert_schema_pins_schema_version_const(schema: &Value, context: &str) {
+        assert!(
+            schema_requires_property(schema, "schema_version"),
+            "{context} should require schema_version"
+        );
+
+        let schema_version = schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .and_then(|properties| properties.get("schema_version"))
+            .unwrap_or_else(|| panic!("{context} should advertise schema_version"));
+        assert_eq!(
+            schema_version.get("const").and_then(Value::as_str),
+            Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION),
+            "{context} should pin schema_version const"
+        );
     }
 
     fn schema_has_error_property(schema: &Value) -> bool {
