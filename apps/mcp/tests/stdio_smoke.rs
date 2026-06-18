@@ -74,28 +74,44 @@ fn binary_version_exits_before_stdio_jsonrpc() {
 }
 
 #[test]
-fn binary_invalid_evidence_root_exits_before_stdio_jsonrpc() {
+fn binary_invalid_evidence_roots_exit_before_stdio_jsonrpc_without_echoing_paths() {
     let root = temp_root("invalid-startup-root");
-    let missing = root.join("missing-root");
-    let output = Command::new(env!("CARGO_BIN_EXE_cairnid-mcp"))
-        .arg("--evidence-root")
-        .arg(&missing)
-        .stdin(Stdio::null())
-        .output()
-        .expect("run cairnid-mcp with invalid evidence root");
+    let missing = root.join(format!("missing-{SENTINEL}"));
+    let file = root.join(format!("file-{SENTINEL}.txt"));
+    fs::write(&file, "not a directory").expect("write invalid evidence root file");
 
-    assert!(
-        !output.status.success(),
-        "invalid root unexpectedly succeeded"
-    );
-    assert_eq!(output_stdout(&output), "");
-    let stderr = output_stderr(&output);
-    assert!(
-        stderr.contains("cairnid-mcp failed: evidence root"),
-        "{stderr}"
-    );
-    assert!(stderr.contains("could not be inspected"), "{stderr}");
-    assert!(stderr.contains(&missing.display().to_string()), "{stderr}");
+    for (invalid_root, expected_reason) in [
+        (&missing, "could not be inspected"),
+        (&file, "is not a directory"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_cairnid-mcp"))
+            .arg("--evidence-root")
+            .arg(invalid_root)
+            .stdin(Stdio::null())
+            .output()
+            .expect("run cairnid-mcp with invalid evidence root");
+
+        assert!(
+            !output.status.success(),
+            "invalid root unexpectedly succeeded"
+        );
+        assert_eq!(output_stdout(&output), "");
+        let stderr = output_stderr(&output);
+        assert!(
+            stderr.contains("cairnid-mcp failed: evidence root"),
+            "{stderr}"
+        );
+        assert!(stderr.contains(expected_reason), "{stderr}");
+        assert!(!stderr.contains("\"jsonrpc\""), "{stderr}");
+        assert!(
+            !stderr.contains(SENTINEL),
+            "startup stderr exposed sentinel path component: {stderr}"
+        );
+        assert!(
+            !stderr.contains(&invalid_root.display().to_string()),
+            "startup stderr exposed invalid evidence root: {stderr}"
+        );
+    }
 
     remove_temp_root(root);
 }
