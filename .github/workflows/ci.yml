@@ -333,6 +333,30 @@ jobs:
               assert init["status"] == "initialized", init
               return evidence_dir
 
+          def assert_tools_list_output_schemas(tools):
+              if not isinstance(tools, list):
+                  raise SystemExit(f"MCP tools/list did not return a tools array: {tools}")
+              advertised_names = set()
+              for tool in tools:
+                  if not isinstance(tool, dict):
+                      raise SystemExit(f"MCP tools/list returned a non-object tool: {tool}")
+                  name = tool.get("name")
+                  advertised_names.add(name)
+                  schema = tool.get("outputSchema")
+                  if not isinstance(schema, dict):
+                      raise SystemExit(f"MCP tool {name} omitted outputSchema: {tool}")
+                  if schema.get("type") != "object":
+                      raise SystemExit(f"MCP tool {name} outputSchema is not an object schema: {schema}")
+                  variants = schema.get("oneOf")
+                  if not isinstance(variants, list) or len(variants) != 2:
+                      raise SystemExit(f"MCP tool {name} outputSchema should expose success and error variants: {schema}")
+                  encoded_schema = json.dumps(schema, sort_keys=True)
+                  if "schema_version" not in encoded_schema:
+                      raise SystemExit(f"MCP tool {name} outputSchema omits schema_version: {schema}")
+              for name in expected_tools:
+                  if name not in advertised_names:
+                      raise SystemExit(f"MCP tools/list omitted {name}: {tools}")
+
           with tempfile.TemporaryDirectory(prefix="cairnid-mcp-distribution-") as root:
               initialize_evidence_dir(root)
               process = subprocess.Popen(
@@ -463,22 +487,31 @@ jobs:
                   )
                   names = sorted(tool["name"] for tool in tools["tools"])
                   assert names == expected_tools, names
+                  assert_tools_list_output_schemas(tools["tools"])
 
                   plan = call_tool(3, "cairnid.evidence_plan", {})
                   plan_content = assert_tool_success(plan, "evidence_plan")
+                  assert plan_content["schema_version"] == "cairnid.mcp.evidence.v1", plan_content
                   assert plan_content["status"] == "ready", plan_content
 
+                  manifest = call_tool(4, "cairnid.evidence_manifest", {})
+                  manifest_content = assert_tool_success(manifest, "evidence_manifest")
+                  assert manifest_content["schema_version"] == "cairnid.mcp.evidence.v1", manifest_content
+                  if not manifest_content.get("artifacts"):
+                      raise SystemExit(f"evidence_manifest omitted artifacts: {manifest_content}")
+
                   status = call_tool(
-                      4,
+                      5,
                       "cairnid.evidence_status",
                       {"evidence_dir": "release-evidence"},
                   )
                   status_content = assert_tool_success(status, "evidence_status")
+                  assert status_content["schema_version"] == "cairnid.mcp.evidence.v1", status_content
                   assert status_content["status"] == "incomplete", status_content
                   missing_evidence_count(status_content)
 
                   check = call_tool(
-                      5,
+                      6,
                       "cairnid.evidence_check",
                       {"evidence_dir": "release-evidence"},
                   )
@@ -488,6 +521,7 @@ jobs:
                   error = check_content.get("error")
                   if not isinstance(error, dict):
                       raise SystemExit(f"evidence_check missing structured error: {check}")
+                  assert check_content["schema_version"] == "cairnid.mcp.evidence.v1", check_content
                   assert error["code"] == "release_evidence_incomplete", error
                   assert error["failure_code"] == "missing_evidence", error
                   assert error["summary"]["status"] == "incomplete", error
