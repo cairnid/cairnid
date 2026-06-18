@@ -56,9 +56,9 @@ webauthn-rs = { version = "0.5.4", features = ["danger-allow-state-serialisation
 zeroize = { version = "1.8.2", features = ["derive"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
-cairn-audit = { path = "crates/audit", version = "0.1.0" }
-cairn-authn = { path = "crates/authn", version = "0.1.0" }
-cairn-database = { path = "crates/database", version = "0.1.0" }
-cairn-domain = { path = "crates/domain", version = "0.1.0" }
-cairn-oidc = { path = "crates/oidc", version = "0.1.0" }
-cairn-operations = { path = "crates/operations", version = "0.1.0" }
+cairn-audit = { path = "crates/audit", version = "0.1.0-rc.1" }
+cairn-authn = { path = "crates/authn", version = "0.1.0-rc.1" }
+cairn-database = { path = "crates/database", version = "0.1.0-rc.1" }
+cairn-domain = { path = "crates/domain", version = "0.1.0-rc.1" }
+cairn-oidc = { path = "crates/oidc", version = "0.1.0-rc.1" }
+cairn-operations = { path = "crates/operations", version = "0.1.0-rc.1" }

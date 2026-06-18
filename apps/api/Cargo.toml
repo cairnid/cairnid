@@ -1,6 +1,6 @@
 [package]
 name = "cairn-api"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 description = "Cairn Identity Axum API and OIDC provider."
 edition.workspace = true
 license.workspace = true

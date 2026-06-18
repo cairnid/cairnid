@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      candidate_tag:
+        description: Candidate release tag to rehearse without creating a tag or GitHub Release.
+        required: true
+        type: string
+        default: v0.1.0-rc.1
 
 permissions: {}
 
@@ -27,16 +34,22 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
       prerelease: ${{ steps.release.outputs.prerelease }}
-      source_commit: ${{ steps.source.outputs.commit }}
-      ci_run_url: ${{ steps.source.outputs.ci_run_url }}
+      source_commit: ${{ steps.tagged-source.outputs.commit || steps.rehearsal-source.outputs.commit }}
+      ci_run_url: ${{ steps.tagged-source.outputs.ci_run_url }}
     steps:
       - name: Validate release tag
         id: release
         shell: bash
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
         run: |
           set -euo pipefail
 
-          tag="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${CANDIDATE_TAG}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
             echo "::error::release tags must match vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N"
             exit 1
@@ -111,7 +124,8 @@ jobs:
           PY
 
       - name: Verify tagged source commit
-        id: source
+        id: tagged-source
+        if: github.event_name == 'push'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -169,6 +183,15 @@ jobs:
               print(f"commit={tag_commit}", file=output)
               print(f"ci_run_url={matches[0]['url']}", file=output)
           PY
+
+      - name: Use workflow source commit for rehearsal
+        id: rehearsal-source
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.label }}
@@ -1124,16 +1147,14 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  release:
-    name: Assemble draft release
+  assemble:
+    name: Assemble release assets
     needs: [prepare, build]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
+      contents: read
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
@@ -1299,6 +1320,20 @@ jobs:
                       }
                   )
 
+          source = {
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit": os.environ["RELEASE_SOURCE_COMMIT"],
+              "ref": os.environ["GITHUB_REF"],
+              "workflow": os.environ["GITHUB_WORKFLOW"],
+              "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF", ""),
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "run_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }
+          validated_ci_run_url = os.environ.get("RELEASE_SOURCE_CI_RUN_URL", "").strip()
+          if validated_ci_run_url:
+              source["validated_ci_run_url"] = validated_ci_run_url
+
           manifest = {
               "schema_version": 1,
               "project": "cairnid",
@@ -1308,17 +1343,7 @@ jobs:
               "draft": True,
               "prerelease": prerelease,
               "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-              "source": {
-                  "repository": os.environ["GITHUB_REPOSITORY"],
-                  "commit": os.environ["RELEASE_SOURCE_COMMIT"],
-                  "ref": os.environ["GITHUB_REF"],
-                  "workflow": os.environ["GITHUB_WORKFLOW"],
-                  "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF", ""),
-                  "run_id": os.environ["GITHUB_RUN_ID"],
-                  "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
-                  "run_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
-                  "validated_ci_run_url": os.environ["RELEASE_SOURCE_CI_RUN_URL"],
-              },
+              "source": source,
               "distribution": {
                   "release_workflow": ".github/workflows/release.yml",
                   "crates_io": False,
@@ -1453,6 +1478,44 @@ jobs:
                   raise SystemExit(f"{sbom.name} is not a CycloneDX JSON SBOM")
           PY
 
+      - name: Upload assembled release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: assembled-release-assets-${{ needs.prepare.outputs.tag }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Create draft release
+    needs: [prepare, assemble]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+      RELEASE_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
+      RELEASE_SOURCE_CI_RUN_URL: ${{ needs.prepare.outputs.ci_run_url }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download assembled release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: assembled-release-assets-${{ needs.prepare.outputs.tag }}
+          path: dist
+
+      - name: List assembled release assets
+        shell: bash
+        run: find dist -maxdepth 1 -type f -printf '%f\n' | sort
+
       - name: Attest release asset provenance
         uses: actions/attest@v4
         with:
@@ -1562,4 +1625,104 @@ jobs:
             echo
             echo "Assets:"
             find dist -maxdepth 1 -type f -printf '- `%f`\n' | sort
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rehearsal:
+    name: Rehearse release assembly
+    needs: [prepare, assemble]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+      RELEASE_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download assembled release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: assembled-release-assets-${{ needs.prepare.outputs.tag }}
+          path: dist
+
+      - name: List rehearsal assets
+        shell: bash
+        run: find dist -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Verify rehearsal assets without publish-only confirmations
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verifier_root="$(mktemp -d "${RUNNER_TEMP}/cairnid-release-rehearsal-verifier.XXXXXX")"
+          tar -xzf "dist/cairnid-${RELEASE_TAG}-${LINUX_TARGET}.tar.gz" -C "$verifier_root"
+          verifier="${verifier_root}/cairnid-${RELEASE_TAG}-${LINUX_TARGET}/cairnid"
+          test -x "$verifier"
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          set +e
+          "$verifier" release-assets verify dist \
+            --tag "$RELEASE_TAG" \
+            --source-commit "$RELEASE_SOURCE_COMMIT" \
+            --run-url "$run_url" \
+            > "$RUNNER_TEMP/release-assets-rehearsal-verification.json"
+          verifier_status=$?
+          set -e
+
+          if [[ "$verifier_status" -ne 3 ]]; then
+            echo "::error::rehearsal verifier should fail only because publish-only confirmations are absent; got exit ${verifier_status}"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          receipt_path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "release-assets-rehearsal-verification.json"
+          receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+          expected_failures = {
+              "--provenance-attestations-verified must be supplied after external provenance attestation verification",
+              "--sbom-attestations-verified must be supplied after external SBOM attestation verification",
+          }
+          expected_ref = f"refs/tags/{os.environ['RELEASE_TAG']}"
+          if os.environ["GITHUB_REF"] != expected_ref:
+              expected_failures.add(
+                  f"release-manifest.json.source.ref must be {expected_ref}"
+              )
+
+          failures = set(receipt.get("failures", []))
+          if receipt.get("status") != "failed" or failures != expected_failures:
+              print(json.dumps(receipt, indent=2, sort_keys=True), file=sys.stderr)
+              raise SystemExit(
+                  "rehearsal release-assets verification had unexpected failures"
+              )
+          if len(receipt.get("archives", [])) != 4 or len(receipt.get("sboms", [])) != 4:
+              raise SystemExit("rehearsal verifier did not inspect all archives and SBOMs")
+          PY
+
+      - name: Upload rehearsal asset bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-rehearsal-assets-${{ needs.prepare.outputs.tag }}-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Summarize rehearsal
+        shell: bash
+        run: |
+          {
+            echo "## Release rehearsal"
+            echo
+            echo "Candidate tag: \`${RELEASE_TAG}\`"
+            echo
+            echo "This run built, packaged, smoke-tested, assembled, checksummed, and locally verified the candidate CLI/MCP asset set without creating a tag, creating a GitHub Release, or generating attestations."
+            echo
+            echo "Rehearsal artifacts are short-lived Actions artifacts. They are not public release assets and are not release evidence."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -425,7 +425,7 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "cairn-api"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-audit"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "cairn-domain",
  "serde_json",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-authn"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -483,7 +483,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-database"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "cairn-authn",
  "cairn-domain",
@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-domain"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -509,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-oidc"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -527,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-operations"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "flate2",
  "serde",
@@ -543,7 +543,7 @@ dependencies = [
 
 [[package]]
 name = "cairnid"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "cairn-operations",
  "clap",
@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "cairnid-mcp"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "cairn-operations",
  "clap",
