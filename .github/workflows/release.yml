@@ -57,6 +57,59 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Assert release package versions
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          metadata_path="${RUNNER_TEMP}/release-cargo-metadata.json"
+          cargo metadata --locked --no-deps --format-version 1 > "$metadata_path"
+
+          METADATA_PATH="$metadata_path" python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          expected_version = os.environ["RELEASE_VERSION"]
+          release_tag = os.environ["RELEASE_TAG"]
+          metadata_path = os.environ["METADATA_PATH"]
+          required_packages = {
+              "cairnid": "apps/cli/Cargo.toml",
+              "cairnid-mcp": "apps/mcp/Cargo.toml",
+          }
+
+          with open(metadata_path, encoding="utf-8") as handle:
+              metadata = json.load(handle)
+
+          packages = {
+              package.get("name"): package
+              for package in metadata.get("packages", [])
+              if package.get("name") in required_packages
+          }
+          failures = []
+          for name, manifest in required_packages.items():
+              package = packages.get(name)
+              if package is None:
+                  failures.append(
+                      f"{manifest}: cargo metadata did not include release package {name}"
+                  )
+                  continue
+              actual_version = package.get("version")
+              if actual_version != expected_version:
+                  failures.append(
+                      f"{manifest}: release package {name} version mismatch for tag {release_tag}: "
+                      f"expected {expected_version}, actual {actual_version}"
+                  )
+
+          if failures:
+              for failure in failures:
+                  print(f"::error::{failure}", file=sys.stderr)
+              raise SystemExit(1)
+          PY
+
       - name: Verify tagged source commit
         id: source
         shell: bash
@@ -142,6 +195,7 @@ jobs:
             archive_ext: zip
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
       TARGET: ${{ matrix.target }}
       BINARY_EXT: ${{ matrix.binary_ext }}
       ARCHIVE_EXT: ${{ matrix.archive_ext }}
@@ -199,6 +253,7 @@ jobs:
           from pathlib import Path
 
           SENTINEL = "CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE"
+          expected_version = os.environ["RELEASE_VERSION"]
           cli = Path(os.environ["CLI_BINARY"]).resolve()
           outputs = []
 
@@ -218,9 +273,20 @@ jobs:
                   raise SystemExit(f"{' '.join(args)} unexpectedly succeeded")
               return result
 
+          def assert_version_output(label, result, binary_name):
+              expected_output = f"{binary_name} {expected_version}"
+              actual_output = result.stdout.strip()
+              if actual_output != expected_output:
+                  raise SystemExit(
+                      f"{label} --version mismatch: expected {expected_output!r}, "
+                      f"actual output {actual_output!r}"
+                  )
+              if result.stderr.strip():
+                  raise SystemExit(f"{label} --version wrote stderr: {result.stderr.strip()!r}")
+
           with tempfile.TemporaryDirectory(prefix="cairnid-release-") as root:
               evidence_dir = Path(root) / "release-evidence"
-              run_cli("--version")
+              assert_version_output("direct CLI", run_cli("--version"), "cairnid")
               run_cli("evidence", "--help")
               plan = json.loads(run_cli("evidence", "plan").stdout)
               manifest = json.loads(run_cli("evidence", "manifest").stdout)
@@ -301,6 +367,7 @@ jobs:
           ]
 
           SENTINEL = "CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE"
+          expected_version = os.environ["RELEASE_VERSION"]
           cli = os.path.abspath(os.environ["CLI_BINARY"])
           binary = os.path.abspath(os.environ["MCP_BINARY"])
 
@@ -315,6 +382,28 @@ jobs:
               if SENTINEL in text:
                   return "[redacted: sentinel appeared in stderr]"
               return text
+
+          def assert_binary_version(label, binary, binary_name):
+              result = subprocess.run(
+                  [binary, "--version"],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              assert_no_sentinel(label, result.stdout, result.stderr)
+              if result.returncode != 0:
+                  raise SystemExit(
+                      f"{label} --version failed with exit code {result.returncode}: {result.stderr}"
+                  )
+              expected_output = f"{binary_name} {expected_version}"
+              actual_output = result.stdout.strip()
+              if actual_output != expected_output:
+                  raise SystemExit(
+                      f"{label} --version mismatch: expected {expected_output!r}, "
+                      f"actual output {actual_output!r}"
+                  )
+              if result.stderr.strip():
+                  raise SystemExit(f"{label} --version wrote stderr: {result.stderr.strip()!r}")
 
           def initialize_evidence_dir(root):
               evidence_dir = os.path.join(root, "release-evidence")
@@ -356,6 +445,8 @@ jobs:
               for name in expected_tools:
                   if name not in advertised_names:
                       raise SystemExit(f"MCP tools/list omitted {name}: {tools}")
+
+          assert_binary_version("direct MCP", binary, "cairnid-mcp")
 
           with tempfile.TemporaryDirectory(prefix="cairnid-mcp-release-") as root:
               initialize_evidence_dir(root)
@@ -667,6 +758,7 @@ jobs:
           ]
 
           tag = os.environ["RELEASE_TAG"]
+          expected_version = os.environ["RELEASE_VERSION"]
           target = os.environ["TARGET"]
           archive_ext = os.environ["ARCHIVE_EXT"]
           binary_ext = os.environ["BINARY_EXT"]
@@ -720,6 +812,17 @@ jobs:
               if require_empty_stderr and result.stderr:
                   raise SystemExit(f"{label} {' '.join(args)} wrote stderr: {result.stderr}")
               return result
+
+          def assert_version_output(label, result, binary_name):
+              expected_output = f"{binary_name} {expected_version}"
+              actual_output = result.stdout.strip()
+              if actual_output != expected_output:
+                  raise SystemExit(
+                      f"{label} --version mismatch: expected {expected_output!r}, "
+                      f"actual output {actual_output!r}"
+                  )
+              if result.stderr.strip():
+                  raise SystemExit(f"{label} --version wrote stderr: {result.stderr.strip()!r}")
 
           def initialize_evidence_dir(cli, root):
               evidence_dir = root / "release-evidence"
@@ -998,10 +1101,18 @@ jobs:
               root = Path(root_name)
               cli = extract_archive("cairnid", root)
               mcp = extract_archive("cairnid-mcp", root)
-              run_binary("archive CLI", cli, "--version")
+              assert_version_output(
+                  "archive CLI",
+                  run_binary("archive CLI", cli, "--version", require_empty_stderr=True),
+                  "cairnid",
+              )
               run_binary("archive CLI", cli, "--help")
               initialize_evidence_dir(cli, root)
-              run_binary("archive MCP", mcp, "--version", require_empty_stderr=True)
+              assert_version_output(
+                  "archive MCP",
+                  run_binary("archive MCP", mcp, "--version", require_empty_stderr=True),
+                  "cairnid-mcp",
+              )
               run_binary("archive MCP", mcp, "--help", require_empty_stderr=True)
               smoke_mcp_stdio(mcp, root)
 
