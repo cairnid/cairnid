@@ -45,7 +45,7 @@ Do not commit release evidence directories. They can include operational context
 
 ## CLI and MCP Release Assets
 
-Pushing a tag that matches `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-rc.N` starts `.github/workflows/release.yml`. The workflow validates the tag with an exact regex, builds release-mode `cairnid` and `cairnid-mcp` binaries for:
+Pushing a tag that matches `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-rc.N` starts `.github/workflows/release.yml`. The workflow validates the tag with an exact regex, rejects tags that are not reachable from `origin/main`, and requires a successful completed `CI` run for the exact tagged commit before release artifacts are built. It then builds release-mode `cairnid` and `cairnid-mcp` binaries for:
 
 - `x86_64-unknown-linux-gnu`
 - `x86_64-pc-windows-msvc`
@@ -67,11 +67,12 @@ After a draft release is published, download and verify the archive, checksum fi
 ```powershell
 gh release download v0.1.0-rc.1 --repo cairnid/cairnid --dir cairnid-release
 cd cairnid-release
-gh attestation verify .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml
+gh attestation verify .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml --source-ref refs/tags/v0.1.0-rc.1
+gh attestation verify .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml --source-ref refs/tags/v0.1.0-rc.1 --predicate-type https://cyclonedx.org/bom
 Get-FileHash .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip -Algorithm SHA256
 ```
 
-Compare the `Get-FileHash` value with `SHA256SUMS.txt`, `release-manifest.json`, and the digest GitHub exposes for the release asset. On Linux, use `sha256sum -c SHA256SUMS.txt --ignore-missing` and `gh attestation verify ./cairnid-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml`.
+The first `gh attestation verify` command checks the default SLSA provenance attestation. The second verifies the CycloneDX SBOM attestation for the same archive with the CycloneDX predicate type. Compare the `Get-FileHash` value with `SHA256SUMS.txt`, `release-manifest.json`, and the digest GitHub exposes for the release asset. On Linux, use `sha256sum -c SHA256SUMS.txt --ignore-missing` and the same `gh attestation verify` commands against `./cairnid-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz`.
 
 ## Current Blockers
 

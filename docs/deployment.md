@@ -89,7 +89,7 @@ Run the plan first to confirm required capture environment variable names are pr
 
 Tagged CLI/MCP release archives:
 
-The public binary distribution path is `.github/workflows/release.yml`, not CI artifacts. A pushed tag matching `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-rc.N` builds release-mode `cairnid` and `cairnid-mcp` archives for Linux x86_64 and Windows x86_64, generates CycloneDX JSON SBOMs, writes `SHA256SUMS.txt` and `release-manifest.json`, and creates GitHub artifact attestations with `actions/attest@v4` using GitHub Actions OIDC. The workflow creates a draft GitHub Release; maintainers publish it only after review. RC tags are prereleases and are not marked latest.
+The public binary distribution path is `.github/workflows/release.yml`, not CI artifacts. A pushed tag matching `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-rc.N` must be reachable from `origin/main` and must have a successful completed `CI` run for the exact tagged commit. The workflow then builds release-mode `cairnid` and `cairnid-mcp` archives for Linux x86_64 and Windows x86_64, generates CycloneDX JSON SBOMs, writes `SHA256SUMS.txt` and `release-manifest.json`, and creates GitHub artifact attestations with `actions/attest@v4` using GitHub Actions OIDC. The workflow creates a draft GitHub Release; maintainers publish it only after review. RC tags are prereleases and are not marked latest.
 
 The regular CI workflow's `*-ci-rehearsal-*` Actions artifacts are build/smoke proof only. They expire, are not attached to a GitHub Release, and should not be documented as installable public release assets.
 
@@ -98,11 +98,12 @@ After a release draft is published, install by downloading the matching archive 
 ```powershell
 gh release download v0.1.0-rc.1 --repo cairnid/cairnid --dir cairnid-release
 cd cairnid-release
-gh attestation verify .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml
+gh attestation verify .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml --source-ref refs/tags/v0.1.0-rc.1
+gh attestation verify .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml --source-ref refs/tags/v0.1.0-rc.1 --predicate-type https://cyclonedx.org/bom
 Get-FileHash .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip -Algorithm SHA256
 ```
 
-Compare the hash with `SHA256SUMS.txt`, `release-manifest.json`, and GitHub's release asset digest. On Linux, verify with `sha256sum -c SHA256SUMS.txt --ignore-missing` and `gh attestation verify ./cairnid-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml`.
+The first attestation command verifies default SLSA provenance for the archive. The second verifies the CycloneDX SBOM attestation for the same archive. Compare the hash with `SHA256SUMS.txt`, `release-manifest.json`, and GitHub's release asset digest. On Linux, verify with `sha256sum -c SHA256SUMS.txt --ignore-missing` and the same `gh attestation verify` commands against `./cairnid-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz`.
 
 This first distribution slice intentionally does not publish crates.io packages, Homebrew formulae, MSI installers, macOS notarized assets, Authenticode signatures, containers, or site/runtime artifacts.
 

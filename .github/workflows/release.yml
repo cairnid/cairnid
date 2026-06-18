@@ -22,10 +22,13 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
       prerelease: ${{ steps.release.outputs.prerelease }}
+      source_commit: ${{ steps.source.outputs.commit }}
+      ci_run_url: ${{ steps.source.outputs.ci_run_url }}
     steps:
       - name: Validate release tag
         id: release
@@ -49,6 +52,70 @@ jobs:
             echo "version=${tag#v}"
             echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify tagged source commit
+        id: source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main
+
+          tag_commit="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          main_commit="$(git rev-parse "refs/remotes/origin/main^{commit}")"
+
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_commit"; then
+            echo "::error::release tag ${RELEASE_TAG} (${tag_commit}) is not reachable from origin/main (${main_commit})"
+            exit 1
+          fi
+
+          ci_runs="$(
+            gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow CI \
+              --branch main \
+              --commit "$tag_commit" \
+              --event push \
+              --status success \
+              --limit 20 \
+              --json databaseId,status,conclusion,event,headSha,url,workflowName
+          )"
+
+          CI_RUNS_JSON="$ci_runs" TAG_COMMIT="$tag_commit" python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          tag_commit = os.environ["TAG_COMMIT"]
+          runs = json.loads(os.environ["CI_RUNS_JSON"])
+          matches = [
+              run
+              for run in runs
+              if run.get("headSha") == tag_commit
+              and run.get("status") == "completed"
+              and run.get("conclusion") == "success"
+              and run.get("event") == "push"
+              and run.get("workflowName") == "CI"
+          ]
+
+          if not matches:
+              print(
+                  f"::error::release tag commit {tag_commit} does not have a successful completed CI run on main",
+                  file=sys.stderr,
+              )
+              raise SystemExit(1)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"commit={tag_commit}", file=output)
+              print(f"ci_run_url={matches[0]['url']}", file=output)
+          PY
 
   build:
     name: Build ${{ matrix.label }}
@@ -380,6 +447,8 @@ jobs:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
       RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+      RELEASE_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
+      RELEASE_SOURCE_CI_RUN_URL: ${{ needs.prepare.outputs.ci_run_url }}
     steps:
       - uses: actions/checkout@v6
 
@@ -538,13 +607,14 @@ jobs:
               "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
               "source": {
                   "repository": os.environ["GITHUB_REPOSITORY"],
-                  "commit": os.environ["GITHUB_SHA"],
+                  "commit": os.environ["RELEASE_SOURCE_COMMIT"],
                   "ref": os.environ["GITHUB_REF"],
                   "workflow": os.environ["GITHUB_WORKFLOW"],
                   "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF", ""),
                   "run_id": os.environ["GITHUB_RUN_ID"],
                   "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
                   "run_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+                  "validated_ci_run_url": os.environ["RELEASE_SOURCE_CI_RUN_URL"],
               },
               "distribution": {
                   "release_workflow": ".github/workflows/release.yml",
@@ -673,7 +743,8 @@ jobs:
 
           Verify after downloading:
 
-              gh attestation verify <asset> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml
+              gh attestation verify <asset> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml --source-ref refs/tags/${RELEASE_TAG}
+              gh attestation verify <asset> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml --source-ref refs/tags/${RELEASE_TAG} --predicate-type https://cyclonedx.org/bom
               sha256sum -c SHA256SUMS.txt --ignore-missing
 
           This workflow does not publish crates.io packages, Homebrew formulae, MSI installers, macOS notarized assets, Authenticode signatures, containers, or long-lived signing-key signatures.
