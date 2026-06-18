@@ -342,6 +342,38 @@ fn stdio_invalid_evidence_json_remains_sanitized_validation_summary() {
         "MCP response exposed raw invalid artifact content: {status}"
     );
 
+    let check = call_evidence_check(
+        &mut server,
+        3,
+        json!({
+            "evidence_dir": DEFAULT_EVIDENCE_CHILD
+        }),
+    );
+    let error = assert_tool_error_code(&check, "release_evidence_incomplete");
+    assert_eq!(
+        error.get("failure_code").and_then(Value::as_str),
+        Some("missing_evidence")
+    );
+    assert_eq!(
+        error
+            .get("failure_codes")
+            .and_then(Value::as_object)
+            .and_then(|codes| codes.get("invalid_json"))
+            .and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        error
+            .get("summary")
+            .and_then(|summary| summary.get("status"))
+            .and_then(Value::as_str),
+        Some("incomplete")
+    );
+    assert!(
+        !check.to_string().contains("{not json"),
+        "MCP check error exposed raw invalid artifact content: {check}"
+    );
+
     drop(server);
     remove_temp_root(root);
 }
@@ -457,7 +489,10 @@ fn call_evidence_tool(
     )
 }
 
-fn assert_tool_error_code(result: &Value, expected_code: &str) {
+fn assert_tool_error_code<'a>(
+    result: &'a Value,
+    expected_code: &str,
+) -> &'a serde_json::Map<String, Value> {
     assert_eq!(result["isError"].as_bool(), Some(true));
     let structured = result["structuredContent"]
         .as_object()
@@ -470,6 +505,20 @@ fn assert_tool_error_code(result: &Value, expected_code: &str) {
     assert_eq!(
         error.get("code").and_then(Value::as_str),
         Some(expected_code)
+    );
+    let failure_code = error
+        .get("failure_code")
+        .and_then(Value::as_str)
+        .expect("stable failure_code");
+    assert!(!failure_code.is_empty());
+    assert!(
+        error
+            .get("failure_codes")
+            .and_then(Value::as_object)
+            .and_then(|codes| codes.get(failure_code))
+            .and_then(Value::as_u64)
+            .is_some_and(|count| count > 0),
+        "stable failure_codes should count primary failure_code"
     );
     assert!(
         error
@@ -487,6 +536,7 @@ fn assert_tool_error_code(result: &Value, expected_code: &str) {
         .expect("tool error text content");
     let text_json = serde_json::from_str::<Value>(text).expect("tool error text is JSON");
     assert_eq!(text_json, result["structuredContent"]);
+    error
 }
 
 struct McpProcess {
