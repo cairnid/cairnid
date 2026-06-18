@@ -179,14 +179,12 @@ enum ReleaseAssetsCommand {
         #[arg(
             long = "provenance-attestations-verified",
             action = clap::ArgAction::SetTrue,
-            required = true,
             help = "Confirm GitHub provenance attestations were verified externally"
         )]
         provenance_attestations_verified: bool,
         #[arg(
             long = "sbom-attestations-verified",
             action = clap::ArgAction::SetTrue,
-            required = true,
             help = "Confirm CycloneDX SBOM attestations were verified externally"
         )]
         sbom_attestations_verified: bool,
@@ -591,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_release_assets_verify_missing_required_confirmation_inputs() {
+    fn parses_release_assets_verify_missing_attestation_confirmations_as_false() {
         assert!(
             Cli::try_parse_from([
                 "cairnid",
@@ -607,21 +605,31 @@ mod tests {
             ])
             .is_err()
         );
-        assert!(
-            Cli::try_parse_from([
-                "cairnid",
-                "release-assets",
-                "verify",
-                "dist",
-                "--tag",
-                "v0.1.0-rc.1",
-                "--source-commit",
-                "0123456789abcdef0123456789abcdef01234567",
-                "--run-url",
-                "https://github.com/cairnid/cairnid/actions/runs/123456789",
-            ])
-            .is_err()
-        );
+
+        let cli = Cli::parse_from([
+            "cairnid",
+            "release-assets",
+            "verify",
+            "dist",
+            "--tag",
+            "v0.1.0-rc.1",
+            "--source-commit",
+            "0123456789abcdef0123456789abcdef01234567",
+            "--run-url",
+            "https://github.com/cairnid/cairnid/actions/runs/123456789",
+        ]);
+
+        let Commands::ReleaseAssets { command } = cli.command else {
+            panic!("expected release assets command");
+        };
+        let ReleaseAssetsCommand::Verify {
+            provenance_attestations_verified,
+            sbom_attestations_verified,
+            ..
+        } = command;
+
+        assert!(!provenance_attestations_verified);
+        assert!(!sbom_attestations_verified);
     }
 
     #[test]

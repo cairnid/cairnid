@@ -97,6 +97,8 @@ The public binary distribution path is `.github/workflows/release.yml`, not CI a
 
 The regular CI workflow's `*-ci-rehearsal-*` Actions artifacts are build/smoke proof only. They expire, are not attached to a GitHub Release, and should not be documented as installable public release assets.
 
+Maintainers can also run `.github/workflows/release.yml` manually with a `candidate_tag` input to rehearse the release asset path before creating a tag. That rehearsal builds and packages both CLI/MCP targets, assembles SBOMs, checksums, and manifest files, runs the local verifier as far as possible without publish-only confirmations, and uploads only short-lived Actions artifacts named `release-rehearsal-assets-*`. It does not create a tag, create a GitHub Release, generate attestations, or publish assets for users.
+
 After a release draft is published, install by downloading the matching archive from the GitHub Release. Verify the archive before use:
 
 ```powershell

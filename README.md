@@ -58,6 +58,8 @@ Open `http://localhost:5173`, bootstrap the first administrator from `/login`, t
 
 Tagged `cairnid` and `cairnid-mcp` release archives will be distributed through draft-reviewed GitHub Releases after the first RC tag is cut and maintainers publish the draft. Until then, build the CLI locally with Cargo. See [CLI and MCP release assets](docs/release-gates.md#cli-and-mcp-release-assets).
 
+Maintainers can manually run the release workflow as a non-publishing rehearsal before a tag exists. Rehearsal artifacts are short-lived Actions artifacts only; they are not public release assets and are not release evidence.
+
 The current release workflow does not publish container images. CI builds and smokes the API and web images to prove Dockerfile and runtime entrypoint behavior only. See [Deployment](docs/deployment.md#current-container-status) and [Release gates](docs/release-gates.md).
 
 For local development, install JavaScript dependencies with Bun and run the API and web app separately:

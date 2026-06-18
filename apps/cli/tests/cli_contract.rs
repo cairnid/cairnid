@@ -357,7 +357,7 @@ fn release_assets_verify_emits_failed_json_for_malformed_manifest() {
 }
 
 #[test]
-fn release_assets_verify_rejects_missing_url_and_attestation_flags() {
+fn release_assets_verify_rejects_missing_url_at_parse_layer() {
     let no_url = run_cairnid([
         "release-assets",
         "verify",
@@ -377,11 +377,16 @@ fn release_assets_verify_rejects_missing_url_and_attestation_flags() {
         no_url_stderr.contains("--release-url <URL>") || no_url_stderr.contains("--run-url <URL>")
     );
     assert!(!no_url_stderr.contains("cairnid failed"));
+}
 
+#[test]
+fn release_assets_verify_emits_failed_json_for_missing_attestation_confirmations() {
+    let release_dir = fake_release_assets_dir("verify-missing-attestations");
+    let release_dir_arg = release_dir.to_string_lossy().into_owned();
     let no_attestations = run_cairnid([
         "release-assets",
         "verify",
-        "release-dir",
+        &release_dir_arg,
         "--tag",
         RELEASE_ASSET_TAG,
         "--source-commit",
@@ -389,13 +394,33 @@ fn release_assets_verify_rejects_missing_url_and_attestation_flags() {
         "--run-url",
         RELEASE_ASSET_RUN_URL,
     ]);
-    assert_exit_code(&no_attestations, 2);
-    assert!(stdout(&no_attestations).is_empty());
-    let no_attestations_stderr = stderr(&no_attestations);
-    assert!(no_attestations_stderr.contains("error:"));
-    assert!(no_attestations_stderr.contains("--provenance-attestations-verified"));
-    assert!(no_attestations_stderr.contains("--sbom-attestations-verified"));
-    assert!(!no_attestations_stderr.contains("cairnid failed"));
+
+    assert_failed_release_assets_stdout(
+        &no_attestations,
+        "--provenance-attestations-verified must be supplied",
+    );
+    let receipt: Value =
+        serde_json::from_slice(&no_attestations.stdout).expect("valid failed receipt JSON");
+    let failures = receipt["failures"]
+        .as_array()
+        .expect("failed receipt failures array");
+    assert!(
+        failures.iter().any(|failure| failure.as_str().is_some_and(
+            |failure| failure.contains("--sbom-attestations-verified must be supplied")
+        )),
+        "{failures:?}"
+    );
+    assert_eq!(
+        receipt["archives"]
+            .as_array()
+            .expect("archives array")
+            .len(),
+        4
+    );
+    assert_eq!(receipt["sboms"].as_array().expect("sboms array").len(), 4);
+    let stderr = stderr(&no_attestations);
+    assert!(stderr.contains("cairnid failed: release assets verification failed"));
+    assert!(!stderr.contains("error:"));
 }
 
 #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "cairn-database"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 description = "SQLx repositories and migrations for Cairn Identity."
 edition.workspace = true
 license.workspace = true

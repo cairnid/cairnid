@@ -1,6 +1,6 @@
 [package]
 name = "cairnid-mcp"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 description = "Local stdio MCP server for read-only Cairn Identity release evidence inspection."
 edition.workspace = true
 license.workspace = true
