@@ -8,7 +8,13 @@ use cairn_operations::{
 };
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
-use std::{env, error::Error, fmt, io, path::PathBuf, process::ExitCode};
+use std::{
+    env,
+    error::Error,
+    fmt, fs, io,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 use time::OffsetDateTime;
 
 const EXIT_INTERNAL_ERROR: u8 = 1;
@@ -57,6 +63,17 @@ enum Commands {
         after_help = "Examples:\n  cairnid manpage > cairnid.1"
     )]
     Manpage,
+    #[command(
+        about = "Write roff manpages for cairnid and its subcommands to a directory",
+        after_help = "Examples:\n  cairnid manpages ./man/man1"
+    )]
+    Manpages {
+        #[arg(
+            value_name = "OUTPUT_DIR",
+            help = "Directory to write roff manpages into"
+        )]
+        output_dir: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -207,6 +224,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
         Commands::Evidence { command } => run_evidence(command),
         Commands::ReleaseAssets { command } => run_release_assets(command),
         Commands::Manpage => run_manpage(),
+        Commands::Manpages { output_dir } => run_manpages(&output_dir),
     }
 }
 
@@ -221,6 +239,49 @@ fn run_manpage() -> Result<(), CliError> {
     clap_mangen::Man::new(Cli::command())
         .render(&mut io::stdout())
         .map_err(CliError::internal)
+}
+
+fn run_manpages(output_dir: &Path) -> Result<(), CliError> {
+    fs::create_dir_all(output_dir).map_err(CliError::internal)?;
+
+    let mut command = Cli::command();
+    command.build();
+    write_manpage_tree(
+        command,
+        "cairnid".to_owned(),
+        "cairnid".to_owned(),
+        output_dir,
+    )
+    .map_err(CliError::internal)
+}
+
+fn write_manpage_tree(
+    command: clap::Command,
+    page_name: String,
+    invocation: String,
+    output_dir: &Path,
+) -> Result<(), io::Error> {
+    let command = command
+        .display_name(page_name.clone())
+        .bin_name(invocation.clone());
+    let children = command
+        .get_subcommands()
+        .filter(|subcommand| !subcommand.is_hide_set())
+        .map(|subcommand| (subcommand.get_name().to_owned(), subcommand.clone()))
+        .collect::<Vec<_>>();
+
+    clap_mangen::Man::new(command).generate_to(output_dir)?;
+
+    for (name, child) in children {
+        write_manpage_tree(
+            child,
+            format!("{page_name}-{name}"),
+            format!("{invocation} {name}"),
+            output_dir,
+        )?;
+    }
+
+    Ok(())
 }
 
 fn run_evidence(command: EvidenceCommand) -> Result<(), CliError> {
@@ -630,6 +691,17 @@ mod tests {
 
         assert!(!provenance_attestations_verified);
         assert!(!sbom_attestations_verified);
+    }
+
+    #[test]
+    fn parses_manpages_output_dir() {
+        let cli = Cli::parse_from(["cairnid", "manpages", "target/man"]);
+
+        let Commands::Manpages { output_dir } = cli.command else {
+            panic!("expected manpages command");
+        };
+
+        assert_eq!(output_dir, PathBuf::from("target/man"));
     }
 
     #[test]

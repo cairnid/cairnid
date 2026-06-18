@@ -17,6 +17,27 @@ const SECRET_SENTINEL: &str = "TEST_SECRET_SENTINEL_DO_NOT_PRINT";
 const RELEASE_ASSET_TAG: &str = "v0.1.0-rc.1";
 const RELEASE_ASSET_SOURCE_COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
 const RELEASE_ASSET_RUN_URL: &str = "https://github.com/cairnid/cairnid/actions/runs/123456789";
+const CLI_COMPLETION_FILES: &[(&str, &str, &str)] = &[
+    ("completions/cairnid.bash", "shell-completion", "bash"),
+    ("completions/_cairnid", "shell-completion", "zsh"),
+    ("completions/cairnid.fish", "shell-completion", "fish"),
+    ("completions/cairnid.ps1", "shell-completion", "powershell"),
+    ("completions/cairnid.elv", "shell-completion", "elvish"),
+];
+const CLI_MANPAGE_FILES: &[&str] = &[
+    "man/man1/cairnid.1",
+    "man/man1/cairnid-completions.1",
+    "man/man1/cairnid-evidence.1",
+    "man/man1/cairnid-evidence-plan.1",
+    "man/man1/cairnid-evidence-manifest.1",
+    "man/man1/cairnid-evidence-init.1",
+    "man/man1/cairnid-evidence-status.1",
+    "man/man1/cairnid-evidence-check.1",
+    "man/man1/cairnid-release-assets.1",
+    "man/man1/cairnid-release-assets-verify.1",
+    "man/man1/cairnid-manpage.1",
+    "man/man1/cairnid-manpages.1",
+];
 
 #[test]
 fn top_level_help_describes_evidence_commands() {
@@ -132,6 +153,10 @@ fn completions_emit_representative_shell_scripts() {
             stdout.contains("manpage"),
             "{shell} completion output:\n{stdout}"
         );
+        assert!(
+            stdout.contains("manpages"),
+            "{shell} completion output:\n{stdout}"
+        );
         assert!(!stdout.contains(SECRET_SENTINEL));
     }
 }
@@ -150,6 +175,41 @@ fn manpage_emits_roff_for_cli_and_evidence_commands() {
     assert!(stdout.contains("plan"));
     assert!(stdout.contains("check"));
     assert!(!stdout.contains(SECRET_SENTINEL));
+}
+
+#[test]
+fn manpages_writes_root_and_nested_roff_files() {
+    let output_dir = unique_temp_path("manpages", false);
+    let output_dir_arg = output_dir.to_string_lossy().into_owned();
+
+    let output = run_cairnid(["manpages", &output_dir_arg]);
+
+    assert_success(&output);
+    assert!(stdout(&output).is_empty());
+    assert!(stderr(&output).is_empty());
+
+    for relative_path in CLI_MANPAGE_FILES {
+        let file_name = relative_path
+            .strip_prefix("man/man1/")
+            .expect("manpage path prefix");
+        let path = output_dir.join(file_name);
+        assert!(path.is_file(), "missing generated manpage {file_name}");
+        let roff = fs::read_to_string(&path).expect("read generated manpage");
+        assert!(roff.contains(".TH "), "{file_name}:\n{roff}");
+        assert!(!roff.contains(SECRET_SENTINEL));
+    }
+
+    let evidence_check =
+        fs::read_to_string(output_dir.join("cairnid-evidence-check.1")).expect("read nested page");
+    assert!(evidence_check.contains("cairnid evidence check"));
+    assert!(evidence_check.contains("Validate release evidence artifacts"));
+
+    let release_assets_verify =
+        fs::read_to_string(output_dir.join("cairnid-release-assets-verify.1"))
+            .expect("read release-assets nested page");
+    assert!(release_assets_verify.contains(".TH cairnid-release-assets-verify"));
+    assert!(release_assets_verify.contains("cairnid release\\-assets verify"));
+    assert!(release_assets_verify.contains("Verify local release asset files"));
 }
 
 #[test]
@@ -354,6 +414,49 @@ fn release_assets_verify_emits_failed_json_for_malformed_manifest() {
     let output = run_release_assets_verify(&release_dir);
 
     assert_failed_release_assets_stdout(&output, "release-manifest.json must contain valid JSON");
+}
+
+#[test]
+fn release_assets_verify_emits_failed_json_for_missing_nested_manpage_manifest_entry() {
+    let release_dir = fake_release_assets_dir("verify-missing-nested-manpage-manifest");
+    remove_manifest_auxiliary_file(
+        &release_dir,
+        &format!("cairnid-{RELEASE_ASSET_TAG}-x86_64-unknown-linux-gnu.tar.gz"),
+        &format!(
+            "cairnid-{RELEASE_ASSET_TAG}-x86_64-unknown-linux-gnu/man/man1/cairnid-evidence.1"
+        ),
+    );
+
+    let output = run_release_assets_verify(&release_dir);
+
+    assert_failed_release_assets_stdout(
+        &output,
+        "release-manifest.json asset cairnid-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz.auxiliary_files must match the CLI archive member metadata",
+    );
+}
+
+#[test]
+fn release_assets_verify_emits_failed_json_for_missing_nested_manpage_archive_member() {
+    let release_dir = fake_release_assets_dir("verify-missing-nested-manpage-archive");
+    let stem = format!("cairnid-{RELEASE_ASSET_TAG}-x86_64-unknown-linux-gnu");
+    let archive_name = format!("{stem}.tar.gz");
+    let missing_member = format!("{stem}/man/man1/cairnid-release-assets-verify.1");
+    write_release_archive_without_member(
+        &release_dir.join(&archive_name),
+        "tar.gz",
+        &stem,
+        "cairnid",
+        "x86_64-unknown-linux-gnu",
+        "apps/cli",
+        &missing_member,
+    );
+    rewrite_manifest_archive_metadata(&release_dir, &archive_name);
+    rewrite_checksum_for_file(&release_dir, &archive_name);
+    rewrite_checksum_for_file(&release_dir, "release-manifest.json");
+
+    let output = run_release_assets_verify(&release_dir);
+
+    assert_failed_release_assets_stdout(&output, "cairnid-release-assets-verify.1");
 }
 
 #[test]
@@ -849,14 +952,7 @@ fn fake_release_assets_dir(name: &str) -> PathBuf {
                 "sbom": sbom_name
             });
             if package == "apps/cli" {
-                archive_asset["auxiliary_files"] = json!([
-                    {"path": format!("{stem}/completions/cairnid.bash"), "kind": "shell-completion", "shell": "bash"},
-                    {"path": format!("{stem}/completions/_cairnid"), "kind": "shell-completion", "shell": "zsh"},
-                    {"path": format!("{stem}/completions/cairnid.fish"), "kind": "shell-completion", "shell": "fish"},
-                    {"path": format!("{stem}/completions/cairnid.ps1"), "kind": "shell-completion", "shell": "powershell"},
-                    {"path": format!("{stem}/completions/cairnid.elv"), "kind": "shell-completion", "shell": "elvish"},
-                    {"path": format!("{stem}/man/man1/cairnid.1"), "kind": "manpage", "section": "1"}
-                ]);
+                archive_asset["auxiliary_files"] = json!(cli_auxiliary_manifest_entries(&stem));
             }
             manifest_assets.push(archive_asset);
             manifest_assets.push(json!({
@@ -982,34 +1078,144 @@ fn release_archive_members(
         (format!("{stem}/README.md"), b"# CairnID\n".to_vec()),
     ];
     if package == "apps/cli" {
-        members.extend([
-            (
-                format!("{stem}/completions/cairnid.bash"),
-                b"complete -F _cairnid cairnid\n".to_vec(),
-            ),
-            (
-                format!("{stem}/completions/_cairnid"),
-                b"#compdef cairnid\n".to_vec(),
-            ),
-            (
-                format!("{stem}/completions/cairnid.fish"),
-                b"complete -c cairnid\n".to_vec(),
-            ),
-            (
-                format!("{stem}/completions/cairnid.ps1"),
-                b"Register-ArgumentCompleter -Native -CommandName cairnid\n".to_vec(),
-            ),
-            (
-                format!("{stem}/completions/cairnid.elv"),
-                b"edit:completion:arg-completer[cairnid] = {|@words| }\n".to_vec(),
-            ),
-            (
-                format!("{stem}/man/man1/cairnid.1"),
-                b".TH CAIRNID 1\n".to_vec(),
-            ),
-        ]);
+        members.extend(cli_auxiliary_archive_members(stem));
     }
     members
+}
+
+fn cli_auxiliary_manifest_entries(stem: &str) -> Vec<Value> {
+    CLI_COMPLETION_FILES
+        .iter()
+        .map(|(path, kind, shell)| {
+            json!({"path": format!("{stem}/{path}"), "kind": kind, "shell": shell})
+        })
+        .chain(CLI_MANPAGE_FILES.iter().map(|path| {
+            json!({"path": format!("{stem}/{path}"), "kind": "manpage", "section": "1"})
+        }))
+        .collect()
+}
+
+fn cli_auxiliary_archive_members(stem: &str) -> Vec<(String, Vec<u8>)> {
+    CLI_COMPLETION_FILES
+        .iter()
+        .map(|(path, _kind, shell)| {
+            let content = match *shell {
+                "bash" => b"complete -F _cairnid cairnid\n".to_vec(),
+                "zsh" => b"#compdef cairnid\n".to_vec(),
+                "fish" => b"complete -c cairnid\n".to_vec(),
+                "powershell" => {
+                    b"Register-ArgumentCompleter -Native -CommandName cairnid\n".to_vec()
+                }
+                "elvish" => b"edit:completion:arg-completer[cairnid] = {|@words| }\n".to_vec(),
+                other => panic!("unsupported shell {other}"),
+            };
+            (format!("{stem}/{path}"), content)
+        })
+        .chain(CLI_MANPAGE_FILES.iter().map(|path| {
+            let page = path
+                .strip_prefix("man/man1/")
+                .expect("manpage path prefix")
+                .trim_end_matches(".1")
+                .to_ascii_uppercase();
+            (
+                format!("{stem}/{path}"),
+                format!(".TH {page} 1\n").into_bytes(),
+            )
+        }))
+        .collect()
+}
+
+fn write_release_archive_without_member(
+    path: &Path,
+    archive_format: &str,
+    stem: &str,
+    binary: &str,
+    target: &str,
+    package: &str,
+    omitted_member: &str,
+) {
+    let members = release_archive_members(stem, binary, target, package)
+        .into_iter()
+        .filter(|(name, _content)| name != omitted_member)
+        .collect::<Vec<_>>();
+    match archive_format {
+        "zip" => write_zip_archive(path, &members),
+        "tar.gz" => write_tar_gz_archive(path, &members),
+        other => panic!("unsupported archive format {other}"),
+    }
+}
+
+fn remove_manifest_auxiliary_file(root: &Path, archive_name: &str, omitted_path: &str) {
+    let manifest_path = root.join("release-manifest.json");
+    let mut manifest: Value =
+        serde_json::from_slice(&fs::read(&manifest_path).expect("read manifest"))
+            .expect("parse manifest");
+    let assets = manifest["assets"]
+        .as_array_mut()
+        .expect("manifest assets array");
+    let archive = assets
+        .iter_mut()
+        .find(|asset| asset["name"] == archive_name)
+        .expect("archive manifest asset");
+    let auxiliary_files = archive["auxiliary_files"]
+        .as_array_mut()
+        .expect("auxiliary files array");
+    let original_len = auxiliary_files.len();
+    auxiliary_files.retain(|entry| entry["path"] != omitted_path);
+    assert_eq!(auxiliary_files.len(), original_len - 1);
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize manifest") + "\n",
+    )
+    .expect("write manifest");
+    rewrite_checksum_for_file(root, "release-manifest.json");
+}
+
+fn rewrite_manifest_archive_metadata(root: &Path, archive_name: &str) {
+    let archive_path = root.join(archive_name);
+    let manifest_path = root.join("release-manifest.json");
+    let mut manifest: Value =
+        serde_json::from_slice(&fs::read(&manifest_path).expect("read manifest"))
+            .expect("parse manifest");
+    let assets = manifest["assets"]
+        .as_array_mut()
+        .expect("manifest assets array");
+    let archive = assets
+        .iter_mut()
+        .find(|asset| asset["name"] == archive_name)
+        .expect("archive manifest asset");
+    archive["sha256"] = json!(sha256_file(&archive_path));
+    archive["size_bytes"] = json!(archive_path.metadata().expect("archive metadata").len());
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize manifest") + "\n",
+    )
+    .expect("write manifest");
+}
+
+fn rewrite_checksum_for_file(root: &Path, file_name: &str) {
+    let checksum_path = root.join("SHA256SUMS.txt");
+    let replacement_hash = sha256_file(&root.join(file_name));
+    let checksum_text = fs::read_to_string(&checksum_path).expect("read checksums");
+    let mut replaced = false;
+    let updated = checksum_text
+        .lines()
+        .map(|line| {
+            let Some((_, name)) = line.split_once("  ") else {
+                return line.to_owned();
+            };
+            if name == file_name {
+                replaced = true;
+                format!("{replacement_hash}  {file_name}")
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    assert!(replaced, "checksum entry missing for {file_name}");
+    fs::write(checksum_path, updated).expect("rewrite checksums");
 }
 
 fn write_zip_archive(path: &Path, members: &[(String, Vec<u8>)]) {

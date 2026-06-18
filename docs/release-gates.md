@@ -12,7 +12,7 @@ This matrix defines the first-RC support boundary. It is not a production-readin
 | OIDC/OAuth | First-RC target; not OpenID Certified. | Config OP and Basic OP target. Browser and OpenID conformance path is Authorization Code + PKCE with query response mode and `S256`; token endpoint also supports `authorization_code`, `refresh_token`, and configured confidential-client `client_credentials`. | `cairn-oidc` tests, API token/metadata tests, deployed metadata smoke, and external OIDF suite evidence. | API endpoint from a reviewed source/container deployment; no standalone OIDC service artifact. | `oidc-metadata-smoke.json`, static registration/config artifacts, `openid-config-op-result.json`, `openid-basic-op-result.json`. | Implicit, hybrid, resource-owner password grant, dynamic registration, `response_mode=form_post`, request objects through `request` or `request_uri`, and general claims-parameter support. |
 | SCIM | Optional v1 subset; disabled unless `CAIRN_SCIM_BEARER_TOKEN_SHA256` is configured. | SCIM 2.0 User and Group subset, ServiceProviderConfig/Schemas/ResourceTypes, exact filters/SearchRequest, bounded PATCH, bounded Bulk, bearer-token hash rotation. | `cairn-api scim` tests, built-in SCIM smoke, and external Okta/Entra connector summaries. | `/scim/v2/*` on the deployed API; connector profiles from `cairn-api scim connector-profile`. | `scim-generic-connector-profile.json`, `scim-okta-connector-profile.json`, `scim-entra-connector-profile.json`, `scim-smoke.json`, `scim-okta-connector-smoke.json`, `scim-entra-connector-smoke.json`. | Sort, changePassword, ETags, cursor pagination, Shared Signals/security events, password synchronization, nested groups, broad multi-valued PATCH semantics, certified directory templates. |
 | MCP | Local read-only stdio server for release-evidence inspection. | `cairnid-mcp` tools: `evidence_plan`, `evidence_manifest`, `evidence_status`, `evidence_check`, constrained by an allowlisted evidence root. | Windows CI `cargo test`/clippy, Linux/Windows distribution smoke, and local stdio validation. | `cairnid-mcp` Linux x86_64 and Windows x86_64 archives after a published GitHub Release; until then use Cargo from source. | MCP Windows behavior gate, stdio smoke, release-assets verification for the published archive. | Remote/network MCP hosting, write-capable evidence tools, unconstrained filesystem access, raw artifact/log/secret exposure. |
-| cairnid CLI | Operator release-evidence CLI; first public install path pending. | `cairnid evidence plan`, `manifest`, `init`, `status`, and `check`; CLI archives include generated completions and `cairnid.1` manpage. | Windows CI `cargo test -p cairnid --locked`, Linux/Windows distribution smokes, Rust stable 1.94+. | `cairnid` Linux x86_64 and Windows x86_64 archives after a published GitHub Release; until then use Cargo from source. | CLI Windows lifecycle proof, release-assets verification, final `cairnid evidence check`. | Package-manager distribution, unattended install scripts, production support before a published release. |
+| cairnid CLI | Operator release-evidence CLI; first public install path pending. | `cairnid evidence plan`, `manifest`, `init`, `status`, and `check`; CLI archives include generated completions and roff manpages for `cairnid` and its subcommands. | Windows CI `cargo test -p cairnid --locked`, Linux/Windows distribution smokes, Rust stable 1.94+. | `cairnid` Linux x86_64 and Windows x86_64 archives after a published GitHub Release; until then use Cargo from source. | CLI Windows lifecycle proof, release-assets verification, final `cairnid evidence check`. | Package-manager distribution, unattended install scripts, production support before a published release. |
 | API runtime | Source/container-build target for RC evidence; no production support window yet. | Rust stable 1.94+ workspace, Axum API, OIDC/OAuth, SCIM, admin/session, operations commands. | Ubuntu CI with native dependencies; Windows GNU toolchain for local Rust verification where MSVC is unavailable; root Dockerfile Debian runtime smoke. | Reviewed source checkout or locally built API image; no public API binary or container image. | Rust quality gates, operations preflight, deployed HTTPS smokes, restore/key/audit/email evidence. | Published API server binary, public container image, registry digest, non-HTTPS production issuer posture, production SLA. |
 | Web runtime | SvelteKit web UI tested with Bun tooling and Node 24 adapter-node runtime. | Bun 1.3.4 package manager/scripts; Node 24 for CI and Dockerfile build/runtime; Bun remains in the runtime image for healthcheck. | CI web job with Bun 1.3.4 and Node 24; `apps/web/Dockerfile` uses `node:24-bookworm-slim` and `oven/bun:1.3.4`. | Reviewed source checkout or locally built web image; no public site/runtime artifact. | `bun run check`, `bun run test`, `bun run build`, `bun run test:e2e`, web image smoke. | Other Node major versions as a tested runtime, published web image, static/site runtime distribution. |
 | Database | Postgres-backed only. | Postgres 17 migrations and runtime schema. | `postgres:17-alpine` in CI service and local Compose. | Operator-provided Postgres; no managed database package. | Postgres 17 migration tests, operations preflight, restore drill. | MySQL, SQLite, untested Postgres major versions, production database support without restore evidence. |
@@ -83,7 +83,7 @@ Pushing a tag that matches `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-rc.N` sta
 
 For each tag, the workflow creates a draft GitHub Release containing:
 
-- Versioned archives for each binary and target. The workflow checks that both directly built binaries and the archive-extracted binaries report the exact release version through `--version`. Each `cairnid` CLI archive also contains generated Bash, Zsh, Fish, PowerShell, and Elvish completions under `completions/`, plus `man/man1/cairnid.1`; `cairnid-mcp` archives do not contain these CLI-only files.
+- Versioned archives for each binary and target. The workflow checks that both directly built binaries and the archive-extracted binaries report the exact release version through `--version`. Each `cairnid` CLI archive also contains generated Bash, Zsh, Fish, PowerShell, and Elvish completions under `completions/`, plus roff manpages for `cairnid` and its subcommands under `man/man1/`; `cairnid-mcp` archives do not contain these CLI-only files.
 - CycloneDX JSON SBOMs generated with `cargo-cyclonedx`.
 - `SHA256SUMS.txt`.
 - `release-manifest.json` with source commit, workflow run, target, archive, SBOM, CLI archive auxiliary-file paths, and SHA-256 metadata.
@@ -164,7 +164,18 @@ $cliRequired = @(
     "$cliStem/completions/cairnid.fish",
     "$cliStem/completions/cairnid.ps1",
     "$cliStem/completions/cairnid.elv",
-    "$cliStem/man/man1/cairnid.1"
+    "$cliStem/man/man1/cairnid.1",
+    "$cliStem/man/man1/cairnid-completions.1",
+    "$cliStem/man/man1/cairnid-evidence.1",
+    "$cliStem/man/man1/cairnid-evidence-plan.1",
+    "$cliStem/man/man1/cairnid-evidence-manifest.1",
+    "$cliStem/man/man1/cairnid-evidence-init.1",
+    "$cliStem/man/man1/cairnid-evidence-status.1",
+    "$cliStem/man/man1/cairnid-evidence-check.1",
+    "$cliStem/man/man1/cairnid-release-assets.1",
+    "$cliStem/man/man1/cairnid-release-assets-verify.1",
+    "$cliStem/man/man1/cairnid-manpage.1",
+    "$cliStem/man/man1/cairnid-manpages.1"
 )
 foreach ($member in $cliRequired) {
     if ($member -notin $cliMembers) { throw "CLI archive is missing $member" }
@@ -173,7 +184,7 @@ foreach ($member in @("$mcpStem/cairnid-mcp.exe", "$mcpStem/LICENSE", "$mcpStem/
     if ($member -notin $mcpMembers) { throw "MCP archive is missing $member" }
 }
 $mcpForbidden = $mcpMembers | Where-Object {
-    $_ -like "$mcpStem/completions/*" -or $_ -eq "$mcpStem/man/man1/cairnid.1"
+    $_ -like "$mcpStem/completions/*" -or $_ -like "$mcpStem/man/man1/*"
 }
 if ($mcpForbidden) { throw "MCP archive contains CLI-only files: $mcpForbidden" }
 
@@ -252,13 +263,24 @@ for member in \
   "$cli_stem/completions/cairnid.fish" \
   "$cli_stem/completions/cairnid.ps1" \
   "$cli_stem/completions/cairnid.elv" \
-  "$cli_stem/man/man1/cairnid.1"; do
+  "$cli_stem/man/man1/cairnid.1" \
+  "$cli_stem/man/man1/cairnid-completions.1" \
+  "$cli_stem/man/man1/cairnid-evidence.1" \
+  "$cli_stem/man/man1/cairnid-evidence-plan.1" \
+  "$cli_stem/man/man1/cairnid-evidence-manifest.1" \
+  "$cli_stem/man/man1/cairnid-evidence-init.1" \
+  "$cli_stem/man/man1/cairnid-evidence-status.1" \
+  "$cli_stem/man/man1/cairnid-evidence-check.1" \
+  "$cli_stem/man/man1/cairnid-release-assets.1" \
+  "$cli_stem/man/man1/cairnid-release-assets-verify.1" \
+  "$cli_stem/man/man1/cairnid-manpage.1" \
+  "$cli_stem/man/man1/cairnid-manpages.1"; do
     tar -tzf "$cli_archive" "$member" >/dev/null
 done
 for member in "$mcp_stem/cairnid-mcp" "$mcp_stem/LICENSE" "$mcp_stem/README.md"; do
     tar -tzf "$mcp_archive" "$member" >/dev/null
 done
-if tar -tzf "$mcp_archive" | grep -E "/(completions/|man/man1/cairnid\.1$)"; then
+if tar -tzf "$mcp_archive" | grep -E "/(completions/|man/man1/)"; then
     echo "MCP archive contains CLI-only files" >&2
     exit 1
 fi
@@ -287,7 +309,7 @@ For release evidence, do not paste command output into the receipt. After the ex
 cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <release-url> --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json
 ```
 
-Use `--run-url <run-url>` instead of `--release-url` when the evidence is tied to the release workflow run rather than the published release page. The command reads local `SHA256SUMS.txt`, `release-manifest.json`, four archives, and four SBOMs; recomputes SHA-256; confirms the manifest source and non-distribution flags; validates SBOM `bomFormat="CycloneDX"`; verifies archive member structure for binaries, `LICENSE`, `README.md`, CLI completions and manpage; and emits the receipt fields required by `release-assets-verification.json`. It does not download assets, call `gh`, verify remote attestations, or write files. The two attestation flags are explicit operator confirmations that the preceding `gh attestation verify` commands succeeded. Verification failures after the release directory can be inspected exit 3 and still emit structured stdout JSON with `status="failed"` and non-empty `failures`; do not save failed output as release evidence. The evidence checker accepts `release-assets-verification.json` only when `status="ok"` and `failures` is empty. Do not include GitHub tokens, request headers, cookies, raw attestation payloads, debug logs, or copied stdout/stderr.
+Use `--run-url <run-url>` instead of `--release-url` when the evidence is tied to the release workflow run rather than the published release page. The command reads local `SHA256SUMS.txt`, `release-manifest.json`, four archives, and four SBOMs; recomputes SHA-256; confirms the manifest source and non-distribution flags; validates SBOM `bomFormat="CycloneDX"`; verifies archive member structure for binaries, `LICENSE`, `README.md`, CLI completions and nested manpages; and emits the receipt fields required by `release-assets-verification.json`. It does not download assets, call `gh`, verify remote attestations, or write files. The two attestation flags are explicit operator confirmations that the preceding `gh attestation verify` commands succeeded. Verification failures after the release directory can be inspected exit 3 and still emit structured stdout JSON with `status="failed"` and non-empty `failures`; do not save failed output as release evidence. The evidence checker accepts `release-assets-verification.json` only when `status="ok"` and `failures` is empty. Do not include GitHub tokens, request headers, cookies, raw attestation payloads, debug logs, or copied stdout/stderr.
 
 ## Current Blockers
 

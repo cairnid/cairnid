@@ -95,6 +95,8 @@ Tagged CLI/MCP release archives:
 
 The public binary distribution path is `.github/workflows/release.yml`, not CI artifacts. A pushed tag matching `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-rc.N` must be reachable from `origin/main` and must have a successful completed `CI` run for the exact tagged commit. The workflow then builds release-mode `cairnid` and `cairnid-mcp` archives for Linux x86_64 and Windows x86_64, generates CycloneDX JSON SBOMs, writes `SHA256SUMS.txt` and `release-manifest.json`, and creates GitHub artifact attestations with `actions/attest@v4` using GitHub Actions OIDC. The workflow creates a draft GitHub Release; maintainers publish it only after review. RC tags are prereleases and are not marked latest.
 
+Each `cairnid` CLI archive includes generated shell completions under `completions/` and roff manpages for the root command and visible subcommands under `man/man1/`. `cairnid-mcp` archives do not include those CLI-only support files.
+
 The regular CI workflow's `*-ci-rehearsal-*` Actions artifacts are build/smoke proof only. They expire, are not attached to a GitHub Release, and should not be documented as installable public release assets.
 
 Maintainers can also run `.github/workflows/release.yml` manually with a `candidate_tag` input to rehearse the release asset path before creating a tag. That rehearsal builds and packages both CLI/MCP targets, assembles SBOMs, checksums, and manifest files, runs the local verifier as far as possible without publish-only confirmations, and uploads only short-lived Actions artifacts named `release-rehearsal-assets-*`. It does not create a tag, create a GitHub Release, generate attestations, or publish assets for users.
