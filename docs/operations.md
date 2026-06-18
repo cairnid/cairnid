@@ -117,7 +117,7 @@ cairnid completions bash > cairnid.bash
 cairnid manpage > cairnid.1
 ```
 
-Do not commit generated completion scripts or manpages; regenerate them from the released binary when packaging or installing local shell support.
+The public release workflow regenerates these files from the freshly built `cairnid` binary for each target and packages them inside the matching CLI archive under `completions/` and `man/man1/cairnid.1`. `cairnid-mcp` archives do not include generated CLI completion or manpage files. Do not commit generated completion scripts or manpages; regenerate them from the released binary when packaging or installing local shell support.
 
 Verify the release capture environment without printing secret values:
 
@@ -153,6 +153,8 @@ cairnid evidence check <evidence-dir>
 ```
 
 `cairnid evidence status` runs the same validators as `cairnid evidence check`, then emits a smaller JSON summary with passed, missing, and failed artifact counts plus the next command for every artifact that still needs work. It exits non-zero while the evidence set is incomplete. `cairnid evidence check` remains the release gate and emits the full per-artifact check/failure detail. Both commands reject unexpected files, directories, symlinks, screenshots, logs, raw provider exports, and forbidden secret-bearing field names in token-free artifacts; failure text redacts obvious secret-looking values before printing.
+
+Every public JSON report printed by `cairnid evidence plan`, `manifest`, `init`, `status`, and `check` includes root `schema_version="cairnid.evidence.v1"`. This version identifies the CLI/operations evidence report contract, not the individual evidence artifact formats. Additive root fields, nested fields, artifact entries, counts, notes, or next-action details may be added within the same version. Removing or renaming fields, changing field meaning, changing stable status values, weakening redaction expectations, or changing the meaning of count/failure fields requires a new schema version.
 
 Stable `cairnid evidence` exit codes:
 

@@ -11,7 +11,7 @@ Cairn Identity is pre-beta. A release can be recommended for production use only
 | Rust quality | `cargo fmt`, `cargo check`, `cargo test`, and `cargo clippy -D warnings` pass | CI-gated |
 | CLI Windows lifecycle proof | `cargo test -p cairnid --locked` passes on Windows, including binary-level release-evidence manifest, init, incomplete status/check, and failure-redaction coverage | CI-gated |
 | MCP stdio and Windows behavior | `cargo test -p cairnid-mcp --locked` and `cargo clippy -p cairnid-mcp --locked --all-targets -- -D warnings` pass on Windows, including stdio initialize, `tools/list`, and sanitized `tools/call` coverage | CI-gated |
-| CLI/MCP public release assets | `.github/workflows/release.yml` builds versioned `cairnid` and `cairnid-mcp` archives, CycloneDX SBOMs, SHA256 checksums, a release manifest, and GitHub artifact attestations for a version tag | Tag-gated; first RC pending |
+| CLI/MCP public release assets | `.github/workflows/release.yml` builds versioned `cairnid` archives with generated completions/manpage files, `cairnid-mcp` archives without CLI-only files, CycloneDX SBOMs, SHA256 checksums, a release manifest, and GitHub artifact attestations for a version tag | Tag-gated; first RC pending |
 | Frontend quality | `bun run check`, `bun run test`, `bun run build`, and `bun run test:e2e` pass | CI-gated |
 | Docs export | `bun run docs:site -- --out <temp-dir>` completes without committing generated output | CI-gated |
 | Database migrations | Postgres 17 migration tests pass against a disposable database | CI-gated |
@@ -41,6 +41,8 @@ cargo run -p cairnid --locked -- evidence check --evidence-dir <evidence-dir>
 
 `cairnid evidence plan` confirms that required environment variable names are present without printing values. `cairnid evidence init` creates the guarded evidence directory. `cairnid evidence status` shows missing or failed artifacts while evidence is being collected. `cairnid evidence check` is the final local release gate.
 
+The CLI evidence JSON reports carry root `schema_version="cairnid.evidence.v1"` for machine-readable contract stability. Additive fields can appear under the same version, but removing or renaming fields, changing field meanings, changing stable status values, weakening redaction expectations, or changing count/failure semantics requires a new schema version.
+
 Stable `cairnid evidence` exit codes:
 
 - `0`: success.
@@ -60,10 +62,10 @@ Pushing a tag that matches `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-rc.N` sta
 
 For each tag, the workflow creates a draft GitHub Release containing:
 
-- Versioned archives for each binary and target.
+- Versioned archives for each binary and target. Each `cairnid` CLI archive also contains generated Bash, Zsh, Fish, PowerShell, and Elvish completions under `completions/`, plus `man/man1/cairnid.1`; `cairnid-mcp` archives do not contain these CLI-only files.
 - CycloneDX JSON SBOMs generated with `cargo-cyclonedx`.
 - `SHA256SUMS.txt`.
-- `release-manifest.json` with source commit, workflow run, target, archive, SBOM, and SHA-256 metadata.
+- `release-manifest.json` with source commit, workflow run, target, archive, SBOM, CLI archive auxiliary-file paths, and SHA-256 metadata.
 - GitHub artifact attestations created with `actions/attest@v4`, GitHub Actions OIDC, and Sigstore, without long-lived signing keys.
 
 Maintainers must review and publish the draft before the assets are public. RC tags are marked as prereleases and are not marked latest. The workflow does not publish crates.io packages, Homebrew formulae, MSI installers, macOS notarized assets, Authenticode signatures, containers, or any site/runtime artifact.

@@ -4,7 +4,7 @@ mod requirements;
 use self::notes::{evidence_capture_is_manual, evidence_operator_notes};
 use self::requirements::{evidence_environment_requirements, missing_environment_for_requirements};
 use super::registry::{EvidenceSpec, evidence_validator_name};
-use super::{ReleaseEvidencePlanReport, ReleaseEvidencePlanStep};
+use super::{RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidencePlanReport, ReleaseEvidencePlanStep};
 use std::collections::BTreeSet;
 use time::OffsetDateTime;
 
@@ -56,6 +56,7 @@ where
         .collect::<Vec<_>>();
 
     ReleaseEvidencePlanReport {
+        schema_version: RELEASE_EVIDENCE_SCHEMA_VERSION,
         status: if missing_environment.is_empty() {
             "ready"
         } else {

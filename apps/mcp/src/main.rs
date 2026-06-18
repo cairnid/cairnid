@@ -7,6 +7,7 @@ use cairn_operations::{
     ReleaseEvidenceReport, check_release_evidence, release_evidence_capture_plan,
     release_evidence_manifest,
 };
+use clap::Parser;
 use rmcp::{
     Json, ServerHandler, ServiceExt,
     model::{CallToolResult, Implementation, JsonObject, ServerCapabilities, ServerInfo},
@@ -17,17 +18,115 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    env, fs, io,
+    env,
+    error::Error,
+    fmt, fs, io,
     path::{Component, Path, PathBuf},
+    process::ExitCode,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing_subscriber::EnvFilter;
 
 const DEFAULT_EVIDENCE_CHILD: &str = "release-evidence";
 const MCP_EVIDENCE_RESULT_SCHEMA_VERSION: &str = "cairnid.mcp.evidence.v1";
+const EXIT_INTERNAL_ERROR: u8 = 1;
+const EXIT_OPERATOR_INPUT: u8 = 4;
 
-#[derive(Debug, Clone, Default)]
-struct CairnIdMcpServer;
+#[derive(Debug, Parser)]
+#[command(
+    name = "cairnid-mcp",
+    version,
+    about = "Local stdio MCP server for read-only CairnID release evidence inspection.",
+    long_about = None
+)]
+#[command(
+    after_help = "Examples:\n  cairnid-mcp\n  cairnid-mcp --evidence-root C:\\path\\to\\cairnid"
+)]
+struct Cli {
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Evidence allowlist root. Defaults to the process working directory"
+    )]
+    evidence_root: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+struct CairnIdMcpServer {
+    evidence_root: PathBuf,
+}
+
+impl CairnIdMcpServer {
+    fn new(evidence_root: PathBuf) -> Self {
+        Self { evidence_root }
+    }
+}
+
+#[derive(Debug)]
+enum StartupError {
+    EvidenceRoot(StartupEvidenceRootError),
+    Serve(Box<dyn Error + Send + Sync>),
+}
+
+impl StartupError {
+    fn exit_code(&self) -> u8 {
+        match self {
+            Self::EvidenceRoot(_) => EXIT_OPERATOR_INPUT,
+            Self::Serve(_) => EXIT_INTERNAL_ERROR,
+        }
+    }
+}
+
+impl fmt::Display for StartupError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EvidenceRoot(error) => write!(formatter, "{error}"),
+            Self::Serve(error) => write!(formatter, "stdio server failed: {error}"),
+        }
+    }
+}
+
+impl Error for StartupError {}
+
+#[derive(Debug)]
+struct StartupEvidenceRootError {
+    path: PathBuf,
+    kind: StartupEvidenceRootErrorKind,
+}
+
+#[derive(Debug)]
+enum StartupEvidenceRootErrorKind {
+    InspectFailed,
+    NotDirectory,
+    Symlink,
+}
+
+impl StartupEvidenceRootError {
+    fn new(path: impl Into<PathBuf>, kind: StartupEvidenceRootErrorKind) -> Self {
+        Self {
+            path: path.into(),
+            kind,
+        }
+    }
+
+    fn inspect_failed(path: impl Into<PathBuf>) -> Self {
+        Self::new(path, StartupEvidenceRootErrorKind::InspectFailed)
+    }
+}
+
+impl fmt::Display for StartupEvidenceRootError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let reason = match self.kind {
+            StartupEvidenceRootErrorKind::InspectFailed => "could not be inspected",
+            StartupEvidenceRootErrorKind::NotDirectory => "is not a directory",
+            StartupEvidenceRootErrorKind::Symlink => "must not be a symlink",
+        };
+
+        write!(formatter, "evidence root {} {reason}", self.path.display())
+    }
+}
+
+impl Error for StartupEvidenceRootError {}
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 struct EvidenceDirectoryRequest {
@@ -395,8 +494,7 @@ impl CairnIdMcpServer {
         arguments: JsonObject,
     ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
         let request = parse_evidence_directory_request(arguments)?;
-        let root = evidence_allowlist_root()?;
-        evidence_status_for_root(&root, request)
+        evidence_status_for_root(&self.evidence_root, request)
     }
 
     #[tool(
@@ -417,8 +515,7 @@ impl CairnIdMcpServer {
         arguments: JsonObject,
     ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
         let request = parse_evidence_directory_request(arguments)?;
-        let root = evidence_allowlist_root()?;
-        evidence_check_for_root(&root, request)
+        evidence_check_for_root(&self.evidence_root, request)
     }
 }
 
@@ -435,15 +532,37 @@ impl ServerHandler for CairnIdMcpServer {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> ExitCode {
+    match run(Cli::parse()).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("cairnid-mcp failed: {error}");
+            ExitCode::from(error.exit_code())
+        }
+    }
+}
+
+async fn run(cli: Cli) -> Result<(), StartupError> {
+    let evidence_root =
+        startup_evidence_root(cli.evidence_root).map_err(StartupError::EvidenceRoot)?;
     init_tracing();
-    tracing::debug!("starting cairnid-mcp stdio server");
+    tracing::debug!(
+        evidence_root = %evidence_root.display(),
+        "starting cairnid-mcp stdio server"
+    );
 
-    let service = CairnIdMcpServer.serve(stdio()).await.inspect_err(|error| {
-        tracing::error!(?error, "failed to serve cairnid-mcp");
-    })?;
+    let service = CairnIdMcpServer::new(evidence_root)
+        .serve(stdio())
+        .await
+        .inspect_err(|error| {
+            tracing::error!(?error, "failed to serve cairnid-mcp");
+        })
+        .map_err(|error| StartupError::Serve(Box::new(error)))?;
 
-    service.waiting().await?;
+    service
+        .waiting()
+        .await
+        .map_err(|error| StartupError::Serve(Box::new(error)))?;
     Ok(())
 }
 
@@ -516,10 +635,34 @@ fn incomplete_evidence_error(summary: McpEvidenceSummary) -> CallToolResult {
     CallToolResult::structured_error(value)
 }
 
-fn evidence_allowlist_root() -> Result<PathBuf, McpEvidenceRequestError> {
-    let current_dir =
-        env::current_dir().map_err(|_| McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE)?;
-    canonical_existing_directory(&current_dir, EvidenceDirectoryKind::AllowlistRoot)
+fn startup_evidence_root(value: Option<PathBuf>) -> Result<PathBuf, StartupEvidenceRootError> {
+    let root = match value {
+        Some(root) => root,
+        None => env::current_dir().map_err(|_| StartupEvidenceRootError::inspect_failed("."))?,
+    };
+
+    canonical_startup_evidence_root(&root)
+}
+
+fn canonical_startup_evidence_root(path: &Path) -> Result<PathBuf, StartupEvidenceRootError> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| StartupEvidenceRootError::inspect_failed(path))?;
+
+    if metadata.file_type().is_symlink() {
+        return Err(StartupEvidenceRootError::new(
+            path,
+            StartupEvidenceRootErrorKind::Symlink,
+        ));
+    }
+    if !metadata.is_dir() {
+        return Err(StartupEvidenceRootError::new(
+            path,
+            StartupEvidenceRootErrorKind::NotDirectory,
+        ));
+    }
+
+    path.canonicalize()
+        .map_err(|_| StartupEvidenceRootError::inspect_failed(path))
 }
 
 fn parse_evidence_directory_request(
@@ -1040,7 +1183,7 @@ mod tests {
 
     #[test]
     fn server_info_uses_binary_name() {
-        let info = CairnIdMcpServer.get_info();
+        let info = CairnIdMcpServer::new(PathBuf::from(".")).get_info();
 
         assert_eq!(info.server_info.name, "cairnid-mcp");
         assert!(info.capabilities.tools.is_some());

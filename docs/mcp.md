@@ -1,11 +1,24 @@
 # MCP
 
-`cairnid-mcp` is a local stdio MCP server for inspecting release evidence below the process working directory. It exposes only read-only tools backed by the same `cairn-operations` release-evidence validators used by the operator commands.
+`cairnid-mcp` is a local stdio MCP server for inspecting release evidence below an explicit allowlisted root. It exposes only read-only tools backed by the same `cairn-operations` release-evidence validators used by the operator commands.
 
-Start it from the repository root:
+Inspect the binary safely without starting stdio JSON-RPC:
+
+```powershell
+cairnid-mcp --help
+cairnid-mcp --version
+```
+
+Start it from the repository root. When `--evidence-root` is omitted, the process working directory remains the allowlisted root:
 
 ```powershell
 cargo run -p cairnid-mcp --locked
+```
+
+MCP clients can launch the server from any working directory by passing an explicit evidence root:
+
+```powershell
+cairnid-mcp --evidence-root C:\path\to\cairnid
 ```
 
 Available tools:
@@ -17,12 +30,14 @@ Available tools:
 
 `evidence_status` and `evidence_check` accept:
 
-- `evidence_dir`: optional evidence directory. When omitted, the server uses `release-evidence` under the process working directory.
+- `evidence_dir`: optional evidence directory. When omitted, the server uses `release-evidence` under the configured evidence root.
 - `max_age_days`: optional freshness window in days; defaults to the operations validator default.
 
 Unknown request arguments are rejected with `unknown_argument`; the input schema advertises a closed object contract with no additional properties.
 
-Relative paths are resolved under the process working directory. Absolute paths are accepted only when their canonical path remains under that allowlisted root. Parent traversal with `..`, drive-relative paths, symlinked evidence directories, and symlink entries are rejected before the server calls the evidence checker.
+Relative paths are resolved under the configured evidence root. Absolute paths are accepted only when their canonical path remains under that allowlisted root. Parent traversal with `..`, drive-relative paths, symlinked evidence directories, and symlink entries are rejected before the server calls the evidence checker.
+
+If `--evidence-root <DIR>` is supplied and the root cannot be inspected, is not a directory, or is a symlink, the process exits non-zero before starting JSON-RPC and writes a startup error to stderr. Request-level errors after startup still use the MCP tool-error envelopes below.
 
 `evidence_status` and `evidence_check` do not return validator failure text, artifact JSON, resource links, logs, standard streams, or provider exports. Their MCP responses contain stable statuses, artifact names, file names, commands, check counts, failure counts, and failure-code counts. The server does not expose the scaffold initializer or any other write-capable release-evidence operation.
 
@@ -64,7 +79,7 @@ Stable request error codes:
 - `empty_evidence_dir`: `evidence_dir` is empty or whitespace.
 - `parent_traversal`: `evidence_dir` contains `..`.
 - `drive_relative_or_root_style_relative_path`: `evidence_dir` is a drive-relative path such as `C:release-evidence`, or a rooted relative path such as `\release-evidence`.
-- `outside_allowlisted_root`: the canonical evidence path resolves outside the process working directory.
+- `outside_allowlisted_root`: the canonical evidence path resolves outside the configured evidence root.
 - `symlinked_evidence_dir`: the evidence directory itself is a symlink.
 - `symlink_entry`: an entry inside the evidence directory is a symlink.
 - `missing_evidence_dir`: the requested evidence directory does not exist.

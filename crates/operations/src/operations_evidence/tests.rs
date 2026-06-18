@@ -1,9 +1,9 @@
 mod fixtures;
 
 use super::{
-    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseEvidenceError, check_release_evidence,
-    init_release_evidence_directory, release_evidence_capture_plan, release_evidence_manifest,
-    release_evidence_status_report,
+    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidenceError,
+    check_release_evidence, init_release_evidence_directory, release_evidence_capture_plan,
+    release_evidence_manifest, release_evidence_status_report,
 };
 use fixtures::*;
 use serde_json::{Value, json};
@@ -153,12 +153,14 @@ fn release_evidence_passes_complete_directory() {
     .expect("release evidence report");
 
     assert_eq!(report.status, "ready");
+    assert_eq!(report.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert!(report.failures.is_empty());
     assert_eq!(report.artifacts.len(), 23);
 
     let status = release_evidence_status_report(&root, release_evidence_now(), 30)
         .expect("release evidence status report");
     assert_eq!(status.status, "ready");
+    assert_eq!(status.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert_eq!(status.artifact_count, 23);
     assert_eq!(status.passed_artifact_count, 23);
     assert_eq!(status.missing_artifact_count, 0);
@@ -327,6 +329,7 @@ fn release_evidence_status_reports_next_actions_for_incomplete_directory() {
         .expect("release evidence status report");
 
     assert_eq!(status.status, "incomplete");
+    assert_eq!(status.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert_eq!(status.artifact_count, 23);
     assert_eq!(status.passed_artifact_count, 1);
     assert_eq!(status.missing_artifact_count, 22);
@@ -353,6 +356,7 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
     let manifest = release_evidence_manifest(OffsetDateTime::now_utc());
 
     assert_eq!(manifest.status, "ok");
+    assert_eq!(manifest.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert_eq!(manifest.default_max_age_days, 30);
     assert_eq!(manifest.artifact_count, 23);
     assert_eq!(manifest.artifacts.len(), 23);
@@ -468,6 +472,7 @@ fn release_evidence_plan_reports_missing_environment_without_values() {
     let report = release_evidence_capture_plan(release_evidence_now(), |_| false);
 
     assert_eq!(report.status, "missing_environment");
+    assert_eq!(report.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert_eq!(report.artifact_count, 23);
     assert_eq!(report.ready_artifact_count, 1);
     assert_eq!(report.manual_artifact_count, 4);
@@ -591,6 +596,7 @@ fn release_evidence_init_writes_guarded_scaffold() {
         init_release_evidence_directory(&root, release_evidence_now(), false).expect("init");
 
     assert_eq!(report.status, "initialized");
+    assert_eq!(report.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert!(!report.force);
     assert_eq!(report.artifact_count, 23);
     assert_eq!(report.secret_artifact_count, 1);
@@ -609,6 +615,10 @@ fn release_evidence_init_writes_guarded_scaffold() {
     let manifest_json = fs::read_to_string(root.join("release-evidence-manifest.json"))
         .expect("read generated manifest");
     let manifest: Value = serde_json::from_str(&manifest_json).expect("generated manifest is JSON");
+    assert_eq!(
+        manifest["schema_version"],
+        json!(RELEASE_EVIDENCE_SCHEMA_VERSION)
+    );
     assert_eq!(manifest["artifact_count"], json!(23));
     let artifacts = manifest["artifacts"]
         .as_array()

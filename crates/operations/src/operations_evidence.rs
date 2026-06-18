@@ -22,10 +22,11 @@ pub use self::email_evidence::{
 use self::redaction::sanitize_release_evidence_failure;
 use self::registry::EVIDENCE_SPECS;
 pub use self::types::{
-    ReleaseEvidenceArtifactReport, ReleaseEvidenceEnvironmentRequirement, ReleaseEvidenceError,
-    ReleaseEvidenceInitReport, ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact,
-    ReleaseEvidenceNextAction, ReleaseEvidencePlanReport, ReleaseEvidencePlanStep,
-    ReleaseEvidenceReport, ReleaseEvidenceStatusReport,
+    RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidenceArtifactReport,
+    ReleaseEvidenceEnvironmentRequirement, ReleaseEvidenceError, ReleaseEvidenceInitReport,
+    ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact, ReleaseEvidenceNextAction,
+    ReleaseEvidencePlanReport, ReleaseEvidencePlanStep, ReleaseEvidenceReport,
+    ReleaseEvidenceStatusReport,
 };
 use std::path::Path;
 use time::OffsetDateTime;
@@ -75,6 +76,7 @@ pub fn check_release_evidence(
         .collect::<Vec<_>>();
 
     Ok(ReleaseEvidenceReport {
+        schema_version: RELEASE_EVIDENCE_SCHEMA_VERSION,
         status: if failures.is_empty() {
             "ready"
         } else {
@@ -127,6 +129,7 @@ pub fn summarize_release_evidence(report: &ReleaseEvidenceReport) -> ReleaseEvid
         .collect::<Vec<_>>();
 
     ReleaseEvidenceStatusReport {
+        schema_version: RELEASE_EVIDENCE_SCHEMA_VERSION,
         status: report.status,
         evidence_dir: report.evidence_dir.clone(),
         generated_at: report.generated_at,

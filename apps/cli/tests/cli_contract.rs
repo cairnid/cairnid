@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use cairn_operations::RELEASE_EVIDENCE_SCHEMA_VERSION;
 use serde_json::{Value, json};
 use std::{
     env, fs,
@@ -134,6 +135,7 @@ fn evidence_plan_emits_expected_json_contract() {
     assert!(stderr(&output).is_empty());
 
     let json: Value = serde_json::from_slice(&output.stdout).expect("valid plan JSON");
+    assert_schema_version(&json);
     assert_eq!(json["status"], "ready");
     assert_eq!(json["artifact_count"], 23);
     assert_eq!(json["ready_artifact_count"], 19);
@@ -150,6 +152,7 @@ fn evidence_plan_missing_environment_exits_gate_failed_and_emits_json() {
 
     let stdout = stdout(&output);
     let json: Value = serde_json::from_str(&stdout).expect("valid plan JSON");
+    assert_schema_version(&json);
     assert_eq!(json["status"], "missing_environment");
     assert!(
         json["missing_environment_artifact_count"]
@@ -175,6 +178,7 @@ fn evidence_manifest_emits_expected_json_contract_without_values() {
     assert!(!stdout.contains("secret-value"));
 
     let json: Value = serde_json::from_str(&stdout).expect("valid manifest JSON");
+    assert_schema_version(&json);
     assert_eq!(json["status"], "ok");
     assert_eq!(json["default_max_age_days"], 30);
     assert_eq!(json["artifact_count"], 23);
@@ -211,6 +215,7 @@ fn evidence_init_creates_scaffold_and_status_reports_incomplete_lifecycle() {
     assert!(stderr(&init).is_empty());
 
     let init_json: Value = serde_json::from_slice(&init.stdout).expect("valid init JSON");
+    assert_schema_version(&init_json);
     assert_eq!(init_json["status"], "initialized");
     assert_eq!(init_json["artifact_count"], 23);
     assert_eq!(init_json["secret_artifact_count"], 1);
@@ -232,6 +237,7 @@ fn evidence_init_creates_scaffold_and_status_reports_incomplete_lifecycle() {
 
     let status_stdout = stdout(&status);
     let status_json: Value = serde_json::from_str(&status_stdout).expect("valid status JSON");
+    assert_schema_version(&status_json);
     assert_eq!(status_json["status"], "incomplete");
     assert_eq!(status_json["artifact_count"], 23);
     assert_eq!(status_json["passed_artifact_count"], 0);
@@ -302,6 +308,7 @@ fn evidence_status_redacts_secret_like_artifact_failures() {
     assert!(combined.contains("Bearer <redacted>"));
 
     let json: Value = serde_json::from_slice(&output.stdout).expect("valid status JSON");
+    assert_schema_version(&json);
     assert_eq!(json["status"], "incomplete");
     assert_eq!(json["failed_artifact_count"], 1);
     assert_eq!(json["missing_artifact_count"], 22);
@@ -328,6 +335,7 @@ fn evidence_check_reports_incomplete_scaffold_and_redacts_secret_like_failures()
     assert!(combined.contains("Bearer <redacted>"));
 
     let json: Value = serde_json::from_slice(&output.stdout).expect("valid check JSON");
+    assert_schema_version(&json);
     assert_eq!(json["status"], "incomplete");
     assert_eq!(
         json["artifacts"].as_array().expect("artifacts array").len(),
@@ -473,6 +481,13 @@ fn assert_exit_code(output: &Output, code: i32) {
         "expected exit code {code}\nstdout:\n{}\nstderr:\n{}",
         stdout(output),
         stderr(output)
+    );
+}
+
+fn assert_schema_version(json: &Value) {
+    assert_eq!(
+        json["schema_version"],
+        json!(RELEASE_EVIDENCE_SCHEMA_VERSION)
     );
 }
 

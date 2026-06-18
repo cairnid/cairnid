@@ -47,6 +47,7 @@ pub(in crate::operations_evidence) fn init_release_evidence_directory(
     }
 
     Ok(ReleaseEvidenceInitReport {
+        schema_version: manifest.schema_version,
         status: "initialized",
         evidence_dir: evidence_dir.to_string_lossy().into_owned(),
         generated_at,

@@ -2,8 +2,11 @@ use serde::Serialize;
 use std::io;
 use time::OffsetDateTime;
 
+pub const RELEASE_EVIDENCE_SCHEMA_VERSION: &str = "cairnid.evidence.v1";
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReleaseEvidenceReport {
+    pub schema_version: &'static str,
     pub status: &'static str,
     pub evidence_dir: String,
     #[serde(with = "time::serde::rfc3339")]
@@ -28,6 +31,7 @@ pub struct ReleaseEvidenceArtifactReport {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReleaseEvidenceManifest {
+    pub schema_version: &'static str,
     pub status: &'static str,
     #[serde(with = "time::serde::rfc3339")]
     pub generated_at: OffsetDateTime,
@@ -51,6 +55,7 @@ pub struct ReleaseEvidenceManifestArtifact {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReleaseEvidenceInitReport {
+    pub schema_version: &'static str,
     pub status: &'static str,
     pub evidence_dir: String,
     #[serde(with = "time::serde::rfc3339")]
@@ -66,6 +71,7 @@ pub struct ReleaseEvidenceInitReport {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReleaseEvidencePlanReport {
+    pub schema_version: &'static str,
     pub status: &'static str,
     #[serde(with = "time::serde::rfc3339")]
     pub generated_at: OffsetDateTime,
@@ -106,6 +112,7 @@ pub struct ReleaseEvidenceEnvironmentRequirement {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReleaseEvidenceStatusReport {
+    pub schema_version: &'static str,
     pub status: &'static str,
     pub evidence_dir: String,
     #[serde(with = "time::serde::rfc3339")]

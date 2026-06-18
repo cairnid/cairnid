@@ -508,6 +508,7 @@ name = "cairnid-mcp"
 version = "0.1.0"
 dependencies = [
  "cairn-operations",
+ "clap",
  "rmcp",
  "schemars",
  "serde",

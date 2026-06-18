@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 cairn-operations.workspace = true
+clap.workspace = true
 rmcp.workspace = true
 schemars.workspace = true
 serde.workspace = true

@@ -145,6 +145,7 @@ jobs:
       TARGET: ${{ matrix.target }}
       BINARY_EXT: ${{ matrix.binary_ext }}
       CLI_BINARY: target/${{ matrix.target }}/release/cairnid${{ matrix.binary_ext }}
+      CLI_AUX_DIR: target/${{ matrix.target }}/release/cairnid-operator-files
       MCP_BINARY: target/${{ matrix.target }}/release/cairnid-mcp${{ matrix.binary_ext }}
     steps:
       - uses: actions/checkout@v6
@@ -521,6 +522,32 @@ jobs:
                       process.kill()
                       process.wait(timeout=5)
 
+      - name: Generate CLI completions and manpage
+        shell: python
+        run: |
+          import os
+          import pathlib
+          import subprocess
+
+          cli = pathlib.Path(os.environ["CLI_BINARY"]).resolve()
+          output_dir = pathlib.Path(os.environ["CLI_AUX_DIR"])
+          generated_files = [
+              (("completions", "cairnid.bash"), ["completions", "bash"]),
+              (("completions", "_cairnid"), ["completions", "zsh"]),
+              (("completions", "cairnid.fish"), ["completions", "fish"]),
+              (("completions", "cairnid.ps1"), ["completions", "powershell"]),
+              (("completions", "cairnid.elv"), ["completions", "elvish"]),
+              (("man", "man1", "cairnid.1"), ["manpage"]),
+          ]
+
+          for relative_path, args in generated_files:
+              path = output_dir.joinpath(*relative_path)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              with path.open("wb") as handle:
+                  subprocess.run([str(cli), *args], stdout=handle, check=True)
+              if path.stat().st_size == 0:
+                  raise SystemExit(f"generated file is empty: {path}")
+
       - name: Package Linux archives
         if: runner.os == 'Linux'
         shell: bash
@@ -535,6 +562,9 @@ jobs:
             mkdir -p "$staging_dir"
             cp "${release_dir}/${binary}" "$staging_dir/"
             cp LICENSE README.md "$staging_dir/"
+            if [[ "$binary" == "cairnid" ]]; then
+              cp -R "${CLI_AUX_DIR}/." "$staging_dir/"
+            fi
             tar -czf "dist/${archive_base}.tar.gz" -C "$RUNNER_TEMP" "$archive_base"
           done
 
@@ -552,6 +582,9 @@ jobs:
             New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
             Copy-Item (Join-Path $releaseDir "$binary.exe") $stagingDir
             Copy-Item LICENSE, README.md $stagingDir
+            if ($binary -eq "cairnid") {
+              Get-ChildItem -LiteralPath $env:CLI_AUX_DIR | Copy-Item -Destination $stagingDir -Recurse -Force
+            }
             Compress-Archive -Path $stagingDir -DestinationPath "dist\$archiveBase.zip" -Force
           }
 
@@ -670,6 +703,14 @@ jobs:
               {"name": "cairnid", "package": "apps/cli", "description": "operator CLI"},
               {"name": "cairnid-mcp", "package": "apps/mcp", "description": "stdio MCP server"},
           ]
+          cli_auxiliary_files = [
+              {"path": "completions/cairnid.bash", "kind": "shell-completion", "shell": "bash"},
+              {"path": "completions/_cairnid", "kind": "shell-completion", "shell": "zsh"},
+              {"path": "completions/cairnid.fish", "kind": "shell-completion", "shell": "fish"},
+              {"path": "completions/cairnid.ps1", "kind": "shell-completion", "shell": "powershell"},
+              {"path": "completions/cairnid.elv", "kind": "shell-completion", "shell": "elvish"},
+              {"path": "man/man1/cairnid.1", "kind": "manpage", "section": "1"},
+          ]
 
           def sha256(path: pathlib.Path) -> str:
               digest = hashlib.sha256()
@@ -696,21 +737,25 @@ jobs:
                       raise SystemExit(f"missing archive {archive_name}")
                   if not sbom_path.is_file():
                       raise SystemExit(f"missing SBOM {sbom_name}")
-                  assets.append(
-                      {
-                          "name": archive_name,
-                          "kind": "archive",
-                          "binary": binary["name"],
-                          "description": binary["description"],
-                          "target": target["target"],
-                          "os": target["os"],
-                          "arch": target["arch"],
-                          "archive_format": target["archive_ext"],
-                          "sha256": sha256(archive_path),
-                          "size_bytes": archive_path.stat().st_size,
-                          "sbom": sbom_name,
-                      }
-                  )
+                  archive_asset = {
+                      "name": archive_name,
+                      "kind": "archive",
+                      "binary": binary["name"],
+                      "description": binary["description"],
+                      "target": target["target"],
+                      "os": target["os"],
+                      "arch": target["arch"],
+                      "archive_format": target["archive_ext"],
+                      "sha256": sha256(archive_path),
+                      "size_bytes": archive_path.stat().st_size,
+                      "sbom": sbom_name,
+                  }
+                  if binary["name"] == "cairnid":
+                      archive_asset["auxiliary_files"] = [
+                          {**file, "path": f"{stem}/{file['path']}"}
+                          for file in cli_auxiliary_files
+                      ]
+                  assets.append(archive_asset)
                   assets.append(
                       {
                           "name": sbom_name,
@@ -808,7 +853,10 @@ jobs:
 
           python3 - <<'PY'
           import json
+          import os
           import pathlib
+          import tarfile
+          import zipfile
 
           dist = pathlib.Path("dist")
           files = sorted(path.name for path in dist.iterdir() if path.is_file())
@@ -816,9 +864,61 @@ jobs:
           if len(files) != expected_count:
               raise SystemExit(f"expected {expected_count} release assets, found {len(files)}: {files}")
 
+          tag = os.environ["RELEASE_TAG"]
+          targets = [
+              (os.environ["LINUX_TARGET"], "tar.gz"),
+              (os.environ["WINDOWS_TARGET"], "zip"),
+          ]
+          cli_auxiliary_paths = [
+              "completions/cairnid.bash",
+              "completions/_cairnid",
+              "completions/cairnid.fish",
+              "completions/cairnid.ps1",
+              "completions/cairnid.elv",
+              "man/man1/cairnid.1",
+          ]
+
+          def archive_members(path):
+              if path.suffix == ".zip":
+                  with zipfile.ZipFile(path) as archive:
+                      return set(archive.namelist())
+              with tarfile.open(path, "r:gz") as archive:
+                  return set(archive.getnames())
+
           manifest = json.loads((dist / "release-manifest.json").read_text(encoding="utf-8"))
           if len(manifest["assets"]) != 8:
               raise SystemExit("release manifest must describe 4 archives and 4 SBOMs")
+          archives = {
+              asset["name"]: asset
+              for asset in manifest["assets"]
+              if asset.get("kind") == "archive"
+          }
+          for target, archive_ext in targets:
+              cli_stem = f"cairnid-{tag}-{target}"
+              cli_archive_name = f"{cli_stem}.{archive_ext}"
+              cli_expected = [f"{cli_stem}/{path}" for path in cli_auxiliary_paths]
+              cli_members = archive_members(dist / cli_archive_name)
+              missing = [path for path in cli_expected if path not in cli_members]
+              if missing:
+                  raise SystemExit(f"{cli_archive_name} is missing CLI auxiliary files: {missing}")
+              cli_manifest_paths = [
+                  file["path"]
+                  for file in archives[cli_archive_name].get("auxiliary_files", [])
+              ]
+              if cli_manifest_paths != cli_expected:
+                  raise SystemExit(
+                      f"{cli_archive_name} manifest auxiliary files do not match archive contents"
+                  )
+
+              mcp_stem = f"cairnid-mcp-{tag}-{target}"
+              mcp_archive_name = f"{mcp_stem}.{archive_ext}"
+              mcp_forbidden = {f"{mcp_stem}/{path}" for path in cli_auxiliary_paths}
+              mcp_members = archive_members(dist / mcp_archive_name)
+              unexpected = sorted(mcp_members.intersection(mcp_forbidden))
+              if unexpected:
+                  raise SystemExit(f"{mcp_archive_name} contains CLI-only files: {unexpected}")
+              if "auxiliary_files" in archives[mcp_archive_name]:
+                  raise SystemExit(f"{mcp_archive_name} manifest must not list CLI auxiliary files")
           for sbom in dist.glob("*.sbom.cdx.json"):
               data = json.loads(sbom.read_text(encoding="utf-8"))
               if data.get("bomFormat") != "CycloneDX":
@@ -867,6 +967,7 @@ jobs:
 
           Assets:
           - cairnid and cairnid-mcp archives for Linux x86_64 and Windows x86_64.
+          - Generated Bash, Zsh, Fish, PowerShell, and Elvish completions plus a roff manpage inside each cairnid CLI archive.
           - CycloneDX JSON SBOMs for each archive.
           - SHA256SUMS.txt and release-manifest.json.
           - GitHub artifact attestations generated with actions/attest@v4 and OIDC.

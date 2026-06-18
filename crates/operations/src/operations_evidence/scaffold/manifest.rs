@@ -1,6 +1,7 @@
 use super::super::registry::{EvidenceSpec, evidence_validator_name};
 use super::super::{
-    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact,
+    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION,
+    ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact,
 };
 use time::OffsetDateTime;
 
@@ -23,6 +24,7 @@ pub(in crate::operations_evidence) fn release_evidence_manifest_from_specs(
         .collect::<Vec<_>>();
 
     ReleaseEvidenceManifest {
+        schema_version: RELEASE_EVIDENCE_SCHEMA_VERSION,
         status: "ok",
         generated_at,
         default_max_age_days: DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS,

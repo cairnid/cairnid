@@ -1,6 +1,7 @@
 use cairn_operations::init_release_evidence_directory;
 use serde_json::{Value, json};
 use std::{
+    ffi::OsString,
     fs,
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -37,6 +38,59 @@ const ARTIFACT_SUMMARY_KEYS: &[&str] = &[
     "failure_count",
     "failure_codes",
 ];
+
+#[test]
+fn binary_help_exits_before_stdio_jsonrpc() {
+    let output = run_cairnid_mcp(["--help"]);
+
+    assert!(output.status.success(), "help failed: {output:?}");
+    let stdout = output_stdout(&output);
+    assert!(stdout.contains("cairnid-mcp"), "{stdout}");
+    assert!(stdout.contains("Usage:"), "{stdout}");
+    assert!(stdout.contains("--evidence-root <DIR>"), "{stdout}");
+    assert!(stdout.contains("--version"), "{stdout}");
+    assert!(!stdout.contains("\"jsonrpc\""), "{stdout}");
+    assert_eq!(output_stderr(&output), "");
+}
+
+#[test]
+fn binary_version_exits_before_stdio_jsonrpc() {
+    let output = run_cairnid_mcp(["--version"]);
+
+    assert!(output.status.success(), "version failed: {output:?}");
+    assert_eq!(
+        output_stdout(&output).trim(),
+        format!("cairnid-mcp {}", env!("CARGO_PKG_VERSION"))
+    );
+    assert_eq!(output_stderr(&output), "");
+}
+
+#[test]
+fn binary_invalid_evidence_root_exits_before_stdio_jsonrpc() {
+    let root = temp_root("invalid-startup-root");
+    let missing = root.join("missing-root");
+    let output = Command::new(env!("CARGO_BIN_EXE_cairnid-mcp"))
+        .arg("--evidence-root")
+        .arg(&missing)
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cairnid-mcp with invalid evidence root");
+
+    assert!(
+        !output.status.success(),
+        "invalid root unexpectedly succeeded"
+    );
+    assert_eq!(output_stdout(&output), "");
+    let stderr = output_stderr(&output);
+    assert!(
+        stderr.contains("cairnid-mcp failed: evidence root"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("could not be inspected"), "{stderr}");
+    assert!(stderr.contains(&missing.display().to_string()), "{stderr}");
+
+    remove_temp_root(root);
+}
 
 #[test]
 fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
@@ -160,6 +214,46 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
 
     drop(server);
     remove_temp_root(root);
+}
+
+#[test]
+fn stdio_explicit_evidence_root_is_independent_of_launch_cwd() {
+    let evidence_root = temp_root("stdio-explicit-root");
+    let launch_cwd = temp_root("stdio-explicit-cwd");
+    let evidence_dir = evidence_root.join(DEFAULT_EVIDENCE_CHILD);
+    init_release_evidence_directory(&evidence_dir, OffsetDateTime::now_utc(), false)
+        .expect("initialize evidence directory");
+
+    let mut server = McpProcess::start_with_args(
+        &launch_cwd,
+        vec![
+            OsString::from("--evidence-root"),
+            evidence_root.clone().into_os_string(),
+        ],
+    );
+    initialize_mcp(&mut server);
+
+    let status = call_evidence_status(&mut server, 2, json!({}));
+    assert_eq!(status["isError"].as_bool(), Some(false));
+    assert_eq!(
+        status["structuredContent"]["status"].as_str(),
+        Some("incomplete")
+    );
+
+    let outside_dir = launch_cwd.join(DEFAULT_EVIDENCE_CHILD);
+    fs::create_dir_all(&outside_dir).expect("create outside evidence dir");
+    let outside_status = call_evidence_status(
+        &mut server,
+        3,
+        json!({
+            "evidence_dir": outside_dir.to_string_lossy().to_string()
+        }),
+    );
+    assert_tool_error_code(&outside_status, "outside_allowlisted_root");
+
+    drop(server);
+    remove_temp_root(launch_cwd);
+    remove_temp_root(evidence_root);
 }
 
 #[test]
@@ -618,7 +712,16 @@ struct McpProcess {
 
 impl McpProcess {
     fn start(current_dir: &Path) -> Self {
+        Self::start_with_args(current_dir, std::iter::empty::<OsString>())
+    }
+
+    fn start_with_args<I, S>(current_dir: &Path, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<std::ffi::OsStr>,
+    {
         let mut child = Command::new(env!("CARGO_BIN_EXE_cairnid-mcp"))
+            .args(args)
             .current_dir(current_dir)
             .env("RUST_LOG", "off")
             .stdin(Stdio::piped())
@@ -724,6 +827,22 @@ impl Drop for McpProcess {
     fn drop(&mut self) {
         self.close();
     }
+}
+
+fn run_cairnid_mcp(args: impl IntoIterator<Item = &'static str>) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_cairnid-mcp"))
+        .args(args)
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cairnid-mcp")
+}
+
+fn output_stdout(output: &std::process::Output) -> String {
+    String::from_utf8(output.stdout.clone()).expect("stdout is UTF-8")
+}
+
+fn output_stderr(output: &std::process::Output) -> String {
+    String::from_utf8(output.stderr.clone()).expect("stderr is UTF-8")
 }
 
 fn capture_stderr(stderr: ChildStderr, output: Arc<Mutex<String>>) -> thread::JoinHandle<()> {
