@@ -881,9 +881,9 @@ jobs:
           def archive_members(path):
               if path.suffix == ".zip":
                   with zipfile.ZipFile(path) as archive:
-                      return set(archive.namelist())
+                      return {name.replace("\\", "/") for name in archive.namelist()}
               with tarfile.open(path, "r:gz") as archive:
-                  return set(archive.getnames())
+                  return {name.replace("\\", "/") for name in archive.getnames()}
 
           manifest = json.loads((dist / "release-manifest.json").read_text(encoding="utf-8"))
           if len(manifest["assets"]) != 8:
