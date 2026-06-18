@@ -74,15 +74,13 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
         RELEASE_EVIDENCE_README_FILE,
         readme_missing_failure,
         failures,
-    )? {
-        if !contents.contains("Do not commit the evidence artifacts")
-            || !contents.contains("cairnid evidence check")
-            || !contents.contains("Do not add screenshots, raw provider exports")
-        {
-            failures.push(format!(
-                "{RELEASE_EVIDENCE_README_FILE}: scaffold README is missing required release workflow guidance"
-            ));
-        }
+    )? && (!contents.contains("Do not commit the evidence artifacts")
+        || !contents.contains("cairnid evidence check")
+        || !contents.contains("Do not add screenshots, raw provider exports"))
+    {
+        failures.push(format!(
+            "{RELEASE_EVIDENCE_README_FILE}: scaffold README is missing required release workflow guidance"
+        ));
     }
 
     let gitignore_path = evidence_dir.join(RELEASE_EVIDENCE_GITIGNORE_FILE);
@@ -94,12 +92,11 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
         RELEASE_EVIDENCE_GITIGNORE_FILE,
         gitignore_missing_failure,
         failures,
-    )? {
-        if contents.replace("\r\n", "\n") != RELEASE_EVIDENCE_GITIGNORE {
-            failures.push(format!(
-                "{RELEASE_EVIDENCE_GITIGNORE_FILE}: scaffold gitignore must match the guarded release-evidence template"
-            ));
-        }
+    )? && contents.replace("\r\n", "\n") != RELEASE_EVIDENCE_GITIGNORE
+    {
+        failures.push(format!(
+            "{RELEASE_EVIDENCE_GITIGNORE_FILE}: scaffold gitignore must match the guarded release-evidence template"
+        ));
     }
 
     Ok(())
