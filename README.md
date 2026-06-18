@@ -53,6 +53,8 @@ docker compose -f infra/docker-compose.yml up --build
 
 Open `http://localhost:5173`, bootstrap the first administrator from `/login`, then use `/admin` to create users, groups, memberships, and OIDC clients.
 
+Tagged `cairnid` and `cairnid-mcp` release archives will be distributed through draft-reviewed GitHub Releases after the first RC tag is cut and maintainers publish the draft. Until then, build the CLI locally with Cargo. See [CLI and MCP release assets](docs/release-gates.md#cli-and-mcp-release-assets).
+
 For local development, install JavaScript dependencies with Bun and run the API and web app separately:
 
 ```powershell

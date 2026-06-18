@@ -1,0 +1,715 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_CYCLONEDX_VERSION: 0.5.9
+  LINUX_TARGET: x86_64-unknown-linux-gnu
+  WINDOWS_TARGET: x86_64-pc-windows-msvc
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+    steps:
+      - name: Validate release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+            echo "::error::release tags must match vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N"
+            exit 1
+          fi
+
+          prerelease="false"
+          if [[ "$tag" =~ -rc\.[0-9]+$ ]]; then
+            prerelease="true"
+          fi
+
+          {
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: linux-x86_64
+            binary_ext: ''
+            archive_ext: tar.gz
+          - label: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: windows-x86_64
+            binary_ext: .exe
+            archive_ext: zip
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      TARGET: ${{ matrix.target }}
+      BINARY_EXT: ${{ matrix.binary_ext }}
+      CLI_BINARY: target/${{ matrix.target }}/release/cairnid${{ matrix.binary_ext }}
+      MCP_BINARY: target/${{ matrix.target }}/release/cairnid-mcp${{ matrix.binary_ext }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm pkg-config libssl-dev
+
+      - name: Show Rust version
+        shell: bash
+        run: rustc --version && cargo --version
+
+      - name: Ensure Rust target is installed
+        shell: bash
+        run: rustup target add "$TARGET"
+
+      - name: Build release CLI and MCP
+        shell: bash
+        run: cargo build --release --locked --target "$TARGET" -p cairnid -p cairnid-mcp
+
+      - name: Smoke release CLI
+        shell: python
+        env:
+          CAIRN_ENV: production
+          DATABASE_URL: postgres://CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE@example.invalid/cairn_identity
+          CAIRN_ISSUER: https://id.example.com
+          CAIRN_PUBLIC_WEB_ORIGIN: https://app.example.com
+          CAIRN_BOOTSTRAP_SETUP_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_EMAIL_PROVIDER: command
+          CAIRN_EMAIL_COMMAND_PATH: /usr/local/bin/cairn-send-email
+          CAIRN_CONFORMANCE_ALIAS: cairn-release
+          CAIRN_CONFORMANCE_CLIENT_ID: client-one
+          CAIRN_CONFORMANCE_CLIENT_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_CONFORMANCE_CLIENT2_ID: client-two
+          CAIRN_CONFORMANCE_CLIENT2_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_CONFORMANCE_SUITE_BASE_URL: https://www.certification.openid.net/
+          CAIRN_SCIM_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_SCIM_SECONDARY_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_SCIM_REJECTED_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_BREAK_GLASS_CONFIRM: grant-admin-owner
+          CAIRN_OLD_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_NEW_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+        run: |
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          SENTINEL = "CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE"
+          cli = Path(os.environ["CLI_BINARY"]).resolve()
+          outputs = []
+
+          def run_cli(*args, expect_success=True):
+              result = subprocess.run(
+                  [str(cli), *args],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              outputs.extend([result.stdout, result.stderr])
+              if expect_success and result.returncode != 0:
+                  raise SystemExit(
+                      f"{' '.join(args)} failed with exit code {result.returncode}: {result.stderr}"
+                  )
+              if not expect_success and result.returncode == 0:
+                  raise SystemExit(f"{' '.join(args)} unexpectedly succeeded")
+              return result
+
+          with tempfile.TemporaryDirectory(prefix="cairnid-release-") as root:
+              evidence_dir = Path(root) / "release-evidence"
+              run_cli("--version")
+              run_cli("evidence", "--help")
+              plan = json.loads(run_cli("evidence", "plan").stdout)
+              manifest = json.loads(run_cli("evidence", "manifest").stdout)
+              init = json.loads(run_cli("evidence", "init", str(evidence_dir)).stdout)
+              status = json.loads(
+                  run_cli("evidence", "status", str(evidence_dir), expect_success=False).stdout
+              )
+              check = json.loads(
+                  run_cli("evidence", "check", str(evidence_dir), expect_success=False).stdout
+              )
+
+              if SENTINEL in "\n".join(outputs):
+                  raise SystemExit("release CLI smoke output leaked sentinel")
+              for path in evidence_dir.rglob("*"):
+                  if path.is_file() and SENTINEL.encode() in path.read_bytes():
+                      raise SystemExit(f"release evidence scaffold leaked sentinel in {path.name}")
+
+          assert plan["status"] == "ready", plan
+          assert plan["artifact_count"] == 23, plan
+          assert plan["missing_environment"] == [], plan
+
+          assert manifest["status"] == "ok", manifest
+          assert manifest["artifact_count"] == 23, manifest
+
+          assert init["status"] == "initialized", init
+          assert init["artifact_count"] == 23, init
+          assert init["files_written"] == [
+              "release-evidence-manifest.json",
+              "README.md",
+              ".gitignore",
+          ], init
+
+          assert status["status"] == "incomplete", status
+          assert status["artifact_count"] == 23, status
+          assert status["missing_artifact_count"] == 23, status
+
+          assert check["status"] == "incomplete", check
+          assert len(check["artifacts"]) == 23, check
+          assert check["failures"], check
+
+      - name: Smoke release MCP stdio
+        shell: python
+        run: |
+          import json
+          import os
+          import queue
+          import subprocess
+          import tempfile
+          import threading
+          import time
+
+          expected_tools = [
+              "cairnid.evidence_check",
+              "cairnid.evidence_manifest",
+              "cairnid.evidence_plan",
+              "cairnid.evidence_status",
+          ]
+
+          binary = os.path.abspath(os.environ["MCP_BINARY"])
+          with tempfile.TemporaryDirectory(prefix="cairnid-mcp-release-") as root:
+              process = subprocess.Popen(
+                  [binary],
+                  cwd=root,
+                  env={**os.environ, "RUST_LOG": "off"},
+                  stdin=subprocess.PIPE,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  text=True,
+              )
+              responses = queue.Queue()
+              stderr_lines = []
+
+              def read_stdout():
+                  for line in process.stdout:
+                      if line.strip():
+                          responses.put(line)
+
+              def read_stderr():
+                  for line in process.stderr:
+                      stderr_lines.append(line)
+
+              threading.Thread(target=read_stdout, daemon=True).start()
+              threading.Thread(target=read_stderr, daemon=True).start()
+
+              def write(message):
+                  if process.poll() is not None:
+                      raise SystemExit(
+                          f"MCP server exited before request; code={process.returncode}; "
+                          f"stderr={''.join(stderr_lines)}"
+                      )
+                  process.stdin.write(json.dumps(message) + "\n")
+                  process.stdin.flush()
+
+              def request(request_id, message):
+                  write(message)
+                  deadline = time.monotonic() + 10
+                  while True:
+                      remaining = deadline - time.monotonic()
+                      if remaining <= 0:
+                          raise SystemExit(
+                              f"timed out waiting for MCP response {request_id}; "
+                              f"stderr={''.join(stderr_lines)}"
+                          )
+                      try:
+                          line = responses.get(timeout=remaining)
+                      except queue.Empty:
+                          raise SystemExit(
+                              f"timed out waiting for MCP response {request_id}; "
+                              f"stderr={''.join(stderr_lines)}"
+                          ) from None
+                      try:
+                          response = json.loads(line)
+                      except json.JSONDecodeError as exc:
+                          raise SystemExit(
+                              f"MCP wrote non-JSON stdout: {line!r}; stderr={''.join(stderr_lines)}"
+                          ) from exc
+                      if response.get("id") != request_id:
+                          raise SystemExit(
+                              f"MCP response id mismatch for request {request_id}: {response}"
+                          )
+                      if "error" in response:
+                          raise SystemExit(f"MCP response {request_id} returned error: {response}")
+                      return response["result"]
+
+              try:
+                  initialize = request(
+                      1,
+                      {
+                          "jsonrpc": "2.0",
+                          "id": 1,
+                          "method": "initialize",
+                          "params": {
+                              "protocolVersion": "2025-11-25",
+                              "capabilities": {},
+                              "clientInfo": {
+                                  "name": "cairnid-mcp-release-smoke",
+                                  "version": "0.0.0",
+                              },
+                          },
+                      },
+                  )
+                  assert initialize["serverInfo"]["name"] == "cairnid-mcp", initialize
+                  assert isinstance(initialize["capabilities"]["tools"], dict), initialize
+                  write({"jsonrpc": "2.0", "method": "notifications/initialized"})
+                  tools = request(
+                      2,
+                      {
+                          "jsonrpc": "2.0",
+                          "id": 2,
+                          "method": "tools/list",
+                          "params": {},
+                      },
+                  )
+                  names = sorted(tool["name"] for tool in tools["tools"])
+                  assert names == expected_tools, names
+
+                  time.sleep(0.2)
+                  extra_stdout = []
+                  while True:
+                      try:
+                          extra_stdout.append(responses.get_nowait())
+                      except queue.Empty:
+                          break
+                  if extra_stdout:
+                      raise SystemExit(f"MCP wrote unexpected stdout after tools/list: {extra_stdout}")
+                  if stderr_lines:
+                      raise SystemExit(f"MCP wrote stderr during stdio smoke: {''.join(stderr_lines)}")
+              finally:
+                  if process.poll() is None:
+                      process.kill()
+                      process.wait(timeout=5)
+
+      - name: Package Linux archives
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          release_dir="target/${TARGET}/release"
+
+          for binary in cairnid cairnid-mcp; do
+            archive_base="${binary}-${RELEASE_TAG}-${TARGET}"
+            staging_dir="${RUNNER_TEMP}/${archive_base}"
+            mkdir -p "$staging_dir"
+            cp "${release_dir}/${binary}" "$staging_dir/"
+            cp LICENSE README.md "$staging_dir/"
+            tar -czf "dist/${archive_base}.tar.gz" -C "$RUNNER_TEMP" "$archive_base"
+          done
+
+      - name: Package Windows archives
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $releaseDir = Join-Path $PWD "target\$env:TARGET\release"
+
+          foreach ($binary in @("cairnid", "cairnid-mcp")) {
+            $archiveBase = "$binary-$env:RELEASE_TAG-$env:TARGET"
+            $stagingDir = Join-Path $env:RUNNER_TEMP $archiveBase
+            New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+            Copy-Item (Join-Path $releaseDir "$binary.exe") $stagingDir
+            Copy-Item LICENSE, README.md $stagingDir
+            Compress-Archive -Path $stagingDir -DestinationPath "dist\$archiveBase.zip" -Force
+          }
+
+      - name: Upload packaged release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ matrix.artifact_name }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Assemble draft release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download packaged release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-assets-*
+          path: dist
+          merge-multiple: true
+
+      - name: List packaged archives
+        shell: bash
+        run: find dist -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Install cargo-cyclonedx
+        shell: bash
+        run: cargo install cargo-cyclonedx --locked --version "$CARGO_CYCLONEDX_VERSION"
+
+      - name: Generate CycloneDX SBOMs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for target in "$LINUX_TARGET" "$WINDOWS_TARGET"; do
+            api_sbom="apps/api/cairn-api_bin_${target}.cdx.json"
+            cli_sbom="apps/cli/cairnid_bin_${target}.cdx.json"
+            mcp_sbom="apps/mcp/cairnid-mcp_bin_${target}.cdx.json"
+            rm -f "$api_sbom" "$cli_sbom" "$mcp_sbom"
+
+            cargo cyclonedx \
+              --manifest-path apps/cli/Cargo.toml \
+              --format json \
+              --describe binaries \
+              --target "$target" \
+              --target-in-filename \
+              --spec-version 1.5 \
+              --no-build-deps \
+              -q
+
+            test -f "$cli_sbom"
+            test -f "$mcp_sbom"
+            mv "$cli_sbom" "dist/cairnid-${RELEASE_TAG}-${target}.sbom.cdx.json"
+            mv "$mcp_sbom" "dist/cairnid-mcp-${RELEASE_TAG}-${target}.sbom.cdx.json"
+
+            test -f "$api_sbom"
+            rm "$api_sbom"
+            echo "Discarded non-release API SBOM $api_sbom"
+
+            mapfile -t remaining_sboms < <(find apps -type f -name "*_${target}.cdx.json" | sort)
+            if (( ${#remaining_sboms[@]} > 0 )); then
+              printf '::error::unexpected generated SBOM left outside dist: %s\n' "${remaining_sboms[@]}"
+              exit 1
+            fi
+          done
+
+      - name: Generate release manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import subprocess
+          from datetime import datetime, timezone
+
+          dist = pathlib.Path("dist")
+          tag = os.environ["RELEASE_TAG"]
+          version = os.environ["RELEASE_VERSION"]
+          prerelease = os.environ["RELEASE_PRERELEASE"] == "true"
+
+          targets = [
+              {
+                  "target": os.environ["LINUX_TARGET"],
+                  "os": "linux",
+                  "arch": "x86_64",
+                  "archive_ext": "tar.gz",
+              },
+              {
+                  "target": os.environ["WINDOWS_TARGET"],
+                  "os": "windows",
+                  "arch": "x86_64",
+                  "archive_ext": "zip",
+              },
+          ]
+          binaries = [
+              {"name": "cairnid", "package": "apps/cli", "description": "operator CLI"},
+              {"name": "cairnid-mcp", "package": "apps/mcp", "description": "stdio MCP server"},
+          ]
+
+          def sha256(path: pathlib.Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def command_version(command: list[str]) -> str:
+              try:
+                  return subprocess.check_output(command, text=True).strip()
+              except Exception as exc:
+                  return f"unavailable: {exc}"
+
+          assets = []
+          for binary in binaries:
+              for target in targets:
+                  stem = f"{binary['name']}-{tag}-{target['target']}"
+                  archive_name = f"{stem}.{target['archive_ext']}"
+                  sbom_name = f"{stem}.sbom.cdx.json"
+                  archive_path = dist / archive_name
+                  sbom_path = dist / sbom_name
+                  if not archive_path.is_file():
+                      raise SystemExit(f"missing archive {archive_name}")
+                  if not sbom_path.is_file():
+                      raise SystemExit(f"missing SBOM {sbom_name}")
+                  assets.append(
+                      {
+                          "name": archive_name,
+                          "kind": "archive",
+                          "binary": binary["name"],
+                          "description": binary["description"],
+                          "target": target["target"],
+                          "os": target["os"],
+                          "arch": target["arch"],
+                          "archive_format": target["archive_ext"],
+                          "sha256": sha256(archive_path),
+                          "size_bytes": archive_path.stat().st_size,
+                          "sbom": sbom_name,
+                      }
+                  )
+                  assets.append(
+                      {
+                          "name": sbom_name,
+                          "kind": "sbom",
+                          "binary": binary["name"],
+                          "format": "CycloneDX JSON",
+                          "target": target["target"],
+                          "os": target["os"],
+                          "arch": target["arch"],
+                          "sha256": sha256(sbom_path),
+                          "size_bytes": sbom_path.stat().st_size,
+                          "subject": archive_name,
+                      }
+                  )
+
+          manifest = {
+              "schema_version": 1,
+              "project": "cairnid",
+              "tag": tag,
+              "version": version,
+              "release_type": "release-candidate" if prerelease else "versioned",
+              "draft": True,
+              "prerelease": prerelease,
+              "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "source": {
+                  "repository": os.environ["GITHUB_REPOSITORY"],
+                  "commit": os.environ["GITHUB_SHA"],
+                  "ref": os.environ["GITHUB_REF"],
+                  "workflow": os.environ["GITHUB_WORKFLOW"],
+                  "workflow_ref": os.environ.get("GITHUB_WORKFLOW_REF", ""),
+                  "run_id": os.environ["GITHUB_RUN_ID"],
+                  "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+                  "run_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              },
+              "distribution": {
+                  "release_workflow": ".github/workflows/release.yml",
+                  "crates_io": False,
+                  "homebrew": False,
+                  "msi": False,
+                  "macos": False,
+                  "containers": False,
+              },
+              "checksums": {
+                  "algorithm": "SHA-256",
+                  "file": "SHA256SUMS.txt",
+                  "note": "GitHub also exposes release asset digest metadata after upload.",
+              },
+              "provenance": {
+                  "github_artifact_attestations": True,
+                  "action": "actions/attest@v4",
+                  "key_material": "GitHub Actions OIDC and Sigstore; no long-lived signing key",
+              },
+              "sbom": {
+                  "generator": "cargo-cyclonedx",
+                  "generator_version": os.environ["CARGO_CYCLONEDX_VERSION"],
+                  "format": "CycloneDX JSON",
+                  "spec_version": "1.5",
+              },
+              "tools": {
+                  "rustc": command_version(["rustc", "--version"]),
+                  "cargo": command_version(["cargo", "--version"]),
+                  "cargo_cyclonedx": command_version(["cargo", "cyclonedx", "--version"]),
+              },
+              "assets": assets,
+          }
+
+          output = dist / "release-manifest.json"
+          output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import hashlib
+          import pathlib
+
+          dist = pathlib.Path("dist")
+          files = sorted(
+              path for path in dist.iterdir()
+              if path.is_file() and path.name != "SHA256SUMS.txt"
+          )
+          with (dist / "SHA256SUMS.txt").open("w", encoding="utf-8", newline="\n") as handle:
+              for path in files:
+                  handle.write(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n")
+          PY
+
+      - name: Validate release asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          dist = pathlib.Path("dist")
+          files = sorted(path.name for path in dist.iterdir() if path.is_file())
+          expected_count = 10
+          if len(files) != expected_count:
+              raise SystemExit(f"expected {expected_count} release assets, found {len(files)}: {files}")
+
+          manifest = json.loads((dist / "release-manifest.json").read_text(encoding="utf-8"))
+          if len(manifest["assets"]) != 8:
+              raise SystemExit("release manifest must describe 4 archives and 4 SBOMs")
+          for sbom in dist.glob("*.sbom.cdx.json"):
+              data = json.loads(sbom.read_text(encoding="utf-8"))
+              if data.get("bomFormat") != "CycloneDX":
+                  raise SystemExit(f"{sbom.name} is not a CycloneDX JSON SBOM")
+          PY
+
+      - name: Attest release asset provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: 'dist/*'
+
+      - name: Attest Linux CLI SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/cairnid-${{ needs.prepare.outputs.tag }}-x86_64-unknown-linux-gnu.tar.gz
+          sbom-path: dist/cairnid-${{ needs.prepare.outputs.tag }}-x86_64-unknown-linux-gnu.sbom.cdx.json
+
+      - name: Attest Linux MCP SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/cairnid-mcp-${{ needs.prepare.outputs.tag }}-x86_64-unknown-linux-gnu.tar.gz
+          sbom-path: dist/cairnid-mcp-${{ needs.prepare.outputs.tag }}-x86_64-unknown-linux-gnu.sbom.cdx.json
+
+      - name: Attest Windows CLI SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/cairnid-${{ needs.prepare.outputs.tag }}-x86_64-pc-windows-msvc.zip
+          sbom-path: dist/cairnid-${{ needs.prepare.outputs.tag }}-x86_64-pc-windows-msvc.sbom.cdx.json
+
+      - name: Attest Windows MCP SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/cairnid-mcp-${{ needs.prepare.outputs.tag }}-x86_64-pc-windows-msvc.zip
+          sbom-path: dist/cairnid-mcp-${{ needs.prepare.outputs.tag }}-x86_64-pc-windows-msvc.sbom.cdx.json
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > release-notes.md <<EOF
+          CairnID ${RELEASE_TAG}
+          =====================
+
+          This draft release was assembled by the tag-driven release workflow.
+
+          Assets:
+          - cairnid and cairnid-mcp archives for Linux x86_64 and Windows x86_64.
+          - CycloneDX JSON SBOMs for each archive.
+          - SHA256SUMS.txt and release-manifest.json.
+          - GitHub artifact attestations generated with actions/attest@v4 and OIDC.
+
+          Verify after downloading:
+
+              gh attestation verify <asset> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml
+              sha256sum -c SHA256SUMS.txt --ignore-missing
+
+          This workflow does not publish crates.io packages, Homebrew formulae, MSI installers, macOS notarized assets, Authenticode signatures, containers, or long-lived signing-key signatures.
+          EOF
+
+      - name: Create draft GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          assets=(dist/*)
+          command=(
+            release create "$RELEASE_TAG"
+            --verify-tag
+            --draft
+            --title "CairnID ${RELEASE_TAG}"
+            --notes-file release-notes.md
+          )
+
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            command+=(--prerelease --latest=false)
+          fi
+
+          command+=("${assets[@]}")
+          gh "${command[@]}"
+
+      - name: Summarize release assets
+        shell: bash
+        run: |
+          {
+            echo "## Draft release"
+            echo
+            echo "Tag: \`${RELEASE_TAG}\`"
+            echo
+            echo "Assets:"
+            find dist -maxdepth 1 -type f -printf '- `%f`\n' | sort
+          } >> "$GITHUB_STEP_SUMMARY"
