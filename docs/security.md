@@ -57,7 +57,7 @@ Cairn Identity defaults to a narrow OIDC/OAuth surface:
 
 The formal threat model is maintained in [docs/threat-model.md](threat-model.md). Changes touching authentication, OIDC/OAuth behavior, secrets, cookies, persistence, deployment, or audit behavior must update that model when they add or change a trust boundary, protected asset, or required invariant.
 
-## Not Ready For Public Beta Until Closed
+## Not Ready For First Public RC Until Gates Close
 
 The current release blockers are tracked in [release-gates.md](release-gates.md):
 

@@ -21,7 +21,7 @@ The `openid_conformance` block reports:
 - Whether all static-client environment variables are present.
 - The missing variable names, if any.
 - The artifact commands for static registration and suite JSON generation.
-- That external Config OP and Basic OP suite results are still required before public beta.
+- That external Config OP and Basic OP suite results are still required before the first public RC.
 
 The block does not print client IDs, client secrets, or generated suite JSON. Keep the generated `cairn-oidcc-static.json` out of source control because it contains client secrets.
 
@@ -109,7 +109,7 @@ These notes describe the current Basic OP request-surface behavior so external O
 - `phone` and `address` are intentionally absent from `scopes_supported`, so `oidcc-scope-phone`, `oidcc-scope-address`, and all-scope coverage that requires them are expected skips.
 - `profile` and `email` are supported scopes, but Basic OP can still report warnings when the suite expects the full standard claim set. Cairn currently returns the implemented subset only: `name` for `profile`, and `email` plus `email_verified` for `email`.
 
-Do not treat these notes as a certification claim. Public Basic OP readiness still requires an external OIDF run against the production-like issuer and archived token-free evidence.
+Do not treat these notes as a certification claim. Basic OP readiness for the first public RC still requires an external OIDF run against the production-like issuer and archived token-free evidence.
 
 ## Result Templates
 
@@ -124,7 +124,7 @@ After the matching OIDF suite run is complete, save the final normalized files a
 
 ## Evidence Gate
 
-Public beta requires:
+The first-public-RC evidence gate requires:
 
 - Passing Config OP and Basic OP results for the production-like deployment under test.
 - Published OIDF result links or token-free archived plan exports.

@@ -26,7 +26,7 @@ Use Bun for JavaScript package management. Do not add npm, pnpm, or yarn lockfil
 
 ## Release Tooling
 
-Before a public-beta release run, use `cairnid evidence plan` in the release capture environment, then `cairnid evidence init`, `cairnid evidence status`, and `cairnid evidence check` as documented in [docs/operations.md](docs/operations.md). These commands may name required environment variables and artifact commands, but they must not print secret values.
+Before a first-public-RC release-evidence run, use `cairnid evidence plan` in the release capture environment, then `cairnid evidence init`, `cairnid evidence status`, and `cairnid evidence check` as documented in [docs/operations.md](docs/operations.md). These commands may name required environment variables and artifact commands, but they must not print secret values.
 
 ## Dependency Rule
 

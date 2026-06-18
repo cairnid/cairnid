@@ -1131,12 +1131,30 @@ mod tests {
 
     #[test]
     fn structured_evidence_tools_have_output_schemas() {
-        assert_output_schema_contract(CairnIdMcpServer::evidence_plan_tool_attr().output_schema);
+        assert_output_schema_contract(
+            CairnIdMcpServer::evidence_plan_tool_attr().output_schema,
+            "cairnid.evidence_plan",
+            "steps",
+            false,
+        );
         assert_output_schema_contract(
             CairnIdMcpServer::evidence_manifest_tool_attr().output_schema,
+            "cairnid.evidence_manifest",
+            "artifacts",
+            false,
         );
-        assert_output_schema_contract(CairnIdMcpServer::evidence_status_tool_attr().output_schema);
-        assert_output_schema_contract(CairnIdMcpServer::evidence_check_tool_attr().output_schema);
+        assert_output_schema_contract(
+            CairnIdMcpServer::evidence_status_tool_attr().output_schema,
+            "cairnid.evidence_status",
+            "artifacts",
+            false,
+        );
+        assert_output_schema_contract(
+            CairnIdMcpServer::evidence_check_tool_attr().output_schema,
+            "cairnid.evidence_check",
+            "artifacts",
+            true,
+        );
     }
 
     #[test]
@@ -1452,8 +1470,12 @@ mod tests {
 
     fn assert_output_schema_contract(
         output_schema: Option<std::sync::Arc<rmcp::model::JsonObject>>,
+        tool_name: &str,
+        success_collection: &str,
+        expect_error_summary: bool,
     ) {
         let schema = output_schema.expect("output schema");
+        let schema = Value::Object(schema.as_ref().clone());
 
         assert_eq!(
             schema.get("type"),
@@ -1466,6 +1488,139 @@ mod tests {
         assert_eq!(variants.len(), 2);
         assert!(variants.iter().all(schema_requires_schema_version));
         assert!(variants.iter().any(schema_has_error_property));
+
+        let success_schema = success_output_schema(tool_name, variants);
+        assert_schema_array_items_require_release_gate(
+            success_schema,
+            success_schema,
+            success_collection,
+            &format!("{tool_name} success {success_collection}"),
+        );
+
+        if expect_error_summary {
+            assert_error_summary_artifacts_require_release_gate(
+                tool_name,
+                error_output_schema(tool_name, variants),
+            );
+        }
+    }
+
+    fn success_output_schema<'a>(tool_name: &str, variants: &'a [Value]) -> &'a Value {
+        variants
+            .iter()
+            .find(|schema| !schema_has_error_property(schema))
+            .unwrap_or_else(|| panic!("{tool_name} outputSchema success variant"))
+    }
+
+    fn error_output_schema<'a>(tool_name: &str, variants: &'a [Value]) -> &'a Value {
+        variants
+            .iter()
+            .find(|schema| schema_has_error_property(schema))
+            .unwrap_or_else(|| panic!("{tool_name} outputSchema error variant"))
+    }
+
+    fn assert_error_summary_artifacts_require_release_gate(tool_name: &str, error_schema: &Value) {
+        let error_body = schema_property(
+            error_schema,
+            error_schema,
+            "error",
+            &format!("{tool_name} error envelope"),
+        );
+        let summary = schema_property(
+            error_schema,
+            error_body,
+            "summary",
+            &format!("{tool_name} incomplete-check error body"),
+        );
+        assert_schema_array_items_require_release_gate(
+            error_schema,
+            summary,
+            "artifacts",
+            &format!("{tool_name} incomplete-check error summary"),
+        );
+    }
+
+    fn assert_schema_array_items_require_release_gate(
+        root: &Value,
+        schema: &Value,
+        array_property: &str,
+        context: &str,
+    ) {
+        let array_schema = schema_property(root, schema, array_property, context);
+        let item_schema = array_schema
+            .get("items")
+            .unwrap_or_else(|| panic!("{context} should advertise array items"));
+        let item_schema = resolve_schema(root, item_schema);
+        let properties = item_schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .unwrap_or_else(|| panic!("{context} item schema properties"));
+
+        assert!(
+            properties.contains_key("release_gate"),
+            "{context} item schema should advertise release_gate"
+        );
+        assert!(
+            schema_requires_property(item_schema, "release_gate"),
+            "{context} item schema should require release_gate"
+        );
+    }
+
+    fn schema_property<'a>(
+        root: &'a Value,
+        schema: &'a Value,
+        property: &str,
+        context: &str,
+    ) -> &'a Value {
+        let resolved = resolve_schema(root, schema);
+        resolved
+            .get("properties")
+            .and_then(Value::as_object)
+            .and_then(|properties| properties.get(property))
+            .unwrap_or_else(|| panic!("{context} should advertise {property}"))
+    }
+
+    fn resolve_schema<'a>(root: &'a Value, schema: &'a Value) -> &'a Value {
+        let mut current = schema;
+
+        loop {
+            if let Some(reference) = current.get("$ref").and_then(Value::as_str) {
+                let pointer = reference
+                    .strip_prefix('#')
+                    .unwrap_or_else(|| panic!("schema reference should be local: {reference}"));
+                current = root
+                    .pointer(pointer)
+                    .unwrap_or_else(|| panic!("schema reference target should exist: {reference}"));
+                continue;
+            }
+
+            if let Some(non_null) =
+                current
+                    .get("anyOf")
+                    .and_then(Value::as_array)
+                    .and_then(|variants| {
+                        variants.iter().find(|variant| {
+                            variant.get("type").and_then(Value::as_str) != Some("null")
+                        })
+                    })
+            {
+                current = non_null;
+                continue;
+            }
+
+            return current;
+        }
+    }
+
+    fn schema_requires_property(schema: &Value, property: &str) -> bool {
+        schema
+            .get("required")
+            .and_then(Value::as_array)
+            .is_some_and(|required| {
+                required
+                    .iter()
+                    .any(|field| field.as_str() == Some(property))
+            })
     }
 
     fn schema_requires_schema_version(schema: &Value) -> bool {

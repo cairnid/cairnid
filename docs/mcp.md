@@ -115,6 +115,8 @@ The version identifies the MCP evidence result contract, not the evidence artifa
 
 The `v1` success contracts keep the existing top-level `status` and count fields. Tool errors keep the existing top-level `error` envelope and add `schema_version` alongside it.
 
+Artifact and step entries advertised by `outputSchema` include sanitized `release_gate` labels: `cairnid.evidence_plan` `steps[]`, `cairnid.evidence_manifest` `artifacts[]`, `cairnid.evidence_status` `artifacts[]`, and `cairnid.evidence_check` success or incomplete-error-summary `artifacts[]`.
+
 ## Evidence tool errors
 
 Request-level failures from `cairnid.evidence_status` and `cairnid.evidence_check` are returned as MCP tool results, not JSON-RPC protocol errors. The result has `isError: true`, and `structuredContent` contains this stable envelope:

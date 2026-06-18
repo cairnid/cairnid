@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod admin_operations;
+mod api_contract_command;
 mod audit_operations;
 mod browser_origin_smoke;
 mod config;
@@ -24,6 +25,7 @@ mod signing_key_operations;
 
 use crate::{
     admin_operations::run_admin_command,
+    api_contract_command::run_api_contract_command,
     audit_operations::run_audit_command,
     config::ApiConfig,
     conformance_operations::run_conformance_command,
@@ -44,6 +46,10 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
 #[tokio::main]
 async fn main() -> ExitCode {
     let args = env::args().skip(1).collect::<Vec<_>>();
+    if let Some("api-contract") = args.first().map(String::as_str) {
+        return exit_from_result(run_api_contract_command(&args[1..]));
+    }
+
     match args.first().map(String::as_str) {
         Some("healthcheck") => return exit_from_result(run_healthcheck().await),
         Some("signing-key") => {

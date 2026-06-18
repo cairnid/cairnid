@@ -1,5 +1,10 @@
 #![allow(dead_code)]
 
+use serde::Serialize;
+use time::OffsetDateTime;
+
+pub(crate) const API_CONTRACT_SCHEMA_VERSION: &str = "cairnid.api_contract.v1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ApiMethod {
     Delete,
@@ -35,6 +40,15 @@ pub(crate) enum ApiAudience {
     Browser,
 }
 
+impl ApiAudience {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Admin => "admin",
+            Self::Browser => "browser",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ApiSchema {
     None,
@@ -62,8 +76,50 @@ pub(crate) struct ApiRouteContract {
     pub(crate) response_schema: ApiSchema,
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct ApiContractReport {
+    pub(crate) schema_version: &'static str,
+    #[serde(with = "time::serde::rfc3339")]
+    pub(crate) generated_at: OffsetDateTime,
+    pub(crate) routes: Vec<ApiRouteContractReport>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct ApiRouteContractReport {
+    pub(crate) method: &'static str,
+    pub(crate) path: &'static str,
+    pub(crate) audience: &'static str,
+    pub(crate) handler: &'static str,
+    pub(crate) request_contract_label: Option<&'static str>,
+    pub(crate) response_contract_label: Option<&'static str>,
+}
+
 pub(crate) fn browser_admin_api_routes() -> &'static [ApiRouteContract] {
     BROWSER_ADMIN_API_ROUTES
+}
+
+pub(crate) fn api_contract_report(generated_at: OffsetDateTime) -> ApiContractReport {
+    ApiContractReport {
+        schema_version: API_CONTRACT_SCHEMA_VERSION,
+        generated_at,
+        routes: browser_admin_api_routes()
+            .iter()
+            .map(ApiRouteContractReport::from_route)
+            .collect(),
+    }
+}
+
+impl ApiRouteContractReport {
+    const fn from_route(route: &ApiRouteContract) -> Self {
+        Self {
+            method: route.method.as_str(),
+            path: route.path,
+            audience: route.audience.as_str(),
+            handler: route.handler,
+            request_contract_label: route.request_schema.name(),
+            response_contract_label: route.response_schema.name(),
+        }
+    }
 }
 
 const fn route(
@@ -498,6 +554,7 @@ const BROWSER_ADMIN_API_ROUTES: &[ApiRouteContract] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+    use time::format_description::well_known::Rfc3339;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     struct RouteEntry {
@@ -574,6 +631,51 @@ mod tests {
         );
     }
 
+    #[test]
+    fn api_contract_export_json_covers_checked_manifest() {
+        let report = api_contract_report(test_generated_at());
+        let json = serde_json::to_value(&report).expect("serializable API contract report");
+        let generated_at = json["generated_at"]
+            .as_str()
+            .expect("generated_at is serialized");
+        OffsetDateTime::parse(generated_at, &Rfc3339).expect("generated_at is RFC3339");
+        assert_eq!(json["schema_version"], API_CONTRACT_SCHEMA_VERSION);
+
+        let routes = json["routes"].as_array().expect("routes array");
+        assert_eq!(routes.len(), BROWSER_ADMIN_API_ROUTES.len());
+
+        let exported_routes = exported_route_keys(routes);
+        let manifest_routes = BROWSER_ADMIN_API_ROUTES
+            .iter()
+            .map(expected_exported_route)
+            .collect::<Vec<_>>();
+
+        assert_eq!(exported_routes, manifest_routes);
+    }
+
+    #[test]
+    fn api_contract_export_json_excludes_protocol_scim_and_health_routes() {
+        let report = api_contract_report(test_generated_at());
+        let json = serde_json::to_value(&report).expect("serializable API contract report");
+        let routes = json["routes"].as_array().expect("routes array");
+
+        let exported_paths = routes
+            .iter()
+            .map(|route| route["path"].as_str().expect("route path"))
+            .collect::<Vec<_>>();
+
+        for path in exported_paths {
+            assert!(
+                path.starts_with("/api/v1/"),
+                "{path} must remain in the browser/admin API namespace"
+            );
+            assert!(!path.starts_with("/oauth2/"));
+            assert!(!path.starts_with("/.well-known/"));
+            assert!(!path.starts_with("/scim/"));
+            assert_ne!(path, "/healthz");
+        }
+    }
+
     fn manifest_route_keys() -> Vec<RouteEntry> {
         browser_admin_api_routes()
             .iter()
@@ -638,6 +740,37 @@ mod tests {
         let end = after_method
             .find(|character: char| !(character == '_' || character.is_ascii_alphanumeric()))?;
         Some(&after_method[..end])
+    }
+
+    fn expected_exported_route(route: &ApiRouteContract) -> serde_json::Value {
+        serde_json::json!({
+            "method": route.method.as_str(),
+            "path": route.path,
+            "audience": route.audience.as_str(),
+            "handler": route.handler,
+            "request_contract_label": route.request_schema.name(),
+            "response_contract_label": route.response_schema.name(),
+        })
+    }
+
+    fn exported_route_keys(routes: &[serde_json::Value]) -> Vec<serde_json::Value> {
+        routes
+            .iter()
+            .map(|route| {
+                serde_json::json!({
+                    "method": route["method"],
+                    "path": route["path"],
+                    "audience": route["audience"],
+                    "handler": route["handler"],
+                    "request_contract_label": route["request_contract_label"],
+                    "response_contract_label": route["response_contract_label"],
+                })
+            })
+            .collect()
+    }
+
+    fn test_generated_at() -> OffsetDateTime {
+        OffsetDateTime::parse("2026-06-18T12:00:00Z", &Rfc3339).expect("test timestamp")
     }
 
     fn assert_safe_schema_label(schema: ApiSchema) {

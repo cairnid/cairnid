@@ -294,7 +294,7 @@ cairn-api scim connector-profile entra
 
 The command emits a stable JSON report with an RFC3339 `generated_at` timestamp, the SCIM base URL, `ServiceProviderConfig` URL, bearer-header format, server-side token-hash environment variables, recommended User and Group mappings, validation checks, unsupported v1 features, and smoke commands. It does not read the database and does not print raw bearer-token values.
 
-For public-beta release evidence, save the three generated reports as:
+For first-public-RC release evidence, save the three generated reports as:
 
 - `scim-generic-connector-profile.json`
 - `scim-okta-connector-profile.json`
@@ -302,7 +302,7 @@ For public-beta release evidence, save the three generated reports as:
 
 `cairnid evidence check` validates that each profile is fresh, matches the expected provider, uses HTTPS SCIM URLs, includes token-hash rotation guidance, covers required User and Group mappings, discloses unsupported v1 features, and includes smoke commands for primary, secondary, and rejected bearer-token checks.
 
-For public-beta connector evidence, also save token-free normalized external provisioning summaries as:
+For first-public-RC connector evidence, also save token-free normalized external provisioning summaries as:
 
 - `scim-okta-connector-smoke.json`
 - `scim-entra-connector-smoke.json`
@@ -336,7 +336,7 @@ $env:CAIRN_SCIM_REJECTED_BEARER_TOKEN="<old-or-invalid-token>"
 cairn-api scim smoke
 ```
 
-`CAIRN_SCIM_SMOKE_BASE_URL` is optional and defaults to `CAIRN_ISSUER`. `CAIRN_SCIM_BEARER_TOKEN` is the raw token corresponding to the configured hash used for the mutating smoke flow. `CAIRN_SCIM_SECONDARY_BEARER_TOKEN` is optional for ad hoc smoke runs; when present, the smoke verifies a second configured raw token can read `ServiceProviderConfig` during rotation. `CAIRN_SCIM_REJECTED_BEARER_TOKEN` is optional for ad hoc smoke runs; when present, the smoke verifies it receives `401 Unauthorized`. Public-beta release evidence must set both optional token variables so `cairnid evidence check` can prove rotation-window acceptance and retired-token rejection.
+`CAIRN_SCIM_SMOKE_BASE_URL` is optional and defaults to `CAIRN_ISSUER`. `CAIRN_SCIM_BEARER_TOKEN` is the raw token corresponding to the configured hash used for the mutating smoke flow. `CAIRN_SCIM_SECONDARY_BEARER_TOKEN` is optional for ad hoc smoke runs; when present, the smoke verifies a second configured raw token can read `ServiceProviderConfig` during rotation. `CAIRN_SCIM_REJECTED_BEARER_TOKEN` is optional for ad hoc smoke runs; when present, the smoke verifies it receives `401 Unauthorized`. First-public-RC release evidence must set both optional token variables so `cairnid evidence check` can prove rotation-window acceptance and retired-token rejection.
 
 The smoke command exercises `ServiceProviderConfig`, `Schemas`, `ResourceTypes`, optional secondary-token acceptance, optional rejected-token denial, user create, exact-filter lookup, SearchRequest lookup, bounded projection, bounded PATCH, full replacement, soft deprovisioning, group create, exact-filter lookup, SearchRequest lookup, bounded projection, bounded PATCH including `members.value` and filtered member value paths, full replacement, group deletion, and bounded Bulk create/PATCH/delete mutations with same-request and forward `bulkId:` reference resolution through the public SCIM HTTP surface. It emits a token-free JSON evidence report with `base_url`, RFC3339 `completed_at`, token-check booleans, created user IDs, soft-deleted user IDs, deleted group ID, and named checks. It creates unique smoke users and unique smoke groups; the groups are deleted, and the smoke users are left as suspended users with audit history. Run external Okta and Entra connector smokes after this built-in smoke passes, then store the normalized connector-smoke summaries described above for release evidence.
 

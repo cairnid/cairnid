@@ -1,6 +1,6 @@
 # Security Policy
 
-Cairn Identity is not yet a public beta or OpenID Certified provider. Treat this repository as an actively developed security project until the release gates in `docs/release-gates.md` are closed. The current formal threat model is maintained in `docs/threat-model.md`.
+Cairn Identity is pre-beta, has not published a first public RC, and is not an OpenID Certified provider. Treat this repository as an actively developed security project until the release gates in `docs/release-gates.md` are closed. The current formal threat model is maintained in `docs/threat-model.md`.
 
 ## Supported Versions
 
