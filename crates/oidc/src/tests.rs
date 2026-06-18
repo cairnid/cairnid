@@ -265,6 +265,34 @@ fn rejects_invalid_pkce_code_challenge_syntax() {
 }
 
 #[test]
+fn accepts_basic_userinfo_name_essential_claims_request() {
+    let request = AuthorizationRequest {
+        response_type: "code".to_owned(),
+        client_id: "web".to_owned(),
+        redirect_uri: "https://app.example.com/callback".to_owned(),
+        scope: "openid".to_owned(),
+        state: None,
+        nonce: None,
+        max_age: None,
+        response_mode: None,
+        prompt: None,
+        display: None,
+        acr_values: None,
+        ui_locales: None,
+        claims_locales: None,
+        login_hint: None,
+        claims: Some(r#"{"userinfo":{"name":{"essential":true}}}"#.to_owned()),
+        request: None,
+        request_uri: None,
+        code_challenge: Some(TEST_CODE_CHALLENGE.to_owned()),
+        code_challenge_method: Some("S256".to_owned()),
+    };
+
+    let validated = request.validate(&client()).unwrap();
+    assert_eq!(validated.scopes, vec!["openid", "profile"]);
+}
+
+#[test]
 fn rejects_unsupported_request_object_parameters() {
     let request = AuthorizationRequest {
         response_type: "code".to_owned(),
@@ -308,6 +336,46 @@ fn rejects_unsupported_request_object_parameters() {
         request_uri.validate(&client()),
         Err(OidcError::UnsupportedRequestUriParameter)
     ));
+}
+
+#[test]
+fn rejects_unsupported_claims_parameter_shapes() {
+    for claims in [
+        "not-json",
+        r#"[]"#,
+        r#"{"id_token":{"name":{"essential":true}}}"#,
+        r#"{"userinfo":{"name":{"essential":false}}}"#,
+        r#"{"userinfo":{"name":{"essential":true,"value":"User Example"}}}"#,
+        r#"{"userinfo":{"email":{"essential":true}}}"#,
+        r#"{"userinfo":{"name":{"essential":true}},"id_token":{}}"#,
+    ] {
+        let request = AuthorizationRequest {
+            response_type: "code".to_owned(),
+            client_id: "web".to_owned(),
+            redirect_uri: "https://app.example.com/callback".to_owned(),
+            scope: "openid".to_owned(),
+            state: None,
+            nonce: None,
+            max_age: None,
+            response_mode: None,
+            prompt: None,
+            display: None,
+            acr_values: None,
+            ui_locales: None,
+            claims_locales: None,
+            login_hint: None,
+            claims: Some(claims.to_owned()),
+            request: None,
+            request_uri: None,
+            code_challenge: Some(TEST_CODE_CHALLENGE.to_owned()),
+            code_challenge_method: Some("S256".to_owned()),
+        };
+
+        assert!(matches!(
+            request.validate(&client()),
+            Err(OidcError::UnsupportedClaimsParameter)
+        ));
+    }
 }
 
 #[test]
@@ -473,6 +541,7 @@ fn provider_metadata_advertises_strict_code_flow_and_issuer_responses() {
         vec!["page", "popup", "touch", "wap"]
     );
     assert!(metadata.authorization_response_iss_parameter_supported);
+    assert!(!metadata.claims_parameter_supported);
     assert!(!metadata.request_parameter_supported);
     assert!(!metadata.request_uri_parameter_supported);
 }

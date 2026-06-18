@@ -116,6 +116,90 @@ async fn authorization_route_rejects_oversized_query_before_database() {
 }
 
 #[tokio::test]
+async fn authorization_post_rejects_malformed_or_oversized_form_before_database() {
+    use tower::ServiceExt as _;
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_lazy("postgres://postgres:postgres@127.0.0.1:1/cairn_identity")
+        .expect("lazy pool");
+    let state = AppState {
+        database: Database::from_pool(pool),
+        organization_id: Uuid::new_v4(),
+        config: test_config(cairn_domain::Environment::Development),
+    };
+
+    for (body, expected_error) in [
+        ("%".to_owned(), "invalid authorization request"),
+        (
+            format!("state={}", "a".repeat(OAUTH_FORM_BODY_MAX_BYTES + 1)),
+            "authorization request too large",
+        ),
+        (
+            format!("state={}", "a".repeat((2 * 1024 * 1024) + 1)),
+            "authorization request too large",
+        ),
+        (
+            "client_id=public-client&client_id=other-client".to_owned(),
+            "duplicate authorization request parameter",
+        ),
+    ] {
+        let response = build_router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/oauth2/authorize")
+                    .header(
+                        header::CONTENT_TYPE,
+                        "application/x-www-form-urlencoded; charset=UTF-8",
+                    )
+                    .body(axum::body::Body::from(body))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("router response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response_json(response).await.expect("json body"),
+            json!({ "error": expected_error })
+        );
+    }
+}
+
+#[tokio::test]
+async fn authorization_post_rejects_missing_form_content_type_before_database() {
+    use tower::ServiceExt as _;
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_lazy("postgres://postgres:postgres@127.0.0.1:1/cairn_identity")
+        .expect("lazy pool");
+    let state = AppState {
+        database: Database::from_pool(pool),
+        organization_id: Uuid::new_v4(),
+        config: test_config(cairn_domain::Environment::Development),
+    };
+
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/oauth2/authorize")
+                .body(axum::body::Body::from("client_id=public-client"))
+                .expect("valid request"),
+        )
+        .await
+        .expect("router response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response_json(response).await.expect("json body"),
+        json!({ "error": "content type must be application/x-www-form-urlencoded" })
+    );
+}
+
+#[tokio::test]
 async fn logout_route_rejects_malformed_query_encoding_before_database() {
     use tower::ServiceExt as _;
 
@@ -356,6 +440,75 @@ async fn authorization_route_redirects_invalid_max_age_after_client_validation()
 }
 
 #[tokio::test]
+async fn authorization_route_redirects_unsupported_request_object_parameters()
+-> Result<(), Box<dyn std::error::Error>> {
+    use cairn_domain::Organization;
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let organization = Organization::new(
+        format!("api-request-object-errors-{}", Uuid::new_v4()),
+        "API Request Object Errors",
+    )?;
+    database.create_organization(&organization).await?;
+    let client = test_oidc_client(organization.id);
+    database.create_oidc_client(&client).await?;
+
+    let state = AppState {
+        database,
+        organization_id: organization.id,
+        config: test_config(cairn_domain::Environment::Development),
+    };
+    let base_query = "response_type=code&client_id=public-client&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&scope=openid&state=state-value&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256";
+
+    for (extra, expected_error) in [
+        ("request=eyJhbGciOiJub25lIn0", "request_not_supported"),
+        (
+            "request_uri=https%3A%2F%2Fclient.example.com%2Frequest.jwt",
+            "request_uri_not_supported",
+        ),
+    ] {
+        let response = build_router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(format!("/oauth2/authorize?{base_query}&{extra}"))
+                    .body(axum::body::Body::empty())?,
+            )
+            .await?;
+
+        assert!(response.status().is_redirection());
+        let location = response
+            .headers()
+            .get(header::LOCATION)
+            .expect("redirect location")
+            .to_str()?;
+        let callback = Url::parse(location)?;
+        assert_eq!(
+            callback
+                .query_pairs()
+                .find_map(|(name, value)| (name == "error").then(|| value.into_owned())),
+            Some(expected_error.to_owned())
+        );
+        assert_eq!(
+            callback
+                .query_pairs()
+                .find_map(|(name, value)| (name == "state").then(|| value.into_owned())),
+            Some("state-value".to_owned())
+        );
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+        assert_eq!(response.headers().get(header::PRAGMA).unwrap(), "no-cache");
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn authorization_route_maps_missing_response_type_to_invalid_request()
 -> Result<(), Box<dyn std::error::Error>> {
     use cairn_domain::Organization;
@@ -445,6 +598,97 @@ async fn authorization_route_enforces_requested_acr_values_for_existing_sessions
     assert_eq!(
         response.headers().get(header::LOCATION).unwrap(),
         "http://localhost:3000/callback?error=login_required&iss=http%3A%2F%2Flocalhost%3A8080&error_description=requested%20acr_values%20require%20reauthentication&state=state-value"
+    );
+    assert_eq!(
+        response.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    assert_eq!(response.headers().get(header::PRAGMA).unwrap(), "no-cache");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn authorization_post_uses_form_body_for_existing_session_flow()
+-> Result<(), Box<dyn std::error::Error>> {
+    use cairn_domain::Organization;
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let now = OffsetDateTime::now_utc();
+    let organization = Organization::new(
+        format!("api-authorize-post-{}", Uuid::new_v4()),
+        "API Authorize Post",
+    )?;
+    database.create_organization(&organization).await?;
+    let user = User::new(
+        organization.id,
+        format!("authorize-post-user-{}@example.com", Uuid::new_v4()),
+        "Authorize Post User",
+    )?;
+    database.create_user(&user, None).await?;
+    let client = test_oidc_client(organization.id);
+    database.create_oidc_client(&client).await?;
+    let session = test_session(organization.id, user.id, now);
+    database.create_auth_session(&session).await?;
+    database
+        .create_consent_grant(&ConsentGrant {
+            id: Uuid::new_v4(),
+            organization_id: organization.id,
+            user_id: user.id,
+            client_id: client.id,
+            scopes: vec!["openid".to_owned()],
+            created_at: now,
+            revoked_at: None,
+        })
+        .await?;
+
+    let state = AppState {
+        database,
+        organization_id: organization.id,
+        config: test_config(cairn_domain::Environment::Development),
+    };
+    let authorize_body = "response_type=code&client_id=public-client&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&scope=openid&state=state-value&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256";
+
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/oauth2/authorize")
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .header(header::COOKIE, session_cookie(session.id, None))
+                .body(axum::body::Body::from(authorize_body))?,
+        )
+        .await?;
+
+    assert!(response.status().is_redirection());
+    let callback_location = response
+        .headers()
+        .get(header::LOCATION)
+        .expect("callback redirect location")
+        .to_str()?;
+    let callback = Url::parse(callback_location)?;
+    assert_eq!(
+        callback.origin().ascii_serialization(),
+        "http://localhost:3000"
+    );
+    assert_eq!(callback.path(), "/callback");
+    assert!(
+        callback
+            .query_pairs()
+            .any(|(name, value)| { name == "code" && !value.trim().is_empty() })
+    );
+    assert!(
+        callback
+            .query_pairs()
+            .any(|(name, value)| { name == "state" && value == "state-value" })
+    );
+    assert!(
+        callback
+            .query_pairs()
+            .any(|(name, value)| { name == "iss" && value == "http://localhost:8080" })
     );
     assert_eq!(
         response.headers().get(header::CACHE_CONTROL).unwrap(),

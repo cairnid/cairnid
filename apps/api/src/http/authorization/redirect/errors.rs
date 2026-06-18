@@ -43,11 +43,12 @@ pub(super) fn authorization_error_parts(error: OidcError) -> (&'static str, &'st
             ("invalid_request", "unsupported claims parameter")
         }
         OidcError::UnsupportedRequestParameter => {
-            ("invalid_request", "unsupported request parameter")
+            ("request_not_supported", "unsupported request parameter")
         }
-        OidcError::UnsupportedRequestUriParameter => {
-            ("invalid_request", "unsupported request_uri parameter")
-        }
+        OidcError::UnsupportedRequestUriParameter => (
+            "request_uri_not_supported",
+            "unsupported request_uri parameter",
+        ),
         OidcError::PkceRequired => ("invalid_request", "PKCE S256 is required"),
         OidcError::InvalidPkceChallenge => ("invalid_request", "invalid PKCE code_challenge"),
         OidcError::InvalidRedirectUri => ("invalid_request", "invalid redirect URI"),

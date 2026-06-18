@@ -1,5 +1,6 @@
 use cairn_authn::validate_pkce_code_challenge;
 use cairn_domain::{OidcClient, OidcGrantType, PkceMethod};
+use serde_json::Value;
 
 use crate::OidcError;
 
@@ -29,7 +30,18 @@ impl AuthorizationRequest {
             return Err(OidcError::InvalidRedirectUri);
         }
 
-        let scopes = parse_scopes(&self.scope)?;
+        let mut scopes = parse_scopes(&self.scope)?;
+        if optional_parameter_is_present(&self.request) {
+            return Err(OidcError::UnsupportedRequestParameter);
+        }
+        if optional_parameter_is_present(&self.request_uri) {
+            return Err(OidcError::UnsupportedRequestUriParameter);
+        }
+        for scope in additional_scopes_for_supported_claims(self.claims.as_deref())? {
+            if !scopes.iter().any(|existing| existing == scope) {
+                scopes.push(scope.to_owned());
+            }
+        }
         if !scopes.iter().any(|scope| scope == "openid") {
             return Err(OidcError::InvalidScope);
         }
@@ -47,15 +59,6 @@ impl AuthorizationRequest {
 
         if self.max_age.is_some_and(|max_age| max_age < 0) {
             return Err(OidcError::InvalidMaxAge);
-        }
-        if optional_parameter_is_present(&self.claims) {
-            return Err(OidcError::UnsupportedClaimsParameter);
-        }
-        if optional_parameter_is_present(&self.request) {
-            return Err(OidcError::UnsupportedRequestParameter);
-        }
-        if optional_parameter_is_present(&self.request_uri) {
-            return Err(OidcError::UnsupportedRequestUriParameter);
         }
 
         let response_mode = parse_response_mode(self.response_mode.as_deref())?;
@@ -89,5 +92,39 @@ impl AuthorizationRequest {
             code_challenge,
             code_challenge_method: method,
         })
+    }
+}
+
+fn additional_scopes_for_supported_claims(
+    claims: Option<&str>,
+) -> Result<Vec<&'static str>, OidcError> {
+    let Some(claims) = claims.map(str::trim).filter(|claims| !claims.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let claims: Value =
+        serde_json::from_str(claims).map_err(|_| OidcError::UnsupportedClaimsParameter)?;
+    let claims = claims
+        .as_object()
+        .ok_or(OidcError::UnsupportedClaimsParameter)?;
+    if claims.len() != 1 {
+        return Err(OidcError::UnsupportedClaimsParameter);
+    }
+
+    let userinfo = claims
+        .get("userinfo")
+        .and_then(Value::as_object)
+        .ok_or(OidcError::UnsupportedClaimsParameter)?;
+    if userinfo.len() != 1 {
+        return Err(OidcError::UnsupportedClaimsParameter);
+    }
+
+    let name = userinfo
+        .get("name")
+        .and_then(Value::as_object)
+        .ok_or(OidcError::UnsupportedClaimsParameter)?;
+    if name.len() == 1 && name.get("essential").and_then(Value::as_bool) == Some(true) {
+        Ok(vec!["profile"])
+    } else {
+        Err(OidcError::UnsupportedClaimsParameter)
     }
 }
