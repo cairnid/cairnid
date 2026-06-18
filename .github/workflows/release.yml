@@ -832,7 +832,7 @@ jobs:
               smoke_mcp_stdio(mcp, root)
 
       - name: Upload packaged release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-assets-${{ matrix.artifact_name }}
           path: dist/*
@@ -859,7 +859,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download packaged release assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: release-assets-*
           path: dist
