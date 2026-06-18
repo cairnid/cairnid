@@ -18,7 +18,32 @@ jobs:
         with:
           bun-version: 1.3.4
       - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm pkg-config libssl-dev
+        timeout-minutes: 35
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+
+          apt_with_retry() {
+            local description="$1"
+            shift
+            local status=0
+            for attempt in 1 2 3; do
+              echo "${description} (attempt ${attempt}/3)"
+              if sudo env DEBIAN_FRONTEND=noninteractive timeout --kill-after=30s 300s "$@"; then
+                return 0
+              fi
+              status=$?
+              if [ "$attempt" -eq 3 ]; then
+                echo "${description} failed after 3 attempts"
+                return "$status"
+              fi
+              sleep "$((attempt * 10))"
+            done
+          }
+
+          apt_with_retry "apt-get update" apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update
+          apt_with_retry "apt-get install" apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 install -y --no-install-recommends cmake nasm pkg-config libssl-dev
       - name: Show Rust version
         run: rustc --version && cargo --version
       - name: Format
@@ -512,7 +537,32 @@ jobs:
         with:
           bun-version: 1.3.4
       - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm pkg-config libssl-dev
+        timeout-minutes: 35
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+
+          apt_with_retry() {
+            local description="$1"
+            shift
+            local status=0
+            for attempt in 1 2 3; do
+              echo "${description} (attempt ${attempt}/3)"
+              if sudo env DEBIAN_FRONTEND=noninteractive timeout --kill-after=30s 300s "$@"; then
+                return 0
+              fi
+              status=$?
+              if [ "$attempt" -eq 3 ]; then
+                echo "${description} failed after 3 attempts"
+                return "$status"
+              fi
+              sleep "$((attempt * 10))"
+            done
+          }
+
+          apt_with_retry "apt-get update" apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update
+          apt_with_retry "apt-get install" apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 install -y --no-install-recommends cmake nasm pkg-config libssl-dev
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
       - name: Install dependency security tools
@@ -572,7 +622,32 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm pkg-config libssl-dev
+        timeout-minutes: 35
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+
+          apt_with_retry() {
+            local description="$1"
+            shift
+            local status=0
+            for attempt in 1 2 3; do
+              echo "${description} (attempt ${attempt}/3)"
+              if sudo env DEBIAN_FRONTEND=noninteractive timeout --kill-after=30s 300s "$@"; then
+                return 0
+              fi
+              status=$?
+              if [ "$attempt" -eq 3 ]; then
+                echo "${description} failed after 3 attempts"
+                return "$status"
+              fi
+              sleep "$((attempt * 10))"
+            done
+          }
+
+          apt_with_retry "apt-get update" apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update
+          apt_with_retry "apt-get install" apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 install -y --no-install-recommends cmake nasm pkg-config libssl-dev
       - name: Database integration tests
         run: cargo test -p cairn-database --tests --locked
       - name: OIDC public flow API integration test
