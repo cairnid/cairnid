@@ -5,6 +5,7 @@ mod admin_groups;
 mod admin_oidc;
 mod admin_query;
 mod admin_users;
+mod api_contract;
 mod api_response;
 mod app_settings;
 mod auth_routes;
