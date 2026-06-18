@@ -144,6 +144,7 @@ jobs:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       TARGET: ${{ matrix.target }}
       BINARY_EXT: ${{ matrix.binary_ext }}
+      ARCHIVE_EXT: ${{ matrix.archive_ext }}
       CLI_BINARY: target/${{ matrix.target }}/release/cairnid${{ matrix.binary_ext }}
       CLI_AUX_DIR: target/${{ matrix.target }}/release/cairnid-operator-files
       MCP_BINARY: target/${{ matrix.target }}/release/cairnid-mcp${{ matrix.binary_ext }}
@@ -587,6 +588,248 @@ jobs:
             }
             Compress-Archive -Path $stagingDir -DestinationPath "dist\$archiveBase.zip" -Force
           }
+
+      - name: Smoke archive-installed CLI and MCP
+        shell: python
+        env:
+          CAIRN_ENV: production
+          DATABASE_URL: postgres://CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE@example.invalid/cairn_identity
+          CAIRN_ISSUER: https://id.example.com
+          CAIRN_PUBLIC_WEB_ORIGIN: https://app.example.com
+          CAIRN_BOOTSTRAP_SETUP_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_EMAIL_PROVIDER: command
+          CAIRN_EMAIL_COMMAND_PATH: /usr/local/bin/cairn-send-email
+          CAIRN_CONFORMANCE_ALIAS: cairn-release
+          CAIRN_CONFORMANCE_CLIENT_ID: client-one
+          CAIRN_CONFORMANCE_CLIENT_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_CONFORMANCE_CLIENT2_ID: client-two
+          CAIRN_CONFORMANCE_CLIENT2_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_CONFORMANCE_SUITE_BASE_URL: https://www.certification.openid.net/
+          CAIRN_SCIM_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_SCIM_SECONDARY_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_SCIM_REJECTED_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_BREAK_GLASS_CONFIRM: grant-admin-owner
+          CAIRN_OLD_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_NEW_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+        run: |
+          import json
+          import os
+          import queue
+          import subprocess
+          import tarfile
+          import tempfile
+          import threading
+          import time
+          import zipfile
+          from pathlib import Path
+
+          SENTINEL = "CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE"
+          expected_tools = [
+              "cairnid.evidence_check",
+              "cairnid.evidence_manifest",
+              "cairnid.evidence_plan",
+              "cairnid.evidence_status",
+          ]
+
+          tag = os.environ["RELEASE_TAG"]
+          target = os.environ["TARGET"]
+          archive_ext = os.environ["ARCHIVE_EXT"]
+          binary_ext = os.environ["BINARY_EXT"]
+
+          def assert_no_sentinel(label, *values):
+              for value in values:
+                  text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+                  if SENTINEL in text:
+                      raise SystemExit(f"{label} leaked sentinel")
+
+          def safe_stderr(stderr_lines):
+              text = "".join(stderr_lines)
+              if SENTINEL in text:
+                  return "[redacted: sentinel appeared in stderr]"
+              return text
+
+          def extract_archive(binary, root):
+              archive_base = f"{binary}-{tag}-{target}"
+              archive_path = Path("dist") / f"{archive_base}.{archive_ext}"
+              if not archive_path.is_file():
+                  raise SystemExit(f"missing archive {archive_path}")
+
+              destination = root / binary
+              destination.mkdir()
+              if archive_ext == "zip":
+                  with zipfile.ZipFile(archive_path) as archive:
+                      archive.extractall(destination)
+              elif archive_ext == "tar.gz":
+                  with tarfile.open(archive_path, "r:gz") as archive:
+                      archive.extractall(destination)
+              else:
+                  raise SystemExit(f"unsupported archive extension: {archive_ext}")
+
+              executable = destination / archive_base / f"{binary}{binary_ext}"
+              if not executable.is_file():
+                  raise SystemExit(f"archive did not contain expected binary: {executable}")
+              return executable
+
+          def run_binary(label, binary, *args, require_empty_stderr=False):
+              result = subprocess.run(
+                  [str(binary), *args],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              assert_no_sentinel(label, result.stdout, result.stderr)
+              if result.returncode != 0:
+                  raise SystemExit(
+                      f"{label} {' '.join(args)} failed with exit code {result.returncode}: {result.stderr}"
+                  )
+              if require_empty_stderr and result.stderr:
+                  raise SystemExit(f"{label} {' '.join(args)} wrote stderr: {result.stderr}")
+              return result
+
+          def smoke_mcp_stdio(binary, root):
+              process = subprocess.Popen(
+                  [str(binary)],
+                  cwd=root,
+                  env={**os.environ, "RUST_LOG": "off"},
+                  stdin=subprocess.PIPE,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  text=True,
+              )
+              responses = queue.Queue()
+              observed_responses = []
+              stdout_lines = []
+              stderr_lines = []
+
+              def read_stdout():
+                  for line in process.stdout:
+                      stdout_lines.append(line)
+                      if line.strip():
+                          responses.put(line)
+
+              def read_stderr():
+                  for line in process.stderr:
+                      stderr_lines.append(line)
+
+              threading.Thread(target=read_stdout, daemon=True).start()
+              threading.Thread(target=read_stderr, daemon=True).start()
+
+              def write(message):
+                  if process.poll() is not None:
+                      raise SystemExit(
+                          f"MCP server exited before request; code={process.returncode}; "
+                          f"stderr={safe_stderr(stderr_lines)}"
+                      )
+                  process.stdin.write(json.dumps(message) + "\n")
+                  process.stdin.flush()
+
+              def request(request_id, message):
+                  write(message)
+                  deadline = time.monotonic() + 10
+                  while True:
+                      remaining = deadline - time.monotonic()
+                      if remaining <= 0:
+                          raise SystemExit(
+                              f"timed out waiting for MCP response {request_id}; "
+                              f"stderr={safe_stderr(stderr_lines)}"
+                          )
+                      try:
+                          line = responses.get(timeout=remaining)
+                      except queue.Empty:
+                          raise SystemExit(
+                              f"timed out waiting for MCP response {request_id}; "
+                              f"stderr={safe_stderr(stderr_lines)}"
+                          ) from None
+                      assert_no_sentinel("archive MCP stdout", line)
+                      try:
+                          response = json.loads(line)
+                      except json.JSONDecodeError as exc:
+                          raise SystemExit(
+                              f"archive MCP wrote non-JSON stdout: {line!r}; stderr={safe_stderr(stderr_lines)}"
+                          ) from exc
+                      assert_no_sentinel(f"archive MCP response {request_id}", response)
+                      observed_responses.append(response)
+                      if response.get("id") != request_id:
+                          raise SystemExit(
+                              f"archive MCP response id mismatch for request {request_id}: {response}"
+                          )
+                      if "error" in response:
+                          raise SystemExit(f"archive MCP response {request_id} returned error: {response}")
+                      return response["result"]
+
+              try:
+                  initialize = request(
+                      1,
+                      {
+                          "jsonrpc": "2.0",
+                          "id": 1,
+                          "method": "initialize",
+                          "params": {
+                              "protocolVersion": "2025-11-25",
+                              "capabilities": {},
+                              "clientInfo": {
+                                  "name": "cairnid-mcp-archive-release-smoke",
+                                  "version": "0.0.0",
+                              },
+                          },
+                      },
+                  )
+                  assert initialize["serverInfo"]["name"] == "cairnid-mcp", initialize
+                  assert isinstance(initialize["capabilities"]["tools"], dict), initialize
+                  write({"jsonrpc": "2.0", "method": "notifications/initialized"})
+                  tools = request(
+                      2,
+                      {
+                          "jsonrpc": "2.0",
+                          "id": 2,
+                          "method": "tools/list",
+                          "params": {},
+                      },
+                  )
+                  names = sorted(tool["name"] for tool in tools["tools"])
+                  assert names == expected_tools, names
+
+                  time.sleep(0.2)
+                  extra_stdout = []
+                  while True:
+                      try:
+                          extra_stdout.append(responses.get_nowait())
+                      except queue.Empty:
+                          break
+                  if extra_stdout:
+                      assert_no_sentinel("unexpected archive MCP stdout", extra_stdout)
+                      for line in extra_stdout:
+                          try:
+                              json.loads(line)
+                          except json.JSONDecodeError as exc:
+                              raise SystemExit(
+                                  f"archive MCP wrote non-JSON stdout: {line!r}; "
+                                  f"stderr={safe_stderr(stderr_lines)}"
+                              ) from exc
+                      raise SystemExit(f"archive MCP wrote unexpected stdout after tools/list: {extra_stdout}")
+                  assert_no_sentinel(
+                      "archive MCP stdio smoke",
+                      "".join(stdout_lines),
+                      "".join(stderr_lines),
+                      observed_responses,
+                  )
+                  if stderr_lines:
+                      raise SystemExit(f"archive MCP wrote stderr during stdio smoke: {safe_stderr(stderr_lines)}")
+              finally:
+                  if process.poll() is None:
+                      process.kill()
+                      process.wait(timeout=5)
+
+          with tempfile.TemporaryDirectory(prefix="cairnid-archive-release-") as root_name:
+              root = Path(root_name)
+              cli = extract_archive("cairnid", root)
+              mcp = extract_archive("cairnid-mcp", root)
+              run_binary("archive CLI", cli, "--version")
+              run_binary("archive CLI", cli, "--help")
+              run_binary("archive MCP", mcp, "--version", require_empty_stderr=True)
+              run_binary("archive MCP", mcp, "--help", require_empty_stderr=True)
+              smoke_mcp_stdio(mcp, root)
 
       - name: Upload packaged release assets
         uses: actions/upload-artifact@v4

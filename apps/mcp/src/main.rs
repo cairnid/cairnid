@@ -90,7 +90,6 @@ impl Error for StartupError {}
 
 #[derive(Debug)]
 struct StartupEvidenceRootError {
-    path: PathBuf,
     kind: StartupEvidenceRootErrorKind,
 }
 
@@ -102,15 +101,12 @@ enum StartupEvidenceRootErrorKind {
 }
 
 impl StartupEvidenceRootError {
-    fn new(path: impl Into<PathBuf>, kind: StartupEvidenceRootErrorKind) -> Self {
-        Self {
-            path: path.into(),
-            kind,
-        }
+    fn new(kind: StartupEvidenceRootErrorKind) -> Self {
+        Self { kind }
     }
 
-    fn inspect_failed(path: impl Into<PathBuf>) -> Self {
-        Self::new(path, StartupEvidenceRootErrorKind::InspectFailed)
+    fn inspect_failed() -> Self {
+        Self::new(StartupEvidenceRootErrorKind::InspectFailed)
     }
 }
 
@@ -122,7 +118,7 @@ impl fmt::Display for StartupEvidenceRootError {
             StartupEvidenceRootErrorKind::Symlink => "must not be a symlink",
         };
 
-        write!(formatter, "evidence root {} {reason}", self.path.display())
+        write!(formatter, "evidence root {reason}")
     }
 }
 
@@ -641,7 +637,7 @@ fn incomplete_evidence_error(summary: McpEvidenceSummary) -> CallToolResult {
 fn startup_evidence_root(value: Option<PathBuf>) -> Result<PathBuf, StartupEvidenceRootError> {
     let root = match value {
         Some(root) => root,
-        None => env::current_dir().map_err(|_| StartupEvidenceRootError::inspect_failed("."))?,
+        None => env::current_dir().map_err(|_| StartupEvidenceRootError::inspect_failed())?,
     };
 
     canonical_startup_evidence_root(&root)
@@ -649,23 +645,21 @@ fn startup_evidence_root(value: Option<PathBuf>) -> Result<PathBuf, StartupEvide
 
 fn canonical_startup_evidence_root(path: &Path) -> Result<PathBuf, StartupEvidenceRootError> {
     let metadata =
-        fs::symlink_metadata(path).map_err(|_| StartupEvidenceRootError::inspect_failed(path))?;
+        fs::symlink_metadata(path).map_err(|_| StartupEvidenceRootError::inspect_failed())?;
 
     if metadata.file_type().is_symlink() {
         return Err(StartupEvidenceRootError::new(
-            path,
             StartupEvidenceRootErrorKind::Symlink,
         ));
     }
     if !metadata.is_dir() {
         return Err(StartupEvidenceRootError::new(
-            path,
             StartupEvidenceRootErrorKind::NotDirectory,
         ));
     }
 
     path.canonicalize()
-        .map_err(|_| StartupEvidenceRootError::inspect_failed(path))
+        .map_err(|_| StartupEvidenceRootError::inspect_failed())
 }
 
 fn parse_evidence_directory_request(
