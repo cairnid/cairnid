@@ -261,6 +261,27 @@ jobs:
 
       - name: Smoke release MCP stdio
         shell: python
+        env:
+          CAIRN_ENV: production
+          DATABASE_URL: postgres://CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE@example.invalid/cairn_identity
+          CAIRN_ISSUER: https://id.example.com
+          CAIRN_PUBLIC_WEB_ORIGIN: https://app.example.com
+          CAIRN_BOOTSTRAP_SETUP_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_EMAIL_PROVIDER: command
+          CAIRN_EMAIL_COMMAND_PATH: /usr/local/bin/cairn-send-email
+          CAIRN_CONFORMANCE_ALIAS: cairn-release
+          CAIRN_CONFORMANCE_CLIENT_ID: client-one
+          CAIRN_CONFORMANCE_CLIENT_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_CONFORMANCE_CLIENT2_ID: client-two
+          CAIRN_CONFORMANCE_CLIENT2_SECRET: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_CONFORMANCE_SUITE_BASE_URL: https://www.certification.openid.net/
+          CAIRN_SCIM_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_SCIM_SECONDARY_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_SCIM_REJECTED_BEARER_TOKEN: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_BREAK_GLASS_CONFIRM: grant-admin-owner
+          CAIRN_OLD_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
+          CAIRN_NEW_KEY_ENCRYPTION_KEY: CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE
         run: |
           import json
           import os
@@ -277,8 +298,41 @@ jobs:
               "cairnid.evidence_status",
           ]
 
+          SENTINEL = "CAIRNID_RELEASE_SMOKE_SECRET_DO_NOT_EXPOSE"
+          cli = os.path.abspath(os.environ["CLI_BINARY"])
           binary = os.path.abspath(os.environ["MCP_BINARY"])
+
+          def assert_no_sentinel(label, *values):
+              for value in values:
+                  text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+                  if SENTINEL in text:
+                      raise SystemExit(f"{label} leaked sentinel")
+
+          def safe_stderr(stderr_lines):
+              text = "".join(stderr_lines)
+              if SENTINEL in text:
+                  return "[redacted: sentinel appeared in stderr]"
+              return text
+
+          def initialize_evidence_dir(root):
+              evidence_dir = os.path.join(root, "release-evidence")
+              result = subprocess.run(
+                  [cli, "evidence", "init", evidence_dir],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              assert_no_sentinel("release evidence init output", result.stdout, result.stderr)
+              if result.returncode != 0:
+                  raise SystemExit(
+                      f"evidence init failed with exit code {result.returncode}: {result.stderr}"
+                  )
+              init = json.loads(result.stdout)
+              assert init["status"] == "initialized", init
+              return evidence_dir
+
           with tempfile.TemporaryDirectory(prefix="cairnid-mcp-release-") as root:
+              initialize_evidence_dir(root)
               process = subprocess.Popen(
                   [binary],
                   cwd=root,
@@ -289,10 +343,13 @@ jobs:
                   text=True,
               )
               responses = queue.Queue()
+              observed_responses = []
+              stdout_lines = []
               stderr_lines = []
 
               def read_stdout():
                   for line in process.stdout:
+                      stdout_lines.append(line)
                       if line.strip():
                           responses.put(line)
 
@@ -307,7 +364,7 @@ jobs:
                   if process.poll() is not None:
                       raise SystemExit(
                           f"MCP server exited before request; code={process.returncode}; "
-                          f"stderr={''.join(stderr_lines)}"
+                          f"stderr={safe_stderr(stderr_lines)}"
                       )
                   process.stdin.write(json.dumps(message) + "\n")
                   process.stdin.flush()
@@ -320,21 +377,24 @@ jobs:
                       if remaining <= 0:
                           raise SystemExit(
                               f"timed out waiting for MCP response {request_id}; "
-                              f"stderr={''.join(stderr_lines)}"
+                              f"stderr={safe_stderr(stderr_lines)}"
                           )
                       try:
                           line = responses.get(timeout=remaining)
                       except queue.Empty:
                           raise SystemExit(
                               f"timed out waiting for MCP response {request_id}; "
-                              f"stderr={''.join(stderr_lines)}"
+                              f"stderr={safe_stderr(stderr_lines)}"
                           ) from None
+                      assert_no_sentinel("MCP stdout", line)
                       try:
                           response = json.loads(line)
                       except json.JSONDecodeError as exc:
                           raise SystemExit(
-                              f"MCP wrote non-JSON stdout: {line!r}; stderr={''.join(stderr_lines)}"
+                              f"MCP wrote non-JSON stdout: {line!r}; stderr={safe_stderr(stderr_lines)}"
                           ) from exc
+                      assert_no_sentinel(f"MCP response {request_id}", response)
+                      observed_responses.append(response)
                       if response.get("id") != request_id:
                           raise SystemExit(
                               f"MCP response id mismatch for request {request_id}: {response}"
@@ -342,6 +402,40 @@ jobs:
                       if "error" in response:
                           raise SystemExit(f"MCP response {request_id} returned error: {response}")
                       return response["result"]
+
+              def call_tool(request_id, name, arguments):
+                  return request(
+                      request_id,
+                      {
+                          "jsonrpc": "2.0",
+                          "id": request_id,
+                          "method": "tools/call",
+                          "params": {
+                              "name": name,
+                              "arguments": arguments,
+                          },
+                      },
+                  )
+
+              def structured(result, label):
+                  content = result.get("structuredContent")
+                  if not isinstance(content, dict):
+                      raise SystemExit(f"{label} did not return structured content: {result}")
+                  return content
+
+              def assert_tool_success(result, label):
+                  if result.get("isError") is not False:
+                      raise SystemExit(f"{label} returned tool error: {result}")
+                  return structured(result, label)
+
+              def missing_evidence_count(summary):
+                  failure_codes = summary.get("failure_codes")
+                  if not isinstance(failure_codes, dict):
+                      raise SystemExit(f"missing failure_codes in summary: {summary}")
+                  count = failure_codes.get("missing_evidence")
+                  if not isinstance(count, int) or count <= 0:
+                      raise SystemExit(f"missing_evidence was not counted: {summary}")
+                  return count
 
               try:
                   initialize = request(
@@ -375,6 +469,35 @@ jobs:
                   names = sorted(tool["name"] for tool in tools["tools"])
                   assert names == expected_tools, names
 
+                  plan = call_tool(3, "cairnid.evidence_plan", {})
+                  plan_content = assert_tool_success(plan, "evidence_plan")
+                  assert plan_content["status"] == "ready", plan_content
+
+                  status = call_tool(
+                      4,
+                      "cairnid.evidence_status",
+                      {"evidence_dir": "release-evidence"},
+                  )
+                  status_content = assert_tool_success(status, "evidence_status")
+                  assert status_content["status"] == "incomplete", status_content
+                  missing_evidence_count(status_content)
+
+                  check = call_tool(
+                      5,
+                      "cairnid.evidence_check",
+                      {"evidence_dir": "release-evidence"},
+                  )
+                  if check.get("isError") is not True:
+                      raise SystemExit(f"evidence_check unexpectedly succeeded: {check}")
+                  check_content = structured(check, "evidence_check")
+                  error = check_content.get("error")
+                  if not isinstance(error, dict):
+                      raise SystemExit(f"evidence_check missing structured error: {check}")
+                  assert error["code"] == "release_evidence_incomplete", error
+                  assert error["failure_code"] == "missing_evidence", error
+                  assert error["summary"]["status"] == "incomplete", error
+                  missing_evidence_count(error)
+
                   time.sleep(0.2)
                   extra_stdout = []
                   while True:
@@ -383,9 +506,16 @@ jobs:
                       except queue.Empty:
                           break
                   if extra_stdout:
-                      raise SystemExit(f"MCP wrote unexpected stdout after tools/list: {extra_stdout}")
+                      assert_no_sentinel("unexpected MCP stdout", extra_stdout)
+                      raise SystemExit(f"MCP wrote unexpected stdout after tools/call: {extra_stdout}")
+                  assert_no_sentinel(
+                      "MCP stdio smoke",
+                      "".join(stdout_lines),
+                      "".join(stderr_lines),
+                      observed_responses,
+                  )
                   if stderr_lines:
-                      raise SystemExit(f"MCP wrote stderr during stdio smoke: {''.join(stderr_lines)}")
+                      raise SystemExit(f"MCP wrote stderr during stdio smoke: {safe_stderr(stderr_lines)}")
               finally:
                   if process.poll() is None:
                       process.kill()
