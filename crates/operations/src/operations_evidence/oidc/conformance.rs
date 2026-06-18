@@ -1,5 +1,6 @@
 mod common;
 mod constants;
+mod export_normalizer;
 mod normalized;
 mod plan_export;
 mod redaction;
@@ -9,6 +10,7 @@ use self::{
     redaction::reject_forbidden_openid_result_fields,
 };
 use crate::operations_evidence::validation::{reject_non_empty_array, reject_true_bool};
+pub use export_normalizer::normalize_openid_conformance_export;
 use serde_json::Value;
 
 pub(in crate::operations_evidence) fn validate_openid_conformance_result(

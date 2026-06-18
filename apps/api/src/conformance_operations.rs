@@ -39,8 +39,27 @@ pub async fn run_conformance_command(args: &[String]) -> Result<(), Box<dyn std:
             println!("{}", serde_json::to_string_pretty(&report)?);
             Ok(())
         }
+        Some("oidcc-normalize-export") => {
+            let [_, profile, export_path, flag, published_result_url] = args else {
+                return Err(config_error(
+                    "usage: cairn-api conformance oidcc-normalize-export <config-op|basic-op> <zip-or-dir> --published-result-url <url>",
+                ));
+            };
+            if flag != "--published-result-url" {
+                return Err(config_error(
+                    "usage: cairn-api conformance oidcc-normalize-export <config-op|basic-op> <zip-or-dir> --published-result-url <url>",
+                ));
+            }
+            let report = cairn_operations::normalize_openid_conformance_export(
+                profile,
+                export_path,
+                published_result_url,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            Ok(())
+        }
         _ => Err(config_error(
-            "usage: cairn-api conformance <oidcc-static-config|oidcc-static-registration|oidcc-result-template <config-op|basic-op>>",
+            "usage: cairn-api conformance <oidcc-static-config|oidcc-static-registration|oidcc-result-template <config-op|basic-op>|oidcc-normalize-export <config-op|basic-op> <zip-or-dir> --published-result-url <url>>",
         )),
     }
 }

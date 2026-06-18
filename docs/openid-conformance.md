@@ -122,6 +122,15 @@ cairn-api conformance oidcc-result-template basic-op > openid-basic-op-result.te
 
 After the matching OIDF suite run is complete, save the final normalized files as `openid-config-op-result.json` and `openid-basic-op-result.json`. Replace the placeholder completion timestamp and official result URL, set `status="FINISHED"`, and set `result` to `PASSED` or `WARNING` only when the OIDF result supports that value. Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized result summaries; `cairnid evidence check` rejects secret-bearing field names in normalized OpenID result JSON.
 
+When an official OIDF certification package ZIP or unpacked export directory is available, normalize it locally instead of reshaping the result JSON by hand:
+
+```powershell
+cairn-api conformance oidcc-normalize-export config-op .\oidf-config-op-export.zip --published-result-url https://www.certification.openid.net/plan-detail.html?plan=<plan-id> > openid-config-op-result.json
+cairn-api conformance oidcc-normalize-export basic-op .\oidf-basic-op-export --published-result-url https://www.certification.openid.net/plan-detail.html?plan=<plan-id> > openid-basic-op-result.json
+```
+
+The normalizer reads `index.json` and `test-logs/test-log-*.json`, requires the expected Config OP or Basic OP plan name, requires every plan module to have a completed instance with a matching test log, requires `https://www.certification.openid.net` suite origins, accepts only `FINISHED` tests with `PASSED` or `WARNING` results, and rejects secret-bearing fields or credential-shaped values before emitting the token-free normalized summary.
+
 ## Evidence Gate
 
 The first-public-RC evidence gate requires:

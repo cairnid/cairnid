@@ -3,16 +3,17 @@ mod fixtures;
 use super::{
     DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION,
     ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions, ReleaseEvidenceError,
-    check_release_evidence, init_release_evidence_directory, release_assets_verification_receipt,
-    release_assets_verification_report, release_evidence_capture_plan, release_evidence_manifest,
-    release_evidence_status_report,
+    check_release_evidence, init_release_evidence_directory, normalize_openid_conformance_export,
+    release_assets_verification_receipt, release_assets_verification_report,
+    release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
 };
 use fixtures::*;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{fs, path::Path};
+use std::{fs, io::Write, path::Path};
 use time::OffsetDateTime;
 use uuid::Uuid;
+use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 #[test]
 fn release_evidence_passes_complete_directory() {
@@ -1395,6 +1396,152 @@ fn release_evidence_rejects_secret_fields_in_openid_plan_exports() {
 }
 
 #[test]
+fn release_evidence_rejects_plan_export_missing_modules_or_module_backing() {
+    let root = temp_evidence_dir("openid-plan-module-backing");
+    let mut no_modules =
+        openid_conformance_plan_export("oidcc-config-certification-test-plan", "PASSED");
+    no_modules["planInfo"]
+        .as_object_mut()
+        .expect("planInfo object")
+        .remove("modules");
+    write_json(&root, "openid-config-op-result.json", no_modules);
+
+    let mut unbacked_log =
+        openid_conformance_plan_export("oidcc-basic-certification-test-plan", "PASSED");
+    unbacked_log["testLogExports"][0]["testId"] = json!("synthetic-unbacked-log");
+    write_json(&root, "openid-basic-op-result.json", unbacked_log);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+    let config_artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "openid_config_op_conformance")
+        .expect("Config OP artifact");
+    let basic_artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "openid_basic_op_conformance")
+        .expect("Basic OP artifact");
+
+    assert_eq!(config_artifact.status, "failed");
+    assert!(
+        config_artifact
+            .failures
+            .iter()
+            .any(|failure| { failure.contains("planInfo.modules must be a non-empty array") })
+    );
+    assert_eq!(basic_artifact.status, "failed");
+    assert!(basic_artifact.failures.iter().any(|failure| {
+        failure.contains("testLogExports[0].testId must match a planInfo.modules instance")
+    }));
+}
+
+#[test]
+fn release_evidence_rejects_plan_export_missing_test_log_for_module_instance() {
+    let root = temp_evidence_dir("openid-plan-missing-module-log");
+    let mut plan_export =
+        openid_conformance_plan_export("oidcc-config-certification-test-plan", "PASSED");
+    plan_export["testLogExports"]
+        .as_array_mut()
+        .expect("test exports array")
+        .pop();
+    write_json(&root, "openid-config-op-result.json", plan_export);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "openid_config_op_conformance")
+        .expect("Config OP artifact");
+
+    assert_eq!(artifact.status, "failed");
+    assert!(artifact.failures.iter().any(|failure| {
+        failure.contains(
+            "testLogExports must include module oidcc-server-rotate-keys instance test-inst-002",
+        )
+    }));
+}
+
+#[test]
+fn openid_config_op_zip_export_normalizes_and_passes_release_evidence_check() {
+    let zip_path = temp_evidence_dir("oidf-config-op-zip").with_extension("zip");
+    write_oidf_export_zip(
+        &zip_path,
+        "oidcc-config-certification-test-plan",
+        &[("oidcc-server", "config-test-001", "PASSED", "FINISHED")],
+        "https://www.certification.openid.net/",
+    );
+
+    let normalized = normalize_openid_conformance_export(
+        "config-op",
+        &zip_path,
+        "https://www.certification.openid.net/plan-detail.html?plan=config-op",
+    )
+    .expect("normalize Config OP ZIP");
+    let root = temp_evidence_dir("oidf-config-op-normalized");
+    init_release_evidence_directory(&root, release_evidence_now(), false)
+        .expect("initialize evidence scaffold");
+    write_json(&root, "openid-config-op-result.json", normalized);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "openid_config_op_conformance")
+        .expect("Config OP artifact");
+
+    assert_eq!(artifact.status, "passed", "{:?}", artifact.failures);
+    fs::remove_file(zip_path).expect("cleanup ZIP");
+    fs::remove_dir_all(root).expect("cleanup evidence directory");
+}
+
+#[test]
+fn openid_basic_op_zip_export_normalizes_and_passes_release_evidence_check() {
+    let zip_path = temp_evidence_dir("oidf-basic-op-zip").with_extension("zip");
+    write_oidf_export_zip(
+        &zip_path,
+        "oidcc-basic-certification-test-plan",
+        &[
+            ("oidcc-server", "basic-test-001", "PASSED", "FINISHED"),
+            (
+                "oidcc-claims-essential",
+                "basic-test-002",
+                "WARNING",
+                "FINISHED",
+            ),
+        ],
+        "https://www.certification.openid.net/",
+    );
+
+    let normalized = normalize_openid_conformance_export(
+        "basic-op",
+        &zip_path,
+        "https://www.certification.openid.net/plan-detail.html?plan=basic-op",
+    )
+    .expect("normalize Basic OP ZIP");
+    assert_eq!(normalized["result"], "WARNING");
+    let root = temp_evidence_dir("oidf-basic-op-normalized");
+    init_release_evidence_directory(&root, release_evidence_now(), false)
+        .expect("initialize evidence scaffold");
+    write_json(&root, "openid-basic-op-result.json", normalized);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "openid_basic_op_conformance")
+        .expect("Basic OP artifact");
+
+    assert_eq!(artifact.status, "passed", "{:?}", artifact.failures);
+    fs::remove_file(zip_path).expect("cleanup ZIP");
+    fs::remove_dir_all(root).expect("cleanup evidence directory");
+}
+
+#[test]
 fn release_evidence_rejects_generic_or_failed_openid_result_artifacts() {
     let root = temp_evidence_dir("failed-openid-results");
     write_json(
@@ -2717,6 +2864,88 @@ fn rewrite_checksum_for_file(root: &Path, file_name: &str) {
 fn sha256_test_file(path: &Path) -> String {
     let bytes = fs::read(path).expect("read file for sha256");
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn write_oidf_export_zip(
+    path: &Path,
+    plan_name: &str,
+    modules: &[(&str, &str, &str, &str)],
+    exported_from: &str,
+) {
+    let file = fs::File::create(path).expect("create OIDF ZIP");
+    let mut archive = ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    archive
+        .start_file("test-logs/index.json", options)
+        .expect("start index");
+    archive
+        .write_all(
+            serde_json::to_string_pretty(&oidf_index(plan_name, modules))
+                .expect("serialize index")
+                .as_bytes(),
+        )
+        .expect("write index");
+    for (module, test_id, result, status) in modules {
+        archive
+            .start_file(
+                format!("test-logs/test-log-{module}-{test_id}.json"),
+                options,
+            )
+            .expect("start log");
+        archive
+            .write_all(
+                serde_json::to_string_pretty(&oidf_test_log(
+                    module,
+                    test_id,
+                    result,
+                    status,
+                    exported_from,
+                ))
+                .expect("serialize log")
+                .as_bytes(),
+            )
+            .expect("write log");
+    }
+    archive.finish().expect("finish OIDF ZIP");
+}
+
+fn oidf_index(plan_name: &str, modules: &[(&str, &str, &str, &str)]) -> Value {
+    json!({
+        "planName": plan_name,
+        "modules": modules.iter().map(|(module, test_id, _, _)| {
+            json!({
+                "testModule": module,
+                "instances": [test_id]
+            })
+        }).collect::<Vec<_>>()
+    })
+}
+
+fn oidf_test_log(
+    module: &str,
+    test_id: &str,
+    result: &str,
+    status: &str,
+    exported_from: &str,
+) -> Value {
+    json!({
+        "exportedAt": "June 7, 2026, 12:00:00 PM",
+        "exportedFrom": exported_from,
+        "exportedVersion": "5.1.24",
+        "testInfo": {
+            "id": test_id,
+            "testName": module,
+            "status": status,
+            "result": result
+        },
+        "results": [
+            {
+                "result": "SUCCESS",
+                "msg": "Test completed"
+            }
+        ]
+    })
 }
 
 #[test]

@@ -14,7 +14,7 @@ use crate::config::{
 use cairn_domain::Environment;
 use cairn_operations::{
     ReleaseEvidenceArtifactReport, ReleaseEvidenceReport, check_release_evidence,
-    init_release_evidence_directory,
+    init_release_evidence_directory, normalize_openid_conformance_export,
 };
 use serde_json::{Map, Value, json};
 use std::{
@@ -348,6 +348,167 @@ fn openid_conformance_result_template_accepts_aliases_and_rejects_unknown_profil
     assert!(error.to_string().contains("config-op or basic-op"));
 }
 
+#[test]
+fn oidf_export_directory_normalizes_like_zip_input() {
+    let root = temp_release_evidence_dir("oidf-config-op-dir");
+    write_oidf_export_dir(
+        &root,
+        "oidcc-config-certification-test-plan",
+        &[("oidcc-server", "config-test-dir-001", "PASSED", "FINISHED")],
+        None,
+        "https://www.certification.openid.net/",
+    );
+
+    let normalized = normalize_openid_conformance_export(
+        "config-op",
+        &root,
+        "https://www.certification.openid.net/plan-detail.html?plan=config-op-dir",
+    )
+    .expect("normalize unpacked export");
+    let (_, artifact) = check_openid_result_artifact("openid-config-op-result.json", normalized);
+
+    assert_eq!(artifact.status, "passed", "{:?}", artifact.failures);
+    fs::remove_dir_all(root).expect("cleanup export directory");
+}
+
+#[test]
+fn oidf_export_normalizer_rejects_missing_log_for_module_instance() {
+    let root = temp_release_evidence_dir("oidf-missing-log");
+    write_oidf_export_dir(
+        &root,
+        "oidcc-config-certification-test-plan",
+        &[
+            ("oidcc-server", "config-test-001", "PASSED", "FINISHED"),
+            (
+                "oidcc-server-rotate-keys",
+                "config-test-002",
+                "PASSED",
+                "FINISHED",
+            ),
+        ],
+        Some(&["config-test-002"]),
+        "https://www.certification.openid.net/",
+    );
+
+    let error = normalize_openid_conformance_export(
+        "config-op",
+        &root,
+        "https://www.certification.openid.net/plan-detail.html?plan=config-op",
+    )
+    .expect_err("missing module log must fail");
+
+    assert!(error.to_string().contains("missing test log"));
+    fs::remove_dir_all(root).expect("cleanup export directory");
+}
+
+#[test]
+fn oidf_export_normalizer_rejects_wrong_plan_name() {
+    let root = temp_release_evidence_dir("oidf-wrong-plan");
+    write_oidf_export_dir(
+        &root,
+        "oidcc-basic-certification-test-plan",
+        &[("oidcc-server", "basic-test-001", "PASSED", "FINISHED")],
+        None,
+        "https://www.certification.openid.net/",
+    );
+
+    let error = normalize_openid_conformance_export(
+        "config-op",
+        &root,
+        "https://www.certification.openid.net/plan-detail.html?plan=config-op",
+    )
+    .expect_err("wrong plan must fail");
+
+    assert!(error.to_string().contains("plan name must be"));
+    fs::remove_dir_all(root).expect("cleanup export directory");
+}
+
+#[test]
+fn oidf_export_normalizer_rejects_failed_unknown_or_unfinished_tests() {
+    for (result, status) in [
+        ("FAILED", "FINISHED"),
+        ("UNKNOWN", "FINISHED"),
+        ("PASSED", "RUNNING"),
+    ] {
+        let root = temp_release_evidence_dir(&format!("oidf-bad-test-{result}-{status}"));
+        write_oidf_export_dir(
+            &root,
+            "oidcc-config-certification-test-plan",
+            &[("oidcc-server", "config-test-001", result, status)],
+            None,
+            "https://www.certification.openid.net/",
+        );
+
+        let error = normalize_openid_conformance_export(
+            "config-op",
+            &root,
+            "https://www.certification.openid.net/plan-detail.html?plan=config-op",
+        )
+        .expect_err("bad test state must fail");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("status must be FINISHED")
+                || message.contains("result must be PASSED or WARNING"),
+            "{message}"
+        );
+        fs::remove_dir_all(root).expect("cleanup export directory");
+    }
+}
+
+#[test]
+fn oidf_export_normalizer_rejects_wrong_suite_origin() {
+    let root = temp_release_evidence_dir("oidf-wrong-origin");
+    write_oidf_export_dir(
+        &root,
+        "oidcc-config-certification-test-plan",
+        &[("oidcc-server", "config-test-001", "PASSED", "FINISHED")],
+        None,
+        "https://suite.example.com/",
+    );
+
+    let error = normalize_openid_conformance_export(
+        "config-op",
+        &root,
+        "https://www.certification.openid.net/plan-detail.html?plan=config-op",
+    )
+    .expect_err("wrong suite origin must fail");
+
+    assert!(error.to_string().contains("www.certification.openid.net"));
+    fs::remove_dir_all(root).expect("cleanup export directory");
+}
+
+#[test]
+fn oidf_export_normalizer_rejects_secret_fields_without_echoing_secret_values() {
+    let root = temp_release_evidence_dir("oidf-secret-field");
+    write_oidf_export_dir(
+        &root,
+        "oidcc-config-certification-test-plan",
+        &[("oidcc-server", "config-test-001", "PASSED", "FINISHED")],
+        None,
+        "https://www.certification.openid.net/",
+    );
+    let log_path = root
+        .join("test-logs")
+        .join("test-log-oidcc-server-config-test-001.json");
+    let mut log: Value =
+        serde_json::from_str(&fs::read_to_string(&log_path).expect("read log")).expect("parse log");
+    log["results"][0]["client_secret"] = json!("super-sensitive-oidf-secret");
+    write_json_file(&log_path, &log);
+
+    let error = normalize_openid_conformance_export(
+        "config-op",
+        &root,
+        "https://www.certification.openid.net/plan-detail.html?plan=config-op",
+    )
+    .expect_err("secret-bearing field must fail");
+    let message = error.to_string();
+
+    assert!(message.contains("forbidden secret-bearing field"));
+    assert!(!message.contains("super-sensitive-oidf-secret"));
+    fs::remove_dir_all(root).expect("cleanup export directory");
+}
+
 fn completed_openid_result_from_template(profile: &str, result: &str, result_url: &str) -> Value {
     let mut value = openid_result_template_value(profile);
     value["status"] = json!("FINISHED");
@@ -424,11 +585,7 @@ fn temp_release_evidence_dir(name: &str) -> PathBuf {
 }
 
 fn write_json(root: &Path, file_name: &str, value: &Value) {
-    fs::write(
-        root.join(file_name),
-        serde_json::to_string_pretty(value).expect("serialize evidence"),
-    )
-    .expect("write evidence");
+    write_json_file(&root.join(file_name), value);
 }
 
 fn release_evidence_now() -> OffsetDateTime {
@@ -441,6 +598,76 @@ fn release_evidence_now() -> OffsetDateTime {
 
 fn release_evidence_timestamp() -> &'static str {
     "2026-06-07T12:00:00Z"
+}
+
+fn write_oidf_export_dir(
+    root: &Path,
+    plan_name: &str,
+    modules: &[(&str, &str, &str, &str)],
+    omitted_test_ids: Option<&[&str]>,
+    exported_from: &str,
+) {
+    let logs_dir = root.join("test-logs");
+    fs::create_dir_all(&logs_dir).expect("create test-logs");
+    write_json_file(
+        &logs_dir.join("index.json"),
+        &oidf_index(plan_name, modules),
+    );
+    for (module, test_id, result, status) in modules {
+        if omitted_test_ids.is_some_and(|omitted| omitted.contains(test_id)) {
+            continue;
+        }
+        write_json_file(
+            &logs_dir.join(format!("test-log-{module}-{test_id}.json")),
+            &oidf_test_log(module, test_id, result, status, exported_from),
+        );
+    }
+}
+
+fn oidf_index(plan_name: &str, modules: &[(&str, &str, &str, &str)]) -> Value {
+    json!({
+        "planName": plan_name,
+        "modules": modules.iter().map(|(module, test_id, _, _)| {
+            json!({
+                "testModule": module,
+                "instances": [test_id]
+            })
+        }).collect::<Vec<_>>()
+    })
+}
+
+fn oidf_test_log(
+    module: &str,
+    test_id: &str,
+    result: &str,
+    status: &str,
+    exported_from: &str,
+) -> Value {
+    json!({
+        "exportedAt": "June 7, 2026, 12:00:00 PM",
+        "exportedFrom": exported_from,
+        "exportedVersion": "5.1.24",
+        "testInfo": {
+            "id": test_id,
+            "testName": module,
+            "status": status,
+            "result": result
+        },
+        "results": [
+            {
+                "result": "SUCCESS",
+                "msg": "Test completed"
+            }
+        ]
+    })
+}
+
+fn write_json_file(path: &Path, value: &Value) {
+    fs::write(
+        path,
+        serde_json::to_string_pretty(value).expect("serialize JSON"),
+    )
+    .expect("write JSON");
 }
 
 fn test_config(environment: Environment) -> ApiConfig {
