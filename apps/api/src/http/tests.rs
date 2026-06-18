@@ -14,6 +14,7 @@ use uuid::Uuid;
 const TEST_CSRF_TOKEN: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg";
 
 mod admin_audit;
+mod admin_groups;
 mod admin_lifecycle;
 mod admin_oidc_clients;
 mod admin_sessions;
