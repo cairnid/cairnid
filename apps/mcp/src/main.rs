@@ -164,6 +164,7 @@ struct McpEvidencePlan {
 struct McpEvidencePlanStep {
     name: String,
     file_name: String,
+    release_gate: String,
     command: String,
     validator: String,
     status: String,
@@ -198,6 +199,7 @@ struct McpEvidenceManifest {
 struct McpEvidenceManifestArtifact {
     name: String,
     file_name: String,
+    release_gate: String,
     command: String,
     validator: String,
     contains_secrets: bool,
@@ -225,6 +227,7 @@ struct McpEvidenceSummary {
 struct McpEvidenceArtifactSummary {
     name: String,
     file_name: String,
+    release_gate: String,
     command: String,
     status: String,
     check_count: usize,
@@ -878,6 +881,7 @@ fn mcp_evidence_plan_step(step: ReleaseEvidencePlanStep) -> McpEvidencePlanStep 
     McpEvidencePlanStep {
         name: step.name.to_owned(),
         file_name: step.file_name.to_owned(),
+        release_gate: step.release_gate.to_owned(),
         command: step.command.to_owned(),
         validator: step.validator.to_owned(),
         status: step.status.to_owned(),
@@ -929,6 +933,7 @@ fn mcp_manifest_artifact(artifact: ReleaseEvidenceManifestArtifact) -> McpEviden
     McpEvidenceManifestArtifact {
         name: artifact.name.to_owned(),
         file_name: artifact.file_name.to_owned(),
+        release_gate: artifact.release_gate.to_owned(),
         command: artifact.command.to_owned(),
         validator: artifact.validator.to_owned(),
         contains_secrets: artifact.contains_secrets,
@@ -979,6 +984,7 @@ fn mcp_artifact_summary(artifact: &ReleaseEvidenceArtifactReport) -> McpEvidence
     McpEvidenceArtifactSummary {
         name: artifact.name.to_owned(),
         file_name: artifact.file_name.to_owned(),
+        release_gate: artifact.release_gate.to_owned(),
         command: artifact.command.to_owned(),
         status: stable_artifact_status(artifact.status).to_owned(),
         check_count: artifact.checks.len(),

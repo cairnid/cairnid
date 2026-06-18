@@ -39,6 +39,7 @@ const EVIDENCE_SUMMARY_KEYS: &[&str] = &[
 const ARTIFACT_SUMMARY_KEYS: &[&str] = &[
     "name",
     "file_name",
+    "release_gate",
     "command",
     "status",
     "check_count",
@@ -213,7 +214,19 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
             artifact.as_object().expect("artifact summary object"),
             ARTIFACT_SUMMARY_KEYS,
         );
+        assert!(
+            artifact
+                .get("release_gate")
+                .and_then(Value::as_str)
+                .is_some_and(|release_gate| !release_gate.is_empty()),
+            "artifact summary should expose sanitized release gate metadata: {artifact}"
+        );
     }
+    assert_release_gate(
+        named_item(artifacts, "dependency_policy_check", "status artifact"),
+        "Dependency policy",
+        "status artifact",
+    );
     assert!(
         !status.to_string().contains(SENTINEL),
         "MCP response exposed raw artifact content: {status}"
@@ -293,7 +306,47 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
             .is_some_and(|steps| !steps.is_empty()),
         "evidence_plan should include sanitized plan steps"
     );
+    let plan_steps = plan_structured
+        .get("steps")
+        .and_then(Value::as_array)
+        .expect("evidence_plan steps");
+    assert_release_gate(
+        named_item(plan_steps, "dependency_policy_check", "plan step"),
+        "Dependency policy",
+        "plan step",
+    );
     assert_no_sentinel(&plan, "evidence_plan");
+
+    let manifest = client
+        .call_tool(
+            CallToolRequestParams::new("cairnid.evidence_manifest")
+                .with_arguments(JsonObject::new()),
+        )
+        .await
+        .expect("call evidence_manifest through rmcp client");
+    assert_eq!(manifest.is_error, Some(false));
+    let manifest_structured =
+        assert_structured_content_matches_text(&manifest, "evidence_manifest");
+    assert_eq!(
+        manifest_structured
+            .get("schema_version")
+            .and_then(Value::as_str),
+        Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+    );
+    let manifest_artifacts = manifest_structured
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .expect("evidence_manifest artifacts");
+    assert_release_gate(
+        named_item(
+            manifest_artifacts,
+            "dependency_policy_check",
+            "manifest artifact",
+        ),
+        "Dependency policy",
+        "manifest artifact",
+    );
+    assert_no_sentinel(&manifest, "evidence_manifest");
 
     let status = client
         .call_tool(
@@ -313,6 +366,19 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
     assert_eq!(
         status_structured.get("status").and_then(Value::as_str),
         Some("incomplete")
+    );
+    let status_artifacts = status_structured
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .expect("evidence_status artifacts");
+    assert_release_gate(
+        named_item(
+            status_artifacts,
+            "dependency_policy_check",
+            "status artifact",
+        ),
+        "Dependency policy",
+        "status artifact",
     );
     assert_no_sentinel(&status, "evidence_status");
 
@@ -337,6 +403,17 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
             .and_then(|error| error.get("code"))
             .and_then(Value::as_str),
         Some("release_evidence_incomplete")
+    );
+    let check_artifacts = check_structured
+        .get("error")
+        .and_then(|error| error.get("summary"))
+        .and_then(|summary| summary.get("artifacts"))
+        .and_then(Value::as_array)
+        .expect("evidence_check summary artifacts");
+    assert_release_gate(
+        named_item(check_artifacts, "dependency_policy_check", "check artifact"),
+        "Dependency policy",
+        "check artifact",
     );
     assert_no_sentinel(&check, "evidence_check");
 
@@ -625,6 +702,7 @@ fn stdio_invalid_evidence_json_remains_sanitized_validation_summary() {
 fn write_unsafe_artifact_shape(evidence_dir: &Path) {
     let artifact = json!({
         "status": "ok",
+        "release_gate": SENTINEL,
         "generated_at": OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
             .expect("format generated_at"),
@@ -667,6 +745,21 @@ fn assert_allowed_keys(
     expected.sort_unstable();
 
     assert_eq!(actual, expected, "{context} keys changed");
+}
+
+fn named_item<'a>(items: &'a [Value], name: &str, context: &str) -> &'a Value {
+    items
+        .iter()
+        .find(|item| item.get("name").and_then(Value::as_str) == Some(name))
+        .unwrap_or_else(|| panic!("{context} named {name} should be present"))
+}
+
+fn assert_release_gate(item: &Value, expected: &str, context: &str) {
+    assert_eq!(
+        item.get("release_gate").and_then(Value::as_str),
+        Some(expected),
+        "{context} should expose the sanitized registry release gate"
+    );
 }
 
 fn assert_structured_content_matches_text<'a>(

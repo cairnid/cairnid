@@ -954,6 +954,26 @@ jobs:
           subject-path: dist/cairnid-mcp-${{ needs.prepare.outputs.tag }}-x86_64-pc-windows-msvc.zip
           sbom-path: dist/cairnid-mcp-${{ needs.prepare.outputs.tag }}-x86_64-pc-windows-msvc.sbom.cdx.json
 
+      - name: Verify assembled release assets with produced CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verifier_root="$(mktemp -d "${RUNNER_TEMP}/cairnid-release-assets-verifier.XXXXXX")"
+          tar -xzf "dist/cairnid-${RELEASE_TAG}-${LINUX_TARGET}.tar.gz" -C "$verifier_root"
+          verifier="${verifier_root}/cairnid-${RELEASE_TAG}-${LINUX_TARGET}/cairnid"
+          test -x "$verifier"
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          "$verifier" release-assets verify dist \
+            --tag "$RELEASE_TAG" \
+            --source-commit "$RELEASE_SOURCE_COMMIT" \
+            --run-url "$run_url" \
+            --provenance-attestations-verified \
+            --sbom-attestations-verified \
+            > "$RUNNER_TEMP/release-assets-verification.json"
+          test -s "$RUNNER_TEMP/release-assets-verification.json"
+
       - name: Write release notes
         shell: bash
         run: |
