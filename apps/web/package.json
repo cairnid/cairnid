@@ -12,21 +12,21 @@
     "test:e2e": "bun scripts/run-playwright.ts"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.17.0",
+    "@lucide/svelte": "^1.21.0",
     "@sveltejs/adapter-node": "^5.5.4",
-    "@sveltejs/kit": "^2.63.0",
-    "svelte": "^5.56.0",
+    "@sveltejs/kit": "^2.65.2",
+    "svelte": "^5.56.3",
     "zod": "^4.2.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.61.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
-    "@tailwindcss/vite": "^4.3.0",
-    "@types/node": "^25.9.2",
+    "@tailwindcss/vite": "^4.3.1",
+    "@types/node": "^25.9.3",
     "svelte-check": "^4.3.4",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.9.3",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }
