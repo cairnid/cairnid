@@ -20,6 +20,10 @@ The repository includes a root `.dockerignore` so generated Rust targets, Bun de
 
 ## API Container
 
+### Current Container Status
+
+The repository contains Dockerfiles and Compose configuration, and CI validates that the API and web images build and pass image-level smoke checks. The current release workflow does not publish container images or registry digests. Operators should build images from the reviewed source checkout until a separate container publishing workflow and registry policy are added.
+
 The root `Dockerfile` builds `cairn-api` with CMake, NASM, pkg-config, and Linux OpenSSL development headers for AWS-LC, OpenSSL key generation, and `webauthn-rs`. The runtime stage ships a slim Debian image with CA certificates and `libssl3`.
 
 The API image healthcheck runs `cairn-api healthcheck`, which performs an HTTP GET against the local `/healthz` endpoint and requires the JSON status payload to be `ok`. Because `/healthz` performs a database health check, container health probes cover both HTTP serving and Postgres reachability after startup migrations.
@@ -118,7 +122,7 @@ Use these against a production-like HTTPS issuer to prepare Config OP and Basic 
 
 CI validates `cairnid evidence` tooling with placeholder environment values. Linux CI proves `cairnid evidence plan` does not print values, `cairnid evidence init` writes the expected scaffold, and `cairnid evidence status` reports next actions for an incomplete evidence directory. Windows CI runs `cargo test -p cairnid --locked` for the CLI binary contract, including manifest, init, incomplete status/check, and common failure-redaction coverage.
 
-CI also generates the dependency-policy evidence receipt after pinned `cargo-deny`, `cargo-audit`, and Bun audit checks pass. Container checks validate the Compose file, build both production images, run `cairn-api signing-key generate-kek` inside the API image, run `bun --version` inside the web image, and boot the web image long enough to run its `/healthz` probe. Docker Compose waits for Postgres health before starting the API and waits for API health before starting the web service. The image smokes verify Dockerfile buildability and runtime entrypoint dependencies without requiring a live database or external provider.
+CI also generates the dependency-policy evidence receipt after pinned `cargo-deny`, `cargo-audit`, and Bun audit checks pass. Container checks validate the Compose file, build both production images, run `cairn-api signing-key generate-kek` inside the API image, run `bun --version` inside the web image, and boot the web image long enough to run its `/healthz` probe. Docker Compose waits for Postgres health before starting the API and waits for API health before starting the web service. The image smokes verify Dockerfile buildability and runtime entrypoint dependencies without requiring a live database or external provider. These checks stop at smoke coverage and create no image tags, registry entries, or digests.
 
 Operational email delivery command:
 

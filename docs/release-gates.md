@@ -15,7 +15,7 @@ Cairn Identity is pre-beta. A release can be recommended for production use only
 | Frontend quality | `bun run check`, `bun run test`, `bun run build`, and `bun run test:e2e` pass | CI-gated |
 | Docs export | `bun run docs:site -- --out <temp-dir>` completes without committing generated output | CI-gated |
 | Database migrations | Postgres 17 migration tests pass against a disposable database | CI-gated |
-| Containers | Compose validates, API image builds, web image builds, and image-level smoke checks pass | CI-gated |
+| Containers | Compose validates, API image builds, web image builds, and image-level smoke checks pass; no container images are published by the release workflow | CI-gated smoke only |
 | Deployed OIDC metadata | `cairn-api operations oidc-metadata-smoke` passes against the HTTPS API origin | Pending external evidence |
 | OpenID conformance | Config OP and Basic OP suite runs pass using generated static registration/config artifacts | Pending external evidence |
 | Browser origin defense | `cairn-api operations browser-origin-smoke` passes against the HTTPS API origin | Pending external evidence |
@@ -70,6 +70,8 @@ Maintainers must review and publish the draft before the assets are public. RC t
 
 CI distribution smoke artifacts are different. The regular CI workflow uploads short-lived Actions artifacts named `*-ci-rehearsal-*` to prove release-mode binaries can build and smoke-test before a tag exists. Those CI artifacts are not public release assets, are not attached to a GitHub Release, and are not the install path for users.
 
+Container checks are also different from public release assets. CI validates Compose configuration, builds the API and web images, and runs image-level smoke checks, but no workflow currently pushes images to a registry or records public container digests. Container publication requires a separate registry policy and workflow before it can be documented as a release artifact.
+
 After a draft release is published, download and verify the archive, checksum file, manifest, and SBOM from the GitHub Release page or with `gh release download`. Example:
 
 ```powershell
@@ -85,6 +87,7 @@ The first `gh attestation verify` command checks the default SLSA provenance att
 ## Current Blockers
 
 - No first public RC tag has been pushed and published.
+- No container image publishing workflow or registry policy exists; CI container checks are smoke evidence only.
 - No published OpenID Foundation conformance result.
 - No deployed HTTPS metadata/JWKS smoke receipt.
 - No deployed browser-origin or security-header smoke receipt.
