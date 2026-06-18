@@ -230,8 +230,33 @@ jobs:
 
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
+        timeout-minutes: 35
         shell: bash
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake nasm pkg-config libssl-dev
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+
+          apt_with_retry() {
+            local description="$1"
+            shift
+            local status=0
+            for attempt in 1 2 3; do
+              echo "${description} (attempt ${attempt}/3)"
+              if sudo env DEBIAN_FRONTEND=noninteractive timeout --kill-after=30s 300s "$@"; then
+                return 0
+              fi
+              status=$?
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::${description} failed after 3 attempts"
+                return "$status"
+              fi
+              sleep "$((attempt * 10))"
+            done
+          }
+
+          apt_with_retry "apt-get update" apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update
+          apt_with_retry "apt-get install" apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 install -y --no-install-recommends cmake nasm pkg-config libssl-dev
 
       - name: Show Rust version
         shell: bash
