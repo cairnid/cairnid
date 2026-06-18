@@ -1,4 +1,11 @@
 use cairn_operations::init_release_evidence_directory;
+use rmcp::{
+    ServiceExt,
+    model::{
+        CallToolRequestParams, CallToolResult, ClientCapabilities, ClientInfo, Implementation,
+        JsonObject, ProtocolVersion,
+    },
+};
 use serde_json::{Value, json};
 use std::{
     ffi::OsString,
@@ -213,6 +220,135 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
     );
 
     drop(server);
+    remove_temp_root(root);
+}
+
+#[tokio::test]
+async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
+    let root = temp_root("rmcp-client-smoke");
+    let evidence_dir = root.join(DEFAULT_EVIDENCE_CHILD);
+    init_release_evidence_directory(&evidence_dir, OffsetDateTime::now_utc(), false)
+        .expect("initialize evidence directory");
+    write_unsafe_artifact_shape(&evidence_dir);
+
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_cairnid-mcp"))
+        .arg("--evidence-root")
+        .arg(&root)
+        .env("RUST_LOG", "off")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn cairnid-mcp for rmcp client smoke");
+    let stdout = child.stdout.take().expect("child stdout");
+    let stdin = child.stdin.take().expect("child stdin");
+    let client = ClientInfo::new(
+        ClientCapabilities::default(),
+        Implementation::new("cairnid-mcp-rmcp-stdio-smoke", "0.0.0"),
+    )
+    .with_protocol_version(ProtocolVersion::V_2025_11_25)
+    .serve((stdout, stdin))
+    .await
+    .expect("initialize rmcp client");
+    let server_info = client.peer_info().expect("server info after initialize");
+    assert_eq!(server_info.protocol_version, ProtocolVersion::V_2025_11_25);
+    assert_eq!(server_info.server_info.name, "cairnid-mcp");
+
+    let mut tool_names = client
+        .list_all_tools()
+        .await
+        .expect("list tools through rmcp client")
+        .into_iter()
+        .map(|tool| tool.name.into_owned())
+        .collect::<Vec<_>>();
+    tool_names.sort_unstable();
+    assert_eq!(
+        tool_names,
+        vec![
+            "cairnid.evidence_check",
+            "cairnid.evidence_manifest",
+            "cairnid.evidence_plan",
+            "cairnid.evidence_status",
+        ]
+    );
+
+    let plan = client
+        .call_tool(
+            CallToolRequestParams::new("cairnid.evidence_plan").with_arguments(JsonObject::new()),
+        )
+        .await
+        .expect("call evidence_plan through rmcp client");
+    assert_eq!(plan.is_error, Some(false));
+    let plan_structured = assert_structured_content_matches_text(&plan, "evidence_plan");
+    assert_eq!(
+        plan_structured
+            .get("schema_version")
+            .and_then(Value::as_str),
+        Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+    );
+    assert!(
+        plan_structured
+            .get("steps")
+            .and_then(Value::as_array)
+            .is_some_and(|steps| !steps.is_empty()),
+        "evidence_plan should include sanitized plan steps"
+    );
+    assert_no_sentinel(&plan, "evidence_plan");
+
+    let status = client
+        .call_tool(
+            CallToolRequestParams::new("cairnid.evidence_status")
+                .with_arguments(json_object(json!({"evidence_dir": DEFAULT_EVIDENCE_CHILD}))),
+        )
+        .await
+        .expect("call evidence_status through rmcp client");
+    assert_eq!(status.is_error, Some(false));
+    let status_structured = assert_structured_content_matches_text(&status, "evidence_status");
+    assert_eq!(
+        status_structured
+            .get("schema_version")
+            .and_then(Value::as_str),
+        Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+    );
+    assert_eq!(
+        status_structured.get("status").and_then(Value::as_str),
+        Some("incomplete")
+    );
+    assert_no_sentinel(&status, "evidence_status");
+
+    let check = client
+        .call_tool(
+            CallToolRequestParams::new("cairnid.evidence_check")
+                .with_arguments(json_object(json!({"evidence_dir": DEFAULT_EVIDENCE_CHILD}))),
+        )
+        .await
+        .expect("call evidence_check through rmcp client");
+    assert_eq!(check.is_error, Some(true));
+    let check_structured = assert_structured_content_matches_text(&check, "evidence_check");
+    assert_eq!(
+        check_structured
+            .get("schema_version")
+            .and_then(Value::as_str),
+        Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+    );
+    assert_eq!(
+        check_structured
+            .get("error")
+            .and_then(|error| error.get("code"))
+            .and_then(Value::as_str),
+        Some("release_evidence_incomplete")
+    );
+    assert_no_sentinel(&check, "evidence_check");
+
+    client.cancel().await.expect("cancel rmcp client");
+    let exit_status = tokio::time::timeout(Duration::from_secs(5), child.wait())
+        .await
+        .expect("cairnid-mcp should exit after client cancellation")
+        .expect("wait for cairnid-mcp");
+    assert!(
+        exit_status.success(),
+        "cairnid-mcp exited with {exit_status}"
+    );
     remove_temp_root(root);
 }
 
@@ -531,6 +667,46 @@ fn assert_allowed_keys(
     expected.sort_unstable();
 
     assert_eq!(actual, expected, "{context} keys changed");
+}
+
+fn assert_structured_content_matches_text<'a>(
+    result: &'a CallToolResult,
+    context: &str,
+) -> &'a Value {
+    let structured = result
+        .structured_content
+        .as_ref()
+        .unwrap_or_else(|| panic!("{context} omitted structuredContent"));
+    let text = result
+        .content
+        .first()
+        .and_then(|content| content.as_text())
+        .map(|text| text.text.as_str())
+        .unwrap_or_else(|| panic!("{context} omitted content[0].text"));
+    let text_json = serde_json::from_str::<Value>(text)
+        .unwrap_or_else(|error| panic!("{context} content[0].text was not JSON: {error}"));
+
+    assert_eq!(
+        &text_json, structured,
+        "{context} content[0].text should match structuredContent"
+    );
+    structured
+}
+
+fn assert_no_sentinel(result: &CallToolResult, context: &str) {
+    let serialized = serde_json::to_string(result)
+        .unwrap_or_else(|error| panic!("serialize {context}: {error}"));
+    assert!(
+        !serialized.contains(SENTINEL),
+        "{context} exposed sentinel data: {serialized}"
+    );
+}
+
+fn json_object(value: Value) -> JsonObject {
+    value
+        .as_object()
+        .cloned()
+        .unwrap_or_else(|| panic!("expected JSON object: {value}"))
 }
 
 fn assert_tools_list_output_schemas(tools: &[Value]) {

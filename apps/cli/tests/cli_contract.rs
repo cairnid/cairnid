@@ -2,14 +2,21 @@
 
 use cairn_operations::RELEASE_EVIDENCE_SCHEMA_VERSION;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     env, fs,
-    path::PathBuf,
+    fs::File,
+    io::Write,
+    path::{Path, PathBuf},
     process::{Command, Output},
     time::{SystemTime, UNIX_EPOCH},
 };
+use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 const SECRET_SENTINEL: &str = "TEST_SECRET_SENTINEL_DO_NOT_PRINT";
+const RELEASE_ASSET_TAG: &str = "v0.1.0-rc.1";
+const RELEASE_ASSET_SOURCE_COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
+const RELEASE_ASSET_RUN_URL: &str = "https://github.com/cairnid/cairnid/actions/runs/123456789";
 
 #[test]
 fn top_level_help_describes_evidence_commands() {
@@ -20,6 +27,7 @@ fn top_level_help_describes_evidence_commands() {
     assert!(stdout.contains("CairnID operator CLI"));
     assert!(stdout.contains("Usage: cairnid"));
     assert!(stdout.contains("evidence"));
+    assert!(stdout.contains("release-assets"));
     assert!(stdout.contains("Examples:"));
 }
 
@@ -50,6 +58,23 @@ fn evidence_check_help_describes_arguments_and_examples() {
     assert!(stdout.contains("EVIDENCE_DIR"));
     assert!(stdout.contains("--evidence-dir <EVIDENCE_DIR>"));
     assert!(stdout.contains("--max-age-days <DAYS>"));
+    assert!(stdout.contains("Examples:"));
+}
+
+#[test]
+fn release_assets_verify_help_describes_arguments_and_manual_flags() {
+    let output = run_cairnid(["release-assets", "verify", "--help"]);
+
+    assert_success(&output);
+    let stdout = stdout(&output);
+    assert!(stdout.contains("Verify local release asset files"));
+    assert!(stdout.contains("RELEASE_DIR"));
+    assert!(stdout.contains("--tag <TAG>"));
+    assert!(stdout.contains("--source-commit <SHA>"));
+    assert!(stdout.contains("--release-url <URL>"));
+    assert!(stdout.contains("--run-url <URL>"));
+    assert!(stdout.contains("--provenance-attestations-verified"));
+    assert!(stdout.contains("--sbom-attestations-verified"));
     assert!(stdout.contains("Examples:"));
 }
 
@@ -224,6 +249,111 @@ fn evidence_manifest_emits_expected_json_contract_without_values() {
                 .as_str()
                 .is_some_and(|note| note.contains("access-controlled")))
     );
+}
+
+#[test]
+fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
+    let release_dir = fake_release_assets_dir("verify-success");
+    let release_dir_arg = release_dir.to_string_lossy().into_owned();
+
+    let output = run_cairnid([
+        "release-assets",
+        "verify",
+        &release_dir_arg,
+        "--tag",
+        RELEASE_ASSET_TAG,
+        "--source-commit",
+        RELEASE_ASSET_SOURCE_COMMIT,
+        "--run-url",
+        RELEASE_ASSET_RUN_URL,
+        "--provenance-attestations-verified",
+        "--sbom-attestations-verified",
+    ]);
+
+    assert_success(&output);
+    assert!(stderr(&output).is_empty());
+    let receipt_stdout = stdout(&output);
+    assert!(!receipt_stdout.contains(SECRET_SENTINEL));
+
+    let receipt: Value = serde_json::from_slice(&output.stdout).expect("valid receipt JSON");
+    assert_eq!(receipt["status"], "ok");
+    assert_eq!(receipt["release_tag"], RELEASE_ASSET_TAG);
+    assert_eq!(receipt["source_commit"], RELEASE_ASSET_SOURCE_COMMIT);
+    assert_eq!(receipt["run_url"], RELEASE_ASSET_RUN_URL);
+    assert_eq!(receipt["failures"], json!([]));
+    assert_eq!(
+        receipt["archives"]
+            .as_array()
+            .expect("archives array")
+            .len(),
+        4
+    );
+    assert_eq!(receipt["sboms"].as_array().expect("sboms array").len(), 4);
+
+    let evidence_dir = unique_evidence_dir("release-assets-verify-check");
+    let evidence_dir_arg = evidence_dir.to_string_lossy().into_owned();
+    assert_success(&run_cairnid(["evidence", "init", &evidence_dir_arg]));
+    fs::write(
+        evidence_dir.join("release-assets-verification.json"),
+        &output.stdout,
+    )
+    .expect("write generated receipt");
+
+    let check = run_cairnid(["evidence", "check", "--evidence-dir", &evidence_dir_arg]);
+    assert_exit_code(&check, 3);
+    let report: Value = serde_json::from_slice(&check.stdout).expect("valid evidence report JSON");
+    let release_assets_artifact = report["artifacts"]
+        .as_array()
+        .expect("artifacts array")
+        .iter()
+        .find(|artifact| artifact["name"] == "release_assets_verification")
+        .expect("release assets artifact");
+    assert_eq!(release_assets_artifact["status"], "passed");
+    assert_eq!(release_assets_artifact["failures"], json!([]));
+    assert!(!stdout(&check).contains(SECRET_SENTINEL));
+    assert!(!stderr(&check).contains(SECRET_SENTINEL));
+}
+
+#[test]
+fn release_assets_verify_rejects_missing_url_and_attestation_flags() {
+    let no_url = run_cairnid([
+        "release-assets",
+        "verify",
+        "release-dir",
+        "--tag",
+        RELEASE_ASSET_TAG,
+        "--source-commit",
+        RELEASE_ASSET_SOURCE_COMMIT,
+        "--provenance-attestations-verified",
+        "--sbom-attestations-verified",
+    ]);
+    assert_exit_code(&no_url, 2);
+    assert!(stdout(&no_url).is_empty());
+    let no_url_stderr = stderr(&no_url);
+    assert!(no_url_stderr.contains("error:"));
+    assert!(
+        no_url_stderr.contains("--release-url <URL>") || no_url_stderr.contains("--run-url <URL>")
+    );
+    assert!(!no_url_stderr.contains("cairnid failed"));
+
+    let no_attestations = run_cairnid([
+        "release-assets",
+        "verify",
+        "release-dir",
+        "--tag",
+        RELEASE_ASSET_TAG,
+        "--source-commit",
+        RELEASE_ASSET_SOURCE_COMMIT,
+        "--run-url",
+        RELEASE_ASSET_RUN_URL,
+    ]);
+    assert_exit_code(&no_attestations, 2);
+    assert!(stdout(&no_attestations).is_empty());
+    let no_attestations_stderr = stderr(&no_attestations);
+    assert!(no_attestations_stderr.contains("error:"));
+    assert!(no_attestations_stderr.contains("--provenance-attestations-verified"));
+    assert!(no_attestations_stderr.contains("--sbom-attestations-verified"));
+    assert!(!no_attestations_stderr.contains("cairnid failed"));
 }
 
 #[test]
@@ -545,6 +675,271 @@ fn write_json(root: &std::path::Path, file_name: &str, value: Value) {
         serde_json::to_string_pretty(&value).expect("serialize evidence"),
     )
     .expect("write evidence");
+}
+
+fn fake_release_assets_dir(name: &str) -> PathBuf {
+    let root = unique_evidence_dir(name);
+    let targets = [
+        ("x86_64-unknown-linux-gnu", "linux", "tar.gz"),
+        ("x86_64-pc-windows-msvc", "windows", "zip"),
+    ];
+    let binaries = [
+        ("cairnid", "apps/cli", "operator CLI"),
+        ("cairnid-mcp", "apps/mcp", "stdio MCP server"),
+    ];
+
+    let mut manifest_assets = Vec::new();
+    let mut checksums = Vec::new();
+    for (binary, package, description) in binaries {
+        for (target, os, archive_format) in targets {
+            let stem = format!("{binary}-{RELEASE_ASSET_TAG}-{target}");
+            let archive_name = format!("{stem}.{archive_format}");
+            let sbom_name = format!("{stem}.sbom.cdx.json");
+
+            let archive_path = root.join(&archive_name);
+            write_release_archive(
+                &archive_path,
+                archive_format,
+                &stem,
+                binary,
+                target,
+                package,
+            );
+            let archive_hash = sha256_file(&archive_path);
+            checksums.push((archive_name.clone(), archive_hash.clone()));
+
+            let sbom_path = root.join(&sbom_name);
+            fs::write(
+                &sbom_path,
+                serde_json::to_string_pretty(&json!({
+                    "bomFormat": "CycloneDX",
+                    "specVersion": "1.5",
+                    "metadata": {
+                        "component": {
+                            "name": binary,
+                            "version": RELEASE_ASSET_TAG
+                        }
+                    },
+                    "components": []
+                }))
+                .expect("serialize SBOM"),
+            )
+            .expect("write SBOM");
+            let sbom_hash = sha256_file(&sbom_path);
+            checksums.push((sbom_name.clone(), sbom_hash.clone()));
+
+            let mut archive_asset = json!({
+                "name": archive_name,
+                "kind": "archive",
+                "binary": binary,
+                "description": description,
+                "target": target,
+                "os": os,
+                "arch": "x86_64",
+                "archive_format": archive_format,
+                "sha256": archive_hash,
+                "size_bytes": archive_path.metadata().expect("archive metadata").len(),
+                "sbom": sbom_name
+            });
+            if package == "apps/cli" {
+                archive_asset["auxiliary_files"] = json!([
+                    {"path": format!("{stem}/completions/cairnid.bash"), "kind": "shell-completion", "shell": "bash"},
+                    {"path": format!("{stem}/completions/_cairnid"), "kind": "shell-completion", "shell": "zsh"},
+                    {"path": format!("{stem}/completions/cairnid.fish"), "kind": "shell-completion", "shell": "fish"},
+                    {"path": format!("{stem}/completions/cairnid.ps1"), "kind": "shell-completion", "shell": "powershell"},
+                    {"path": format!("{stem}/completions/cairnid.elv"), "kind": "shell-completion", "shell": "elvish"},
+                    {"path": format!("{stem}/man/man1/cairnid.1"), "kind": "manpage", "section": "1"}
+                ]);
+            }
+            manifest_assets.push(archive_asset);
+            manifest_assets.push(json!({
+                "name": sbom_name,
+                "kind": "sbom",
+                "binary": binary,
+                "format": "CycloneDX JSON",
+                "target": target,
+                "os": os,
+                "arch": "x86_64",
+                "sha256": sbom_hash,
+                "size_bytes": sbom_path.metadata().expect("SBOM metadata").len(),
+                "subject": archive_name
+            }));
+        }
+    }
+
+    let manifest = json!({
+        "schema_version": 1,
+        "project": "cairnid",
+        "tag": RELEASE_ASSET_TAG,
+        "version": "0.1.0-rc.1",
+        "release_type": "release-candidate",
+        "draft": true,
+        "prerelease": true,
+        "generated_at": "2026-06-07T12:00:00Z",
+        "source": {
+            "repository": "cairnid/cairnid",
+            "commit": RELEASE_ASSET_SOURCE_COMMIT,
+            "ref": "refs/tags/v0.1.0-rc.1",
+            "workflow": "Release",
+            "workflow_ref": "cairnid/cairnid/.github/workflows/release.yml@refs/tags/v0.1.0-rc.1",
+            "run_id": "123456789",
+            "run_attempt": "1",
+            "run_url": RELEASE_ASSET_RUN_URL,
+            "validated_ci_run_url": "https://github.com/cairnid/cairnid/actions/runs/123456700"
+        },
+        "distribution": {
+            "release_workflow": ".github/workflows/release.yml",
+            "crates_io": false,
+            "homebrew": false,
+            "msi": false,
+            "macos": false,
+            "containers": false
+        },
+        "checksums": {
+            "algorithm": "SHA-256",
+            "file": "SHA256SUMS.txt",
+            "note": "GitHub also exposes release asset digest metadata after upload."
+        },
+        "provenance": {
+            "github_artifact_attestations": true,
+            "action": "actions/attest@v4",
+            "key_material": "GitHub Actions OIDC and Sigstore; no long-lived signing key"
+        },
+        "sbom": {
+            "generator": "cargo-cyclonedx",
+            "generator_version": "0.5.8",
+            "format": "CycloneDX JSON",
+            "spec_version": "1.5"
+        },
+        "tools": {
+            "rustc": "rustc 1.94.0",
+            "cargo": "cargo 1.94.0",
+            "cargo_cyclonedx": "cargo-cyclonedx 0.5.8"
+        },
+        "assets": manifest_assets
+    });
+    let manifest_path = root.join("release-manifest.json");
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize release manifest") + "\n",
+    )
+    .expect("write release manifest");
+    checksums.push((
+        "release-manifest.json".to_owned(),
+        sha256_file(&manifest_path),
+    ));
+
+    checksums.sort_by(|left, right| left.0.cmp(&right.0));
+    let checksum_text = checksums
+        .iter()
+        .map(|(file_name, hash)| format!("{hash}  {file_name}\n"))
+        .collect::<String>();
+    fs::write(root.join("SHA256SUMS.txt"), checksum_text).expect("write checksums");
+
+    root
+}
+
+fn write_release_archive(
+    path: &Path,
+    archive_format: &str,
+    stem: &str,
+    binary: &str,
+    target: &str,
+    package: &str,
+) {
+    let members = release_archive_members(stem, binary, target, package);
+    match archive_format {
+        "zip" => write_zip_archive(path, &members),
+        "tar.gz" => write_tar_gz_archive(path, &members),
+        other => panic!("unsupported archive format {other}"),
+    }
+}
+
+fn release_archive_members(
+    stem: &str,
+    binary: &str,
+    target: &str,
+    package: &str,
+) -> Vec<(String, Vec<u8>)> {
+    let binary_name = if target == "x86_64-pc-windows-msvc" {
+        format!("{binary}.exe")
+    } else {
+        binary.to_owned()
+    };
+    let mut members = vec![
+        (
+            format!("{stem}/{binary_name}"),
+            format!("fake binary for {binary} {target}\n").into_bytes(),
+        ),
+        (format!("{stem}/LICENSE"), b"Apache-2.0\n".to_vec()),
+        (format!("{stem}/README.md"), b"# CairnID\n".to_vec()),
+    ];
+    if package == "apps/cli" {
+        members.extend([
+            (
+                format!("{stem}/completions/cairnid.bash"),
+                b"complete -F _cairnid cairnid\n".to_vec(),
+            ),
+            (
+                format!("{stem}/completions/_cairnid"),
+                b"#compdef cairnid\n".to_vec(),
+            ),
+            (
+                format!("{stem}/completions/cairnid.fish"),
+                b"complete -c cairnid\n".to_vec(),
+            ),
+            (
+                format!("{stem}/completions/cairnid.ps1"),
+                b"Register-ArgumentCompleter -Native -CommandName cairnid\n".to_vec(),
+            ),
+            (
+                format!("{stem}/completions/cairnid.elv"),
+                b"edit:completion:arg-completer[cairnid] = {|@words| }\n".to_vec(),
+            ),
+            (
+                format!("{stem}/man/man1/cairnid.1"),
+                b".TH CAIRNID 1\n".to_vec(),
+            ),
+        ]);
+    }
+    members
+}
+
+fn write_zip_archive(path: &Path, members: &[(String, Vec<u8>)]) {
+    let file = File::create(path).expect("create zip archive");
+    let mut archive = ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    for (name, content) in members {
+        archive
+            .start_file(name, options)
+            .expect("start zip archive member");
+        archive
+            .write_all(content)
+            .expect("write zip archive member");
+    }
+    archive.finish().expect("finish zip archive");
+}
+
+fn write_tar_gz_archive(path: &Path, members: &[(String, Vec<u8>)]) {
+    let file = File::create(path).expect("create tar.gz archive");
+    let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+    let mut archive = tar::Builder::new(encoder);
+    for (name, content) in members {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, name, content.as_slice())
+            .expect("append tar archive member");
+    }
+    let encoder = archive.into_inner().expect("finish tar archive");
+    encoder.finish().expect("finish gzip archive");
+}
+
+fn sha256_file(path: &Path) -> String {
+    let bytes = fs::read(path).expect("read file for sha256");
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 fn unique_temp_path(name: &str, include_secret: bool) -> PathBuf {

@@ -1,39 +1,13 @@
 use serde_json::Value;
 use url::Url;
 
+use crate::operations_evidence::release_assets::{
+    EXPECTED_RELEASE_ASSETS, ExpectedReleaseAsset, archive_file_name, sbom_file_name,
+};
+
 use super::{
     require_bool, require_empty_array, require_rfc3339_timestamp, require_string, value_at_path,
 };
-
-#[derive(Debug, Clone, Copy)]
-struct ExpectedReleaseAsset {
-    binary: &'static str,
-    target: &'static str,
-    archive_format: &'static str,
-}
-
-const EXPECTED_RELEASE_ASSETS: &[ExpectedReleaseAsset] = &[
-    ExpectedReleaseAsset {
-        binary: "cairnid",
-        target: "x86_64-unknown-linux-gnu",
-        archive_format: "tar.gz",
-    },
-    ExpectedReleaseAsset {
-        binary: "cairnid",
-        target: "x86_64-pc-windows-msvc",
-        archive_format: "zip",
-    },
-    ExpectedReleaseAsset {
-        binary: "cairnid-mcp",
-        target: "x86_64-unknown-linux-gnu",
-        archive_format: "tar.gz",
-    },
-    ExpectedReleaseAsset {
-        binary: "cairnid-mcp",
-        target: "x86_64-pc-windows-msvc",
-        archive_format: "zip",
-    },
-];
 
 pub(in crate::operations_evidence) fn validate_release_assets_verification(
     value: &Value,
@@ -342,20 +316,6 @@ fn validate_sbom_asset(
     require_asset_bool(asset, prefix, "manifest_entry_present", true, failures);
     require_asset_bool(asset, prefix, "github_attestation_verified", true, failures);
     require_asset_sha256(asset, prefix, failures);
-}
-
-fn archive_file_name(expected: &ExpectedReleaseAsset, release_tag: &str) -> String {
-    format!(
-        "{}-{release_tag}-{}.{}",
-        expected.binary, expected.target, expected.archive_format
-    )
-}
-
-fn sbom_file_name(expected: &ExpectedReleaseAsset, release_tag: &str) -> String {
-    format!(
-        "{}-{release_tag}-{}.sbom.cdx.json",
-        expected.binary, expected.target
-    )
 }
 
 fn require_asset_string(

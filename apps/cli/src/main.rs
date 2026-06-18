@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 
 use cairn_operations::{
-    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseEvidenceError, check_release_evidence,
-    init_release_evidence_directory, release_evidence_capture_plan, release_evidence_manifest,
-    release_evidence_status_report,
+    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseAssetsVerificationError,
+    ReleaseAssetsVerificationOptions, ReleaseEvidenceError, check_release_evidence,
+    init_release_evidence_directory, release_assets_verification_receipt,
+    release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
 };
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
@@ -18,7 +19,7 @@ const EXIT_OPERATOR_INPUT: u8 = 4;
 #[command(name = "cairnid", version, about = "CairnID operator CLI", long_about = None)]
 #[command(propagate_version = true)]
 #[command(
-    after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence check release-evidence"
+    after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence check release-evidence\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url <url> --provenance-attestations-verified --sbom-attestations-verified"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -42,6 +43,14 @@ enum Commands {
     Evidence {
         #[command(subcommand)]
         command: EvidenceCommand,
+    },
+    #[command(
+        about = "Verify downloaded GitHub Release assets and print the evidence receipt as JSON",
+        after_help = "Examples:\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --provenance-attestations-verified --sbom-attestations-verified\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url https://github.com/cairnid/cairnid/actions/runs/123456789 --provenance-attestations-verified --sbom-attestations-verified"
+    )]
+    ReleaseAssets {
+        #[command(subcommand)]
+        command: ReleaseAssetsCommand,
     },
     #[command(
         about = "Write the cairnid roff manpage to stdout",
@@ -131,6 +140,59 @@ enum EvidenceCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum ReleaseAssetsCommand {
+    #[command(
+        about = "Verify local release asset files and print release-assets-verification JSON",
+        after_help = "Examples:\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --provenance-attestations-verified --sbom-attestations-verified\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url https://github.com/cairnid/cairnid/actions/runs/123456789 --provenance-attestations-verified --sbom-attestations-verified"
+    )]
+    Verify {
+        #[arg(
+            value_name = "RELEASE_DIR",
+            help = "Directory containing downloaded GitHub Release assets"
+        )]
+        release_dir: PathBuf,
+        #[arg(long, value_name = "TAG", help = "Release tag to verify")]
+        tag: String,
+        #[arg(
+            long,
+            value_name = "SHA",
+            help = "40-character source commit SHA for the tagged release"
+        )]
+        source_commit: String,
+        #[arg(
+            long = "release-url",
+            value_name = "URL",
+            required_unless_present = "run_url",
+            conflicts_with = "run_url",
+            help = "GitHub Release URL for the verified asset set"
+        )]
+        release_url: Option<String>,
+        #[arg(
+            long = "run-url",
+            value_name = "URL",
+            required_unless_present = "release_url",
+            conflicts_with = "release_url",
+            help = "GitHub Actions release workflow run URL for the verified asset set"
+        )]
+        run_url: Option<String>,
+        #[arg(
+            long = "provenance-attestations-verified",
+            action = clap::ArgAction::SetTrue,
+            required = true,
+            help = "Confirm GitHub provenance attestations were verified externally"
+        )]
+        provenance_attestations_verified: bool,
+        #[arg(
+            long = "sbom-attestations-verified",
+            action = clap::ArgAction::SetTrue,
+            required = true,
+            help = "Confirm CycloneDX SBOM attestations were verified externally"
+        )]
+        sbom_attestations_verified: bool,
+    },
+}
+
 fn main() -> ExitCode {
     match run(Cli::parse()) {
         Ok(()) => ExitCode::SUCCESS,
@@ -145,6 +207,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Commands::Completions { shell } => run_completions(shell),
         Commands::Evidence { command } => run_evidence(command),
+        Commands::ReleaseAssets { command } => run_release_assets(command),
         Commands::Manpage => run_manpage(),
     }
 }
@@ -194,6 +257,35 @@ fn run_evidence(command: EvidenceCommand) -> Result<(), CliError> {
             selected_evidence_dir(evidence_dir, evidence_dir_option),
             max_age_days,
         ),
+    }
+}
+
+fn run_release_assets(command: ReleaseAssetsCommand) -> Result<(), CliError> {
+    match command {
+        ReleaseAssetsCommand::Verify {
+            release_dir,
+            tag,
+            source_commit,
+            release_url,
+            run_url,
+            provenance_attestations_verified,
+            sbom_attestations_verified,
+        } => {
+            let receipt = release_assets_verification_receipt(
+                &ReleaseAssetsVerificationOptions {
+                    release_dir,
+                    release_tag: tag,
+                    source_commit,
+                    release_url,
+                    run_url,
+                    provenance_attestations_verified,
+                    sbom_attestations_verified,
+                },
+                OffsetDateTime::now_utc(),
+            )
+            .map_err(release_assets_cli_error)?;
+            print_report(&receipt)
+        }
     }
 }
 
@@ -280,6 +372,28 @@ fn release_evidence_cli_error(error: ReleaseEvidenceError) -> CliError {
     }
 }
 
+fn release_assets_cli_error(error: ReleaseAssetsVerificationError) -> CliError {
+    match error {
+        ReleaseAssetsVerificationError::NotDirectory => {
+            CliError::operator_input("release assets path is not a directory".to_owned())
+        }
+        ReleaseAssetsVerificationError::VerificationFailed(failures) => {
+            let message = if failures.is_empty() {
+                "release assets verification failed".to_owned()
+            } else {
+                format!(
+                    "release assets verification failed: {}",
+                    failures.join("; ")
+                )
+            };
+            CliError::gate_failed(message)
+        }
+        ReleaseAssetsVerificationError::Io(_) | ReleaseAssetsVerificationError::Json(_) => {
+            CliError::internal(error)
+        }
+    }
+}
+
 #[derive(Debug)]
 struct CliError {
     exit_code: u8,
@@ -331,7 +445,7 @@ impl Error for CliError {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands, EvidenceCommand};
+    use super::{Cli, Commands, EvidenceCommand, ReleaseAssetsCommand};
     use clap::{CommandFactory, Parser};
     use std::path::PathBuf;
 
@@ -412,6 +526,82 @@ mod tests {
 
         assert_eq!(evidence_dir, PathBuf::from("release-evidence"));
         assert!(force);
+    }
+
+    #[test]
+    fn parses_release_assets_verify() {
+        let cli = Cli::parse_from([
+            "cairnid",
+            "release-assets",
+            "verify",
+            "dist",
+            "--tag",
+            "v0.1.0-rc.1",
+            "--source-commit",
+            "0123456789abcdef0123456789abcdef01234567",
+            "--run-url",
+            "https://github.com/cairnid/cairnid/actions/runs/123456789",
+            "--provenance-attestations-verified",
+            "--sbom-attestations-verified",
+        ]);
+
+        let Commands::ReleaseAssets { command } = cli.command else {
+            panic!("expected release assets command");
+        };
+        let ReleaseAssetsCommand::Verify {
+            release_dir,
+            tag,
+            source_commit,
+            release_url,
+            run_url,
+            provenance_attestations_verified,
+            sbom_attestations_verified,
+        } = command;
+
+        assert_eq!(release_dir, PathBuf::from("dist"));
+        assert_eq!(tag, "v0.1.0-rc.1");
+        assert_eq!(source_commit, "0123456789abcdef0123456789abcdef01234567");
+        assert_eq!(release_url, None);
+        assert_eq!(
+            run_url.as_deref(),
+            Some("https://github.com/cairnid/cairnid/actions/runs/123456789")
+        );
+        assert!(provenance_attestations_verified);
+        assert!(sbom_attestations_verified);
+    }
+
+    #[test]
+    fn rejects_release_assets_verify_missing_required_confirmation_inputs() {
+        assert!(
+            Cli::try_parse_from([
+                "cairnid",
+                "release-assets",
+                "verify",
+                "dist",
+                "--tag",
+                "v0.1.0-rc.1",
+                "--source-commit",
+                "0123456789abcdef0123456789abcdef01234567",
+                "--provenance-attestations-verified",
+                "--sbom-attestations-verified",
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "cairnid",
+                "release-assets",
+                "verify",
+                "dist",
+                "--tag",
+                "v0.1.0-rc.1",
+                "--source-commit",
+                "0123456789abcdef0123456789abcdef01234567",
+                "--run-url",
+                "https://github.com/cairnid/cairnid/actions/runs/123456789",
+            ])
+            .is_err()
+        );
     }
 
     #[test]

@@ -1,9 +1,10 @@
 mod fixtures;
 
 use super::{
-    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidenceError,
-    check_release_evidence, init_release_evidence_directory, release_evidence_capture_plan,
-    release_evidence_manifest, release_evidence_status_report,
+    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION,
+    ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions, ReleaseEvidenceError,
+    check_release_evidence, init_release_evidence_directory, release_assets_verification_receipt,
+    release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
 };
 use fixtures::*;
 use serde_json::{Value, json};
@@ -841,6 +842,128 @@ fn release_evidence_rejects_invalid_release_assets_verification() {
             "$.request_headers must not be present in token-free release evidence artifact release_assets_verification",
         )
     }));
+}
+
+#[test]
+fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
+    let release = fake_release_assets_dir("receipt-happy");
+    let receipt = release_assets_verification_receipt(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("release assets receipt");
+
+    assert_eq!(receipt.status, "ok");
+    assert!(receipt.failures.is_empty());
+    assert_eq!(receipt.release_tag, RELEASE_ASSET_TAG);
+    assert_eq!(receipt.source_commit, RELEASE_ASSET_SOURCE_COMMIT);
+    assert_eq!(
+        receipt.release_url.as_deref(),
+        Some(RELEASE_ASSET_RELEASE_URL)
+    );
+    assert_eq!(receipt.run_url.as_deref(), Some(RELEASE_ASSET_RUN_URL));
+    assert_eq!(receipt.archives.len(), 4);
+    assert_eq!(receipt.sboms.len(), 4);
+    assert!(
+        receipt
+            .archives
+            .iter()
+            .all(|archive| archive.github_attestation_verified
+                && archive.sbom_attestation_verified
+                && archive.sha256_verified
+                && archive.manifest_entry_present)
+    );
+    assert!(
+        receipt
+            .sboms
+            .iter()
+            .all(|sbom| sbom.github_attestation_verified
+                && sbom.sha256_verified
+                && sbom.manifest_entry_present
+                && sbom.format == "CycloneDX JSON")
+    );
+
+    let evidence_dir = temp_evidence_dir("generated-release-assets-receipt");
+    init_release_evidence_directory(&evidence_dir, release_evidence_now(), false).expect("init");
+    write_json(
+        &evidence_dir,
+        "release-assets-verification.json",
+        serde_json::to_value(&receipt).expect("receipt JSON"),
+    );
+    let report = check_release_evidence(&evidence_dir, release_evidence_now(), 30)
+        .expect("release evidence report");
+    let release_assets = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "release_assets_verification")
+        .expect("release assets artifact");
+    assert_eq!(release_assets.status, "passed");
+    assert!(release_assets.failures.is_empty());
+}
+
+#[test]
+fn release_assets_receipt_generation_rejects_hash_mismatch_and_missing_asset() {
+    let tampered = fake_release_assets_dir("receipt-hash-mismatch");
+    let tampered_archive = format!("cairnid-{}-x86_64-unknown-linux-gnu.tar.gz", tampered.tag);
+    fs::write(tampered.root.join(&tampered_archive), "tampered archive").expect("tamper archive");
+
+    let error = release_assets_verification_receipt(
+        &release_assets_options(&tampered),
+        release_evidence_now(),
+    )
+    .expect_err("hash mismatch fails");
+    let failures = release_assets_failures(&error);
+    assert!(
+        failures.iter().any(|failure| failure.contains(&format!(
+            "SHA256SUMS.txt hash mismatch for {tampered_archive}"
+        ))),
+        "{failures:?}"
+    );
+
+    let missing = fake_release_assets_dir("receipt-missing-asset");
+    let missing_sbom = format!(
+        "cairnid-mcp-{}-x86_64-pc-windows-msvc.sbom.cdx.json",
+        missing.tag
+    );
+    fs::remove_file(missing.root.join(&missing_sbom)).expect("remove SBOM");
+
+    let error = release_assets_verification_receipt(
+        &release_assets_options(&missing),
+        release_evidence_now(),
+    )
+    .expect_err("missing asset fails");
+    let failures = release_assets_failures(&error);
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains(&format!("missing release asset {missing_sbom}"))),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn release_assets_receipt_generation_requires_attestation_confirmation() {
+    let release = fake_release_assets_dir("receipt-attestations");
+    let mut options = release_assets_options(&release);
+    options.provenance_attestations_verified = false;
+    options.sbom_attestations_verified = false;
+
+    let error = release_assets_verification_receipt(&options, release_evidence_now())
+        .expect_err("missing attestation confirmations fail");
+    let failures = release_assets_failures(&error);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("--provenance-attestations-verified must be supplied")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("--sbom-attestations-verified must be supplied")),
+        "{failures:?}"
+    );
 }
 
 #[test]
@@ -2398,6 +2521,22 @@ fn release_evidence_rejects_invalid_signing_key_rotation_receipt() {
             .iter()
             .any(|failure| failure.contains("completed_at"))
     );
+}
+
+fn release_assets_options(release: &FakeReleaseAssets) -> ReleaseAssetsVerificationOptions {
+    ReleaseAssetsVerificationOptions {
+        release_dir: release.root.clone(),
+        release_tag: release.tag.to_owned(),
+        source_commit: release.source_commit.to_owned(),
+        release_url: Some(release.release_url.to_owned()),
+        run_url: Some(release.run_url.to_owned()),
+        provenance_attestations_verified: true,
+        sbom_attestations_verified: true,
+    }
+}
+
+fn release_assets_failures(error: &ReleaseAssetsVerificationError) -> &[String] {
+    error.failures().expect("verification failures")
 }
 
 #[test]

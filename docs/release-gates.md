@@ -271,7 +271,13 @@ done
 
 The default `gh attestation verify` command checks the SLSA provenance predicate. The command with `--predicate-type https://cyclonedx.org/bom` checks the SBOM attestation for each archive. Run the same pattern for every published target that the user installs or records in evidence.
 
-For release evidence, do not paste command output into the receipt. Save a normalized, token-free `release-assets-verification.json` after all four archives and four SBOMs are verified. The receipt fields belong in the release-evidence directory and must record `status="ok"`, `completed_at`, `release_tag`, `source_commit`, `release_url` or `run_url`, `checksums.file_name="SHA256SUMS.txt"`, `checksums.algorithm="SHA-256"`, `checksums.present=true`, `checksums.verified=true`, `release_manifest.file_name="release-manifest.json"`, `release_manifest.present=true`, `release_manifest.sha256_verified=true`, `attestations.signer_workflow="cairnid/cairnid/.github/workflows/release.yml"`, `attestations.source_ref="refs/tags/<tag>"`, `attestations.provenance_verified=true`, `attestations.sbom_attestations_verified=true`, exactly four `archives` entries, exactly four `sboms` entries, each asset `sha256`, `present=true`, `sha256_verified=true`, `manifest_entry_present=true`, and the required GitHub attestation booleans. Do not include GitHub tokens, request headers, cookies, raw attestation payloads, debug logs, or copied stdout/stderr.
+For release evidence, do not paste command output into the receipt. After the external attestation checks pass, generate the normalized, token-free receipt from the downloaded asset directory:
+
+```powershell
+cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <release-url> --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json
+```
+
+Use `--run-url <run-url>` instead of `--release-url` when the evidence is tied to the release workflow run rather than the published release page. The command reads local `SHA256SUMS.txt`, `release-manifest.json`, four archives, and four SBOMs; recomputes SHA-256; confirms the manifest source and non-distribution flags; validates SBOM `bomFormat="CycloneDX"`; verifies archive member structure for binaries, `LICENSE`, `README.md`, CLI completions and manpage; and emits the receipt fields required by `release-assets-verification.json`. It does not download assets, call `gh`, verify remote attestations, or write files. The two attestation flags are explicit operator confirmations that the preceding `gh attestation verify` commands succeeded. Do not include GitHub tokens, request headers, cookies, raw attestation payloads, debug logs, or copied stdout/stderr.
 
 ## Current Blockers
 

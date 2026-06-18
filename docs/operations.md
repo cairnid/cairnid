@@ -173,7 +173,13 @@ cairnid evidence status <evidence-dir> --max-age-days 14
 cairnid evidence check <evidence-dir> --max-age-days 14
 ```
 
-Capture `release-assets-verification.json` only after a tagged GitHub Release exists and the assets have been downloaded from that release or its workflow run. Verify the archive hashes against `SHA256SUMS.txt`, confirm every archive and SBOM is present in `release-manifest.json`, and run `gh attestation verify` for the provenance and CycloneDX SBOM attestations using signer workflow `cairnid/cairnid/.github/workflows/release.yml` and source ref `refs/tags/<tag>`. The saved JSON receipt should record the tag, source commit, release URL or run URL, checksum verification, manifest presence, each CLI/MCP archive, each SBOM, and attestation booleans. It must not contain GitHub tokens, request headers, cookies, raw attestation payloads, debug logs, or copied command stdout/stderr.
+Capture `release-assets-verification.json` only after a tagged GitHub Release exists and the assets have been downloaded from that release or its workflow run. First run `gh attestation verify` for the provenance and CycloneDX SBOM attestations using signer workflow `cairnid/cairnid/.github/workflows/release.yml` and source ref `refs/tags/<tag>`. Then generate the saved receipt from local files:
+
+```powershell
+cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <release-url> --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json
+```
+
+Use `--run-url <run-url>` instead of `--release-url` when the evidence is tied to the release workflow run. The command verifies `SHA256SUMS.txt`, `release-manifest.json`, every expected archive and SBOM, archive member structure for binaries, `LICENSE`, `README.md`, CLI completions and manpage, manifest source and distribution flags, and SBOM `bomFormat="CycloneDX"`. It does not call `gh` or verify remote attestations itself; the attestation flags are explicit operator confirmations that the previous checks succeeded. The saved JSON receipt must not contain GitHub tokens, request headers, cookies, raw attestation payloads, debug logs, or copied command stdout/stderr.
 
 The command validates these required artifact names:
 

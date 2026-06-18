@@ -27,7 +27,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
         name: "release_assets_verification",
         file_name: "release-assets-verification.json",
         release_gate: "CLI/MCP public release assets",
-        command: "verify the GitHub Release assets, SHA256SUMS.txt, release-manifest.json, SBOMs, and GitHub attestations; save the normalized receipt as release-assets-verification.json",
+        command: "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> (--release-url <url>|--run-url <url>) --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json",
         validator: EvidenceValidator::ReleaseAssetsVerification,
         contains_secrets: false,
         requires_production_like_environment: false,

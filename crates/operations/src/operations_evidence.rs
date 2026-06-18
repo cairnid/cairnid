@@ -8,6 +8,7 @@ mod plan;
 mod public_surface;
 mod redaction;
 mod registry;
+mod release_assets;
 mod scaffold;
 mod scim;
 mod timestamp;
@@ -21,6 +22,10 @@ pub use self::email_evidence::{
 };
 use self::redaction::sanitize_release_evidence_failure;
 use self::registry::EVIDENCE_SPECS;
+pub use self::release_assets::{
+    ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions,
+    ReleaseAssetsVerificationReceipt, release_assets_verification_receipt,
+};
 pub use self::types::{
     RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidenceArtifactReport,
     ReleaseEvidenceEnvironmentRequirement, ReleaseEvidenceError, ReleaseEvidenceInitReport,
