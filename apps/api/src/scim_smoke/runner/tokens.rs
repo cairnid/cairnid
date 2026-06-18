@@ -1,6 +1,6 @@
 use reqwest::{Method, StatusCode};
 
-use super::super::ScimSmokeError;
+use super::super::{CHECK_REJECTED_TOKEN, CHECK_SECONDARY_TOKEN, ScimSmokeError};
 use super::ScimSmokeRun;
 
 pub(super) fn validate_rotation_tokens(
@@ -44,7 +44,7 @@ impl ScimSmokeRun {
         )
         .await?;
         self.pass(
-            "secondary_token",
+            CHECK_SECONDARY_TOKEN,
             "configured secondary SCIM bearer token reached ServiceProviderConfig",
         );
         Ok(())
@@ -66,7 +66,7 @@ impl ScimSmokeRun {
         )
         .await?;
         self.pass(
-            "rejected_token",
+            CHECK_REJECTED_TOKEN,
             "configured rejected SCIM bearer token returned 401 Unauthorized",
         );
         Ok(())

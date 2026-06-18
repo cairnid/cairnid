@@ -1,4 +1,5 @@
 mod bulk;
+mod checks;
 mod groups;
 mod helpers;
 mod http;
@@ -8,6 +9,7 @@ mod users;
 
 pub use self::types::{ScimSmokeCheck, ScimSmokeError, ScimSmokeInputs, ScimSmokeReport};
 
+pub(in crate::scim_smoke) use self::checks::*;
 pub(in crate::scim_smoke) use self::runner::ScimSmokeRun;
 
 const SCIM_CONTENT_TYPE: &str = "application/scim+json";

@@ -3,8 +3,9 @@ use serde_json::json;
 use uuid::Uuid;
 
 use super::{
-    SCIM_GROUP_SCHEMA, SCIM_PATCH_OP_SCHEMA, SCIM_SEARCH_REQUEST_SCHEMA, ScimSmokeError,
-    ScimSmokeRun,
+    CHECK_GROUP_CREATE, CHECK_GROUP_DELETE, CHECK_GROUP_FILTER, CHECK_GROUP_PATCH,
+    CHECK_GROUP_PROJECTION, CHECK_GROUP_REPLACE, CHECK_GROUP_SEARCH_REQUEST, SCIM_GROUP_SCHEMA,
+    SCIM_PATCH_OP_SCHEMA, SCIM_SEARCH_REQUEST_SCHEMA, ScimSmokeError, ScimSmokeRun,
     helpers::{
         expect_list_response_id, expect_member_set, expect_missing, expect_str, resource_id,
     },
@@ -41,7 +42,7 @@ impl ScimSmokeRun {
         expect_member_set(&resource, &[user_id])?;
         let group_id = resource_id(&resource)?;
         self.created_group_id = Some(group_id);
-        self.pass("group_create", format!("created SCIM group {group_id}"));
+        self.pass(CHECK_GROUP_CREATE, format!("created SCIM group {group_id}"));
         Ok(group_id)
     }
 
@@ -56,7 +57,7 @@ impl ScimSmokeRun {
             .await?;
         expect_list_response_id(&response, &group_id.to_string())?;
         self.pass(
-            "group_filter",
+            CHECK_GROUP_FILTER,
             format!("exact displayName filter returned SCIM group {group_id}"),
         );
         Ok(())
@@ -79,7 +80,7 @@ impl ScimSmokeRun {
             .await?;
         expect_list_response_id(&response, &group_id.to_string())?;
         self.pass(
-            "group_search_request",
+            CHECK_GROUP_SEARCH_REQUEST,
             format!("SearchRequest displayName filter returned SCIM group {group_id}"),
         );
         Ok(())
@@ -104,7 +105,7 @@ impl ScimSmokeRun {
         expect_missing(&resource, "/members/0/type")?;
         expect_missing(&resource, "/meta")?;
         self.pass(
-            "group_projection",
+            CHECK_GROUP_PROJECTION,
             format!("SCIM group {group_id} excluded selected default attributes"),
         );
         Ok(())
@@ -140,7 +141,7 @@ impl ScimSmokeRun {
             .await?;
         expect_member_set(&resource, &[added_user_id])?;
         self.pass(
-            "group_patch",
+            CHECK_GROUP_PATCH,
             format!("patched SCIM group {group_id} membership set with member value paths"),
         );
         Ok(())
@@ -169,7 +170,7 @@ impl ScimSmokeRun {
         expect_str(&resource, "/externalId", external_id)?;
         expect_member_set(&resource, &[user_id])?;
         self.pass(
-            "group_replace",
+            CHECK_GROUP_REPLACE,
             format!("fully replaced SCIM group {group_id}"),
         );
         Ok(())
@@ -186,7 +187,7 @@ impl ScimSmokeRun {
         )
         .await?;
         self.created_group_id = None;
-        self.pass("group_delete", format!("deleted SCIM group {group_id}"));
+        self.pass(CHECK_GROUP_DELETE, format!("deleted SCIM group {group_id}"));
         Ok(())
     }
 }
