@@ -2,6 +2,7 @@ mod conformance;
 mod metadata_smoke;
 mod static_artifacts;
 
+pub use conformance::normalize_openid_conformance_export;
 pub(super) use conformance::validate_openid_conformance_result;
 #[cfg(test)]
 pub(super) use metadata_smoke::REQUIRED_OIDC_METADATA_SMOKE_CHECKS;

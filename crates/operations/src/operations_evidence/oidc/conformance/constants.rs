@@ -9,6 +9,7 @@ pub(super) const FORBIDDEN_OPENID_RESULT_FIELDS: &[&str] = &[
     "idtoken",
     "password",
     "privatekey",
+    "requestheader",
     "requestheaders",
     "secret",
     "sessioncookie",

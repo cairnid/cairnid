@@ -250,9 +250,13 @@ cairn-api conformance oidcc-static-registration > openid-static-registration.jso
 cairn-api conformance oidcc-static-config > cairn-oidcc-static.json
 cairn-api conformance oidcc-result-template config-op > openid-config-op-result.template.json
 cairn-api conformance oidcc-result-template basic-op > openid-basic-op-result.template.json
+cairn-api conformance oidcc-normalize-export config-op <oidf-zip-or-dir> --published-result-url <url> > openid-config-op-result.json
+cairn-api conformance oidcc-normalize-export basic-op <oidf-zip-or-dir> --published-result-url <url> > openid-basic-op-result.json
 ```
 
 `oidcc-static-registration` emits the exact callback URLs and static-client settings for the configured suite alias. `oidcc-static-config` emits the JSON shape used by the OIDF Config OP and Basic OP static-client plans. Both commands include a root `generated_at` timestamp for release evidence and require an HTTPS `CAIRN_ISSUER`; the registration command also requires `CAIRN_CONFORMANCE_SUITE_BASE_URL`. `oidcc-result-template` emits normalized result-summary templates that cannot pass unchanged because `cairnid evidence check` rejects `status="template"`, `result="pending"`, placeholder timestamps, placeholder official result URLs, and secret-bearing field names in normalized OpenID result JSON. Run `cairn-api operations preflight` first to confirm the issuer posture and identify missing `CAIRN_CONFORMANCE_*` variables without printing secret values. See [openid-conformance.md](openid-conformance.md) for the full environment contract and evidence gate.
+
+Use `oidcc-normalize-export` after downloading the official OIDF certification package. It validates the package plan, module instances, matching test logs, suite origin, finished `PASSED` or `WARNING` results, and secret-free log content before writing the normalized token-free result file accepted by `cairnid evidence check`.
 
 ## SCIM Provisioning
 
