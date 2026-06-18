@@ -5,8 +5,9 @@ use cairn_operations::{
     init_release_evidence_directory, release_evidence_capture_plan, release_evidence_manifest,
     release_evidence_status_report,
 };
-use clap::{Parser, Subcommand};
-use std::{env, error::Error, fmt, path::PathBuf, process::ExitCode};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
+use std::{env, error::Error, fmt, io, path::PathBuf, process::ExitCode};
 use time::OffsetDateTime;
 
 const EXIT_INTERNAL_ERROR: u8 = 1;
@@ -27,6 +28,14 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     #[command(
+        about = "Write a shell completion script to stdout",
+        after_help = "Examples:\n  cairnid completions bash > cairnid.bash\n  cairnid completions powershell > cairnid.ps1"
+    )]
+    Completions {
+        #[arg(value_enum, help = "Shell to generate completions for")]
+        shell: Shell,
+    },
+    #[command(
         about = "Plan, initialize, inspect, and check release evidence",
         after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence init release-evidence\n  cairnid evidence check release-evidence --max-age-days 30"
     )]
@@ -34,6 +43,11 @@ enum Commands {
         #[command(subcommand)]
         command: EvidenceCommand,
     },
+    #[command(
+        about = "Write the cairnid roff manpage to stdout",
+        after_help = "Examples:\n  cairnid manpage > cairnid.1"
+    )]
+    Manpage,
 }
 
 #[derive(Debug, Subcommand)]
@@ -129,8 +143,23 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
+        Commands::Completions { shell } => run_completions(shell),
         Commands::Evidence { command } => run_evidence(command),
+        Commands::Manpage => run_manpage(),
     }
+}
+
+fn run_completions(shell: Shell) -> Result<(), CliError> {
+    let mut command = Cli::command();
+    let binary_name = command.get_name().to_owned();
+    generate(shell, &mut command, binary_name, &mut io::stdout());
+    Ok(())
+}
+
+fn run_manpage() -> Result<(), CliError> {
+    clap_mangen::Man::new(Cli::command())
+        .render(&mut io::stdout())
+        .map_err(CliError::internal)
 }
 
 fn run_evidence(command: EvidenceCommand) -> Result<(), CliError> {
@@ -322,7 +351,9 @@ mod tests {
             "45",
         ]);
 
-        let Commands::Evidence { command } = cli.command;
+        let Commands::Evidence { command } = cli.command else {
+            panic!("expected evidence command");
+        };
         let EvidenceCommand::Check {
             evidence_dir,
             evidence_dir_option,
@@ -347,7 +378,9 @@ mod tests {
             "release-evidence",
         ]);
 
-        let Commands::Evidence { command } = cli.command;
+        let Commands::Evidence { command } = cli.command else {
+            panic!("expected evidence command");
+        };
         let EvidenceCommand::Status {
             evidence_dir,
             evidence_dir_option,
@@ -366,7 +399,9 @@ mod tests {
     fn parses_evidence_init_force() {
         let cli = Cli::parse_from(["cairnid", "evidence", "init", "release-evidence", "--force"]);
 
-        let Commands::Evidence { command } = cli.command;
+        let Commands::Evidence { command } = cli.command else {
+            panic!("expected evidence command");
+        };
         let EvidenceCommand::Init {
             evidence_dir,
             force,

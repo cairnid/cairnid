@@ -53,6 +53,80 @@ fn evidence_check_help_describes_arguments_and_examples() {
 }
 
 #[test]
+fn completions_help_lists_supported_shells() {
+    let output = run_cairnid(["completions", "--help"]);
+
+    assert_success(&output);
+    let stdout = stdout(&output);
+    assert!(stdout.contains("Write a shell completion script to stdout"));
+    assert!(stdout.contains("bash"));
+    assert!(stdout.contains("zsh"));
+    assert!(stdout.contains("fish"));
+    assert!(stdout.contains("powershell"));
+    assert!(stdout.contains("elvish"));
+}
+
+#[test]
+fn completions_rejects_invalid_shell_at_clap_layer() {
+    let output = run_cairnid(["completions", "not-a-shell"]);
+
+    assert_exit_code(&output, 2);
+    assert!(stdout(&output).is_empty());
+
+    let stderr = stderr(&output);
+    assert!(stderr.contains("error:"));
+    assert!(stderr.contains("not-a-shell"));
+    assert!(!stderr.contains("cairnid failed"));
+}
+
+#[test]
+fn completions_emit_representative_shell_scripts() {
+    for (shell, expected) in [
+        ("bash", "_cairnid"),
+        ("zsh", "#compdef cairnid"),
+        ("fish", "complete -c cairnid"),
+        ("powershell", "Register-ArgumentCompleter"),
+        ("elvish", "edit:completion:arg-completer[cairnid]"),
+    ] {
+        let output = run_cairnid(["completions", shell]);
+
+        assert_success(&output);
+        assert!(stderr(&output).is_empty());
+
+        let stdout = stdout(&output);
+        assert!(
+            stdout.contains(expected),
+            "{shell} completion output:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("evidence"),
+            "{shell} completion output:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("manpage"),
+            "{shell} completion output:\n{stdout}"
+        );
+        assert!(!stdout.contains(SECRET_SENTINEL));
+    }
+}
+
+#[test]
+fn manpage_emits_roff_for_cli_and_evidence_commands() {
+    let output = run_cairnid(["manpage"]);
+
+    assert_success(&output);
+    assert!(stderr(&output).is_empty());
+
+    let stdout = stdout(&output);
+    assert!(stdout.contains(".TH cairnid"));
+    assert!(stdout.contains("CairnID operator CLI"));
+    assert!(stdout.contains("evidence"));
+    assert!(stdout.contains("plan"));
+    assert!(stdout.contains("check"));
+    assert!(!stdout.contains(SECRET_SENTINEL));
+}
+
+#[test]
 fn evidence_plan_emits_expected_json_contract() {
     let output = run_cairnid_with_plan_environment(["evidence", "plan"]);
 

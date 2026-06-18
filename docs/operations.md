@@ -109,6 +109,16 @@ When those explicit smoke origins are absent, the command uses `CAIRN_ISSUER` an
 
 Before public beta, use `cairnid evidence` as the public release-evidence control surface. It plans, initializes, summarizes, and checks the evidence directory; artifact-producing receipts remain the `cairn-api operations`, `cairn-api conformance`, `cairn-api scim`, `cairn-api email-outbox`, signing-key, key-encryption, admin, and audit commands listed in the plan.
 
+The CLI can also generate operator-local reference files from the same clap command definition used at runtime:
+
+```powershell
+cairnid completions powershell > cairnid.ps1
+cairnid completions bash > cairnid.bash
+cairnid manpage > cairnid.1
+```
+
+Do not commit generated completion scripts or manpages; regenerate them from the released binary when packaging or installing local shell support.
+
 Verify the release capture environment without printing secret values:
 
 ```powershell
