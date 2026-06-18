@@ -26,7 +26,8 @@ pub(super) fn evidence_operator_notes(spec: &EvidenceSpec) -> Vec<&'static str> 
             notes.push("Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized OpenID result summaries.");
         }
         EvidenceValidator::ScimOktaConnectorSmoke | EvidenceValidator::ScimEntraConnectorSmoke => {
-            notes.push("Record a normalized connector smoke summary after the external provisioning client completes the required SCIM create, update, deactivation, deletion, Bulk, and token-rotation checks.");
+            notes.push("Record a normalized connector smoke summary after the external provisioning client completes the required provider-emitted SCIM create, update, deactivation, deletion, and token-rotation checks.");
+            notes.push("Keep SCIM Bulk proof in the built-in scim-smoke.json evidence; Okta and Microsoft Entra connector summaries do not require provider-emitted Bulk.");
             notes.push("Use `cairn-api scim connector-smoke-template <okta|entra>` to generate the token-free JSON shape, then replace every placeholder with verified external connector evidence.");
             notes.push("Do not include raw connector bearer tokens, provider credentials, end-user secrets, or provider console screenshots in this JSON artifact.");
         }

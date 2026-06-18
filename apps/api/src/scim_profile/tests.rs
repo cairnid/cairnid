@@ -142,7 +142,8 @@ fn scim_connector_smoke_template_reports_provider_shape_without_secrets() {
             .as_array()
             .expect("checks")
             .iter()
-            .any(|check| check["name"] == "bulk_forward_reference" && check["status"] == "pending")
+            .all(|check| check["name"] != "bulk_forward_reference"),
+        "provider templates should not require provider-emitted Bulk"
     );
     assert!(
         json["forbidden_fields"]

@@ -5,7 +5,8 @@ use super::super::validation::{
     require_string_at_path_dynamic, require_uuid_array_exact_len, require_uuid_at_path,
 };
 use super::{
-    REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS, connector_profile::expected_scim_connector_display_name,
+    OPTIONAL_SCIM_CONNECTOR_SMOKE_CHECKS, REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS,
+    connector_profile::expected_scim_connector_display_name,
 };
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -80,6 +81,7 @@ pub(in crate::operations_evidence) fn validate_scim_connector_smoke(
             Some(name) if REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS.contains(&name) => {
                 seen.insert(name);
             }
+            Some(name) if OPTIONAL_SCIM_CONNECTOR_SMOKE_CHECKS.contains(&name) => {}
             Some(name) => failures.push(format!(
                 "{path}.name must be a required SCIM connector smoke check, got {name}"
             )),
@@ -106,7 +108,10 @@ pub(in crate::operations_evidence) fn validate_scim_connector_smoke(
 
 #[cfg(test)]
 mod tests {
-    use super::{REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS, validate_scim_connector_smoke};
+    use super::{
+        OPTIONAL_SCIM_CONNECTOR_SMOKE_CHECKS, REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS,
+        validate_scim_connector_smoke,
+    };
     use serde_json::json;
 
     const USER_ONE: &str = "01890d6f-109f-767a-96cb-2927626f45b1";
@@ -152,5 +157,61 @@ mod tests {
             failure
                 == "deactivated_user_id must be one of the created_user_ids for cleanup evidence"
         }));
+    }
+
+    #[test]
+    fn scim_connector_smoke_accepts_missing_provider_bulk_check() {
+        let value = valid_connector_smoke(REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS);
+        let mut checks = Vec::new();
+        let mut failures = Vec::new();
+
+        validate_scim_connector_smoke(&value, "okta", &mut checks, &mut failures);
+
+        assert!(failures.is_empty(), "{failures:?}");
+        assert!(checks.iter().any(|check| {
+            check == "SCIM okta connector smoke covered required external provisioning flows"
+        }));
+    }
+
+    #[test]
+    fn scim_connector_smoke_tolerates_optional_bulk_check_when_recorded() {
+        let check_names = REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS
+            .iter()
+            .chain(OPTIONAL_SCIM_CONNECTOR_SMOKE_CHECKS.iter())
+            .copied()
+            .collect::<Vec<_>>();
+        let value = valid_connector_smoke(&check_names);
+        let mut checks = Vec::new();
+        let mut failures = Vec::new();
+
+        validate_scim_connector_smoke(&value, "okta", &mut checks, &mut failures);
+
+        assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    fn valid_connector_smoke(check_names: &[&str]) -> serde_json::Value {
+        json!({
+            "status": "ok",
+            "source": "external-scim-connector",
+            "provider": "okta",
+            "display_name": "Okta SCIM 2.0",
+            "scim_base_url": "https://id.example.com/scim/v2",
+            "completed_at": "2026-06-07T12:00:00Z",
+            "connector_application_id": "okta-app",
+            "provisioning_job_id": "okta-job",
+            "secondary_token_checked": true,
+            "rejected_token_checked": true,
+            "created_user_ids": [USER_ONE, USER_TWO],
+            "deactivated_user_id": USER_ONE,
+            "deleted_group_id": GROUP_ID,
+            "checks": check_names
+                .iter()
+                .map(|name| json!({
+                    "name": name,
+                    "status": "passed",
+                    "detail": format!("{name} passed")
+                }))
+                .collect::<Vec<_>>()
+        })
     }
 }

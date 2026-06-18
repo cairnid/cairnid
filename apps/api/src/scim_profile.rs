@@ -23,7 +23,6 @@ pub const REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS: &[&str] = &[
     "group_projection",
     "group_patch_members",
     "group_replace",
-    "bulk_forward_reference",
     "user_deactivation",
     "group_delete",
     "token_rotation_acceptance",

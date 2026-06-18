@@ -294,7 +294,7 @@ pub(super) fn scim_connector_profile(profile: &str) -> Value {
             "ServiceProviderConfig, Schemas, and ResourceTypes discovery",
             "User create, list, SearchRequest, get, full replace, bounded PATCH, and soft deprovision",
             "Group create, list, SearchRequest, get, full replace, bounded PATCH, and delete",
-            "Bounded Bulk mutations with same-request bulkId references",
+            "Built-in smoke covers bounded Bulk mutations with same-request bulkId references",
             "Token rotation with up to four active SHA-256 token hashes"
         ],
         "validation_checks": [
