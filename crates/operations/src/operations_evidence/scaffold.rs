@@ -1,5 +1,6 @@
 mod init;
 mod manifest;
+mod path_safety;
 mod readme;
 mod validation;
 

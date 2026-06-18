@@ -277,6 +277,7 @@ The service provider metadata advertises these as unsupported:
 - ETags.
 - Cursor pagination.
 - Shared Signals Framework events.
+- Password synchronization.
 
 Multi-valued PATCH semantics outside the stored User primary-work-email and Group user-member subset, nested group memberships, and certified directory templates remain tracked milestones.
 
@@ -293,7 +294,7 @@ cairn-api scim connector-profile entra
 
 The command emits a stable JSON report with an RFC3339 `generated_at` timestamp, the SCIM base URL, `ServiceProviderConfig` URL, bearer-header format, server-side token-hash environment variables, recommended User and Group mappings, validation checks, unsupported v1 features, and smoke commands. It does not read the database and does not print raw bearer-token values.
 
-For public-beta release evidence, save the three generated reports as:
+For first-public-RC release evidence, save the three generated reports as:
 
 - `scim-generic-connector-profile.json`
 - `scim-okta-connector-profile.json`
@@ -301,7 +302,7 @@ For public-beta release evidence, save the three generated reports as:
 
 `cairnid evidence check` validates that each profile is fresh, matches the expected provider, uses HTTPS SCIM URLs, includes token-hash rotation guidance, covers required User and Group mappings, discloses unsupported v1 features, and includes smoke commands for primary, secondary, and rejected bearer-token checks.
 
-For public-beta connector evidence, also save token-free normalized external provisioning summaries as:
+For first-public-RC connector evidence, also save token-free normalized external provisioning summaries as:
 
 - `scim-okta-connector-smoke.json`
 - `scim-entra-connector-smoke.json`
@@ -313,7 +314,7 @@ cairn-api scim connector-smoke-template okta > scim-okta-connector-smoke.templat
 cairn-api scim connector-smoke-template entra > scim-entra-connector-smoke.template.json
 ```
 
-These summaries are captured after the Okta and Microsoft Entra provisioning clients run against the production-like SCIM endpoint. They must include `source="external-scim-connector"`, provider, display name, HTTPS `scim_base_url`, `completed_at`, connector application/job IDs, secondary-token acceptance, retired-token rejection, two created User UUIDs, a deactivated User UUID matching one created user, a deleted Group UUID, and named passed checks for connector enablement, ServiceProviderConfig, User create/filter/SearchRequest/projection/PATCH/replace/deactivation, Group create/filter/SearchRequest/projection/member PATCH/replace/delete, Bulk forward-reference behavior, token-rotation acceptance, and retired-token rejection. Do not include raw bearer tokens, authorization headers, provider credentials, screenshots, passwords, or client secrets in these JSON artifacts. `cairnid evidence check` rejects `status="template"` until placeholders are replaced, the external connector evidence is complete, and every required check is marked `passed`.
+These summaries are captured after the Okta and Microsoft Entra provisioning clients run against the production-like SCIM endpoint. They must include `source="external-scim-connector"`, provider, display name, HTTPS `scim_base_url`, `completed_at`, connector application/job IDs, secondary-token acceptance, retired-token rejection, two created User UUIDs, a deactivated User UUID matching one created user, a deleted Group UUID, and named passed checks for connector enablement, ServiceProviderConfig, User create/filter/SearchRequest/projection/PATCH/replace/deactivation, Group create/filter/SearchRequest/projection/member PATCH/replace/delete, token-rotation acceptance, and retired-token rejection. Do not require provider-emitted Bulk in these Okta or Microsoft Entra summaries; `scim-smoke.json` is the release artifact that proves Cairn's bounded Bulk and forward-reference behavior. Do not include raw bearer tokens, authorization headers, provider credentials, screenshots, passwords, or client secrets in these JSON artifacts. `cairnid evidence check` rejects `status="template"` until placeholders are replaced, the external connector evidence is complete, and every required check is marked `passed`.
 
 Profile-specific aliases:
 
@@ -335,7 +336,7 @@ $env:CAIRN_SCIM_REJECTED_BEARER_TOKEN="<old-or-invalid-token>"
 cairn-api scim smoke
 ```
 
-`CAIRN_SCIM_SMOKE_BASE_URL` is optional and defaults to `CAIRN_ISSUER`. `CAIRN_SCIM_BEARER_TOKEN` is the raw token corresponding to the configured hash used for the mutating smoke flow. `CAIRN_SCIM_SECONDARY_BEARER_TOKEN` is optional for ad hoc smoke runs; when present, the smoke verifies a second configured raw token can read `ServiceProviderConfig` during rotation. `CAIRN_SCIM_REJECTED_BEARER_TOKEN` is optional for ad hoc smoke runs; when present, the smoke verifies it receives `401 Unauthorized`. Public-beta release evidence must set both optional token variables so `cairnid evidence check` can prove rotation-window acceptance and retired-token rejection.
+`CAIRN_SCIM_SMOKE_BASE_URL` is optional and defaults to `CAIRN_ISSUER`. `CAIRN_SCIM_BEARER_TOKEN` is the raw token corresponding to the configured hash used for the mutating smoke flow. `CAIRN_SCIM_SECONDARY_BEARER_TOKEN` is optional for ad hoc smoke runs; when present, the smoke verifies a second configured raw token can read `ServiceProviderConfig` during rotation. `CAIRN_SCIM_REJECTED_BEARER_TOKEN` is optional for ad hoc smoke runs; when present, the smoke verifies it receives `401 Unauthorized`. First-public-RC release evidence must set both optional token variables so `cairnid evidence check` can prove rotation-window acceptance and retired-token rejection.
 
 The smoke command exercises `ServiceProviderConfig`, `Schemas`, `ResourceTypes`, optional secondary-token acceptance, optional rejected-token denial, user create, exact-filter lookup, SearchRequest lookup, bounded projection, bounded PATCH, full replacement, soft deprovisioning, group create, exact-filter lookup, SearchRequest lookup, bounded projection, bounded PATCH including `members.value` and filtered member value paths, full replacement, group deletion, and bounded Bulk create/PATCH/delete mutations with same-request and forward `bulkId:` reference resolution through the public SCIM HTTP surface. It emits a token-free JSON evidence report with `base_url`, RFC3339 `completed_at`, token-check booleans, created user IDs, soft-deleted user IDs, deleted group ID, and named checks. It creates unique smoke users and unique smoke groups; the groups are deleted, and the smoke users are left as suspended users with audit history. Run external Okta and Entra connector smokes after this built-in smoke passes, then store the normalized connector-smoke summaries described above for release evidence.
 

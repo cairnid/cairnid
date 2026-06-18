@@ -2,12 +2,18 @@
 
 Cairn Identity is an open-source project in pre-beta development. Support channels should keep operational, security, and product questions separated so reports are handled safely.
 
+## Before Filing
+
+Check the [RC compatibility and support matrix](docs/release-gates.md#rc-compatibility-and-support-matrix) before opening an issue. It lists the first-RC boundary, required evidence, public install paths, and features that are explicitly unsupported.
+
+Kubernetes is a custom, unsupported deployment target until a Helm/Kubernetes package and release evidence exist. Reports from Kubernetes are useful when they identify a Cairn bug, but maintainers cannot treat a custom cluster setup as a supported deployment surface yet.
+
 ## Questions and Usage
 
 Open a repository issue for questions and usage reports. GitHub Discussions are not enabled for this repository. Include:
 
 - The version or commit you are running.
-- Deployment target: local, Docker Compose, Kubernetes, or another container environment.
+- Deployment target: local, Docker Compose, custom Kubernetes, or another container environment.
 - Sanitized configuration names and command output.
 - What you expected and what happened.
 

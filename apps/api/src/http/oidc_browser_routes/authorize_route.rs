@@ -1,6 +1,6 @@
 use axum::{
-    extract::{RawQuery, State},
-    http::HeaderMap,
+    extract::{Request, State},
+    http::{HeaderMap, Method},
     response::Response,
 };
 use cairn_authn::generate_hashed_secret;
@@ -11,7 +11,7 @@ use secrecy::ExposeSecret;
 use time::{Duration, OffsetDateTime};
 
 use super::super::{
-    AppState,
+    AppState, OAUTH_FORM_BODY_MAX_BYTES,
     api_response::ApiError,
     authorization::{
         AuthorizeUrlPromptMode, authorization_error_redirect,
@@ -20,20 +20,37 @@ use super::super::{
         duplicate_authorization_request_parameter,
     },
     client_policy::client_consent_policy_requires_prompt,
+    content_type::request_has_urlencoded_content_type,
     oauth_client::oidc_client_is_active,
     oauth_http::oauth_redirect_response,
+    request_body::bounded_request_body,
     session_auth::{
         require_client_in_session_organization, session_exceeds_max_age, session_from_cookie,
     },
-    urlencoded::percent_encode_minimal,
+    urlencoded::{parse_url_encoded_pairs, percent_encode_minimal},
 };
 
 pub(in crate::http) async fn authorize(
     State(state): State<AppState>,
-    headers: HeaderMap,
-    RawQuery(raw_query): RawQuery,
+    request: Request,
 ) -> Result<Response, ApiError> {
-    let query_pairs = authorization_query_pairs(raw_query.as_deref())?;
+    let method = request.method().clone();
+    let headers = request.headers().clone();
+    let raw_query = request.uri().query().map(str::to_owned);
+    let query_pairs = if method == Method::POST {
+        authorization_form_pairs(&headers, request).await?
+    } else {
+        authorization_query_pairs(raw_query.as_deref())?
+    };
+
+    authorize_with_pairs(state, headers, query_pairs).await
+}
+
+async fn authorize_with_pairs(
+    state: AppState,
+    headers: HeaderMap,
+    query_pairs: Vec<(String, String)>,
+) -> Result<Response, ApiError> {
     let duplicate_parameter = duplicate_authorization_request_parameter(&query_pairs);
     if matches!(duplicate_parameter, Some("client_id" | "redirect_uri")) {
         return Err(ApiError::bad_request(
@@ -250,6 +267,24 @@ pub(in crate::http) async fn authorize(
     );
 
     Ok(oauth_redirect_response(&target))
+}
+
+async fn authorization_form_pairs(
+    headers: &HeaderMap,
+    request: Request,
+) -> Result<Vec<(String, String)>, ApiError> {
+    if !request_has_urlencoded_content_type(headers) {
+        return Err(ApiError::bad_request(
+            "content type must be application/x-www-form-urlencoded",
+        ));
+    }
+    let body = bounded_request_body(request, OAUTH_FORM_BODY_MAX_BYTES)
+        .await
+        .map_err(|_| ApiError::bad_request("authorization request too large"))?;
+    let body = std::str::from_utf8(&body)
+        .map_err(|_| ApiError::bad_request("invalid authorization request"))?;
+    parse_url_encoded_pairs(body)
+        .map_err(|_| ApiError::bad_request("invalid authorization request"))
 }
 
 fn session_satisfies_requested_acr(session_acr: &str, requested_acr_values: &[String]) -> bool {

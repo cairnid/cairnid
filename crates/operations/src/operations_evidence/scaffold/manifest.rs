@@ -1,6 +1,7 @@
 use super::super::registry::{EvidenceSpec, evidence_validator_name};
 use super::super::{
-    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact,
+    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION,
+    ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact,
 };
 use time::OffsetDateTime;
 
@@ -13,6 +14,7 @@ pub(in crate::operations_evidence) fn release_evidence_manifest_from_specs(
         .map(|spec| ReleaseEvidenceManifestArtifact {
             name: spec.name,
             file_name: spec.file_name,
+            release_gate: spec.release_gate,
             command: spec.command,
             validator: evidence_validator_name(spec.validator),
             contains_secrets: spec.contains_secrets,
@@ -23,6 +25,7 @@ pub(in crate::operations_evidence) fn release_evidence_manifest_from_specs(
         .collect::<Vec<_>>();
 
     ReleaseEvidenceManifest {
+        schema_version: RELEASE_EVIDENCE_SCHEMA_VERSION,
         status: "ok",
         generated_at,
         default_max_age_days: DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS,
@@ -31,7 +34,7 @@ pub(in crate::operations_evidence) fn release_evidence_manifest_from_specs(
         notes: vec![
             "Store release evidence in an access-controlled directory.",
             "Do not commit cairn-oidcc-static.json because it contains OIDC client secrets.",
-            "Run cairnid evidence check against the completed directory before public beta.",
+            "Run cairnid evidence check against the completed directory before the first public RC and each public release.",
         ],
     }
 }

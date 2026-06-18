@@ -17,6 +17,14 @@ path = "src/main.rs"
 [dependencies]
 cairn-operations.workspace = true
 clap.workspace = true
+clap_complete.workspace = true
+clap_mangen.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
+
+[dev-dependencies]
+flate2.workspace = true
+sha2.workspace = true
+tar.workspace = true
+zip.workspace = true

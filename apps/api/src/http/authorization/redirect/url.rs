@@ -53,6 +53,9 @@ pub(in crate::http) fn current_authorize_url(
     if let Some(login_hint) = request.login_hint.as_deref() {
         params.push(("login_hint", login_hint));
     }
+    if let Some(claims) = request.claims.as_deref() {
+        params.push(("claims", claims));
+    }
     if let Some(code_challenge) = request.code_challenge.as_deref() {
         params.push(("code_challenge", code_challenge));
     }

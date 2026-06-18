@@ -20,9 +20,12 @@
   | <a href="docs/deployment.md">Deployment</a>
   | <a href="docs/security.md">Security</a>
   | <a href="docs/release-gates.md">Release Gates</a>
+  | <a href="GOVERNANCE.md">Governance</a>
 </p>
 
 > Cairn Identity is pre-beta. It is not OpenID Certified and should not be used as a production identity provider until the gates in [docs/release-gates.md](docs/release-gates.md) are complete.
+>
+> The first-RC compatibility and support boundary is tracked in [docs/release-gates.md#rc-compatibility-and-support-matrix](docs/release-gates.md#rc-compatibility-and-support-matrix).
 
 ## Scope
 
@@ -52,6 +55,10 @@ docker compose -f infra/docker-compose.yml up --build
 ```
 
 Open `http://localhost:5173`, bootstrap the first administrator from `/login`, then use `/admin` to create users, groups, memberships, and OIDC clients.
+
+Tagged `cairnid` and `cairnid-mcp` release archives will be distributed through draft-reviewed GitHub Releases after the first RC tag is cut and maintainers publish the draft. Until then, build the CLI locally with Cargo. See [CLI and MCP release assets](docs/release-gates.md#cli-and-mcp-release-assets).
+
+The current release workflow does not publish container images. CI builds and smokes the API and web images to prove Dockerfile and runtime entrypoint behavior only. See [Deployment](docs/deployment.md#current-container-status) and [Release gates](docs/release-gates.md).
 
 For local development, install JavaScript dependencies with Bun and run the API and web app separately:
 
@@ -142,6 +149,8 @@ cargo test -p cairn-database --test postgres_migrations --locked
 - [Release gates](docs/release-gates.md)
 - [Changelog](CHANGELOG.md)
 - [Roadmap](ROADMAP.md)
+- [Governance](GOVERNANCE.md)
+- [Maintainers](MAINTAINERS.md)
 
 ## Security
 
@@ -149,7 +158,7 @@ Report vulnerabilities privately. Do not open public issues for suspected auth, 
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). The short version: keep protocol behavior strict, keep JavaScript tooling Bun-first, update threat-model and operations docs when security boundaries change, and include the checks you ran in every PR.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [GOVERNANCE.md](GOVERNANCE.md). The short version: keep protocol behavior strict, keep JavaScript tooling Bun-first, update threat-model and operations docs when security boundaries change, and include the checks you ran in every PR.
 
 ## License
 

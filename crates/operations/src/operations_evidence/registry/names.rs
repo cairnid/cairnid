@@ -6,6 +6,7 @@ pub(in crate::operations_evidence) fn evidence_validator_name(
     match validator {
         EvidenceValidator::OperationsPreflight => "operations_preflight",
         EvidenceValidator::DependencyPolicyCheck => "dependency_policy_check",
+        EvidenceValidator::ReleaseAssetsVerification => "release_assets_verification",
         EvidenceValidator::OpenIdStaticRegistration => "openid_static_registration",
         EvidenceValidator::OpenIdStaticConfig => "openid_static_config",
         EvidenceValidator::OidcMetadataSmoke => "oidc_metadata_smoke",

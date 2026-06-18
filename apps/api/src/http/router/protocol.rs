@@ -18,7 +18,7 @@ pub(super) fn protocol_routes() -> Router<AppState> {
             get(openid_configuration),
         )
         .route("/.well-known/jwks.json", get(jwks))
-        .route("/oauth2/authorize", get(authorize))
+        .route("/oauth2/authorize", get(authorize).post(authorize))
         .route("/oauth2/logout", get(end_session).post(end_session_post))
         .route("/oauth2/token", post(token))
         .route("/oauth2/userinfo", userinfo_route())

@@ -17,12 +17,13 @@ pub(super) const REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS: &[&str] = &[
     "group_projection",
     "group_patch_members",
     "group_replace",
-    "bulk_forward_reference",
     "user_deactivation",
     "group_delete",
     "token_rotation_acceptance",
     "retired_token_rejection",
 ];
+
+pub(super) const OPTIONAL_SCIM_CONNECTOR_SMOKE_CHECKS: &[&str] = &["bulk_forward_reference"];
 #[cfg(test)]
 pub(super) use connector_profile::expected_scim_connector_display_name;
 pub(super) use connector_profile::validate_scim_connector_profile;

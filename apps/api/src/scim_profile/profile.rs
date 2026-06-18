@@ -37,7 +37,7 @@ pub fn scim_connector_profile(
             "ServiceProviderConfig, Schemas, and ResourceTypes discovery",
             "User create, list, SearchRequest, get, full replace, bounded PATCH, and soft deprovision",
             "Group create, list, SearchRequest, get, full replace, bounded PATCH, and delete",
-            "Bounded Bulk mutations with same-request bulkId references",
+            "Built-in smoke covers bounded Bulk mutations with same-request bulkId references",
             "Token rotation with up to four active SHA-256 token hashes",
         ],
         validation_checks: vec![
@@ -68,6 +68,7 @@ pub fn scim_connector_profile(
             "Use stable directory object IDs for externalId so retries and renames remain idempotent.",
             "Map SCIM Group members to User resources returned by Cairn; nested Group members are rejected.",
             "Run the built-in smoke command before external connector smokes and after every token rotation.",
+            "External Okta and Microsoft Entra connector-smoke summaries should record only provider-emitted operations; built-in scim-smoke.json carries Bulk proof.",
         ],
     })
 }

@@ -16,11 +16,12 @@ path = "src/main.rs"
 
 [dependencies]
 cairn-operations.workspace = true
-rmcp.workspace = true
+clap.workspace = true
+rmcp = { workspace = true, features = ["client"] }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["process"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

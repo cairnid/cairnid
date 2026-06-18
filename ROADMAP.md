@@ -6,8 +6,9 @@ Cairn Identity should earn trust through a small hardened core before broad prot
 
 - Close every gate in [docs/release-gates.md](docs/release-gates.md).
 - Publish OpenID Foundation Config OP and Basic OP conformance results.
-- Publish a signed release with changelog, SBOM/provenance notes, and container image digests.
-- Capture Docker Compose and container deployment smoke evidence.
+- Publish a draft-reviewed GitHub Release with changelog, CLI/MCP archives, SBOMs, provenance attestations, checksums, and release manifest.
+- Keep container images as CI build/smoke evidence only until a separate container publishing workflow and registry policy exist.
+- Capture Docker Compose and container deployment smoke evidence for release gates.
 - Keep SAML, LDAP, reverse-proxy auth, device trust, and identity brokering out of scope.
 
 ## 0.2.x

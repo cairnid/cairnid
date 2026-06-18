@@ -7,6 +7,7 @@ use cairn_operations::{
     ReleaseEvidenceReport, check_release_evidence, release_evidence_capture_plan,
     release_evidence_manifest,
 };
+use clap::Parser;
 use rmcp::{
     Json, ServerHandler, ServiceExt,
     model::{CallToolResult, Implementation, JsonObject, ServerCapabilities, ServerInfo},
@@ -17,16 +18,111 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    env, fs, io,
+    env,
+    error::Error,
+    fmt, fs, io,
     path::{Component, Path, PathBuf},
+    process::ExitCode,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing_subscriber::EnvFilter;
 
 const DEFAULT_EVIDENCE_CHILD: &str = "release-evidence";
+const MCP_EVIDENCE_RESULT_SCHEMA_VERSION: &str = "cairnid.mcp.evidence.v1";
+const EXIT_INTERNAL_ERROR: u8 = 1;
+const EXIT_OPERATOR_INPUT: u8 = 4;
 
-#[derive(Debug, Clone, Default)]
-struct CairnIdMcpServer;
+#[derive(Debug, Parser)]
+#[command(
+    name = "cairnid-mcp",
+    version,
+    about = "Local stdio MCP server for read-only CairnID release evidence inspection.",
+    long_about = None
+)]
+#[command(
+    after_help = "Examples:\n  cairnid-mcp\n  cairnid-mcp --evidence-root C:\\path\\to\\cairnid"
+)]
+struct Cli {
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Evidence allowlist root. Defaults to the process working directory"
+    )]
+    evidence_root: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+struct CairnIdMcpServer {
+    evidence_root: PathBuf,
+}
+
+impl CairnIdMcpServer {
+    fn new(evidence_root: PathBuf) -> Self {
+        Self { evidence_root }
+    }
+}
+
+#[derive(Debug)]
+enum StartupError {
+    EvidenceRoot(StartupEvidenceRootError),
+    Serve(Box<dyn Error + Send + Sync>),
+}
+
+impl StartupError {
+    fn exit_code(&self) -> u8 {
+        match self {
+            Self::EvidenceRoot(_) => EXIT_OPERATOR_INPUT,
+            Self::Serve(_) => EXIT_INTERNAL_ERROR,
+        }
+    }
+}
+
+impl fmt::Display for StartupError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EvidenceRoot(error) => write!(formatter, "{error}"),
+            Self::Serve(error) => write!(formatter, "stdio server failed: {error}"),
+        }
+    }
+}
+
+impl Error for StartupError {}
+
+#[derive(Debug)]
+struct StartupEvidenceRootError {
+    kind: StartupEvidenceRootErrorKind,
+}
+
+#[derive(Debug)]
+enum StartupEvidenceRootErrorKind {
+    InspectFailed,
+    NotDirectory,
+    Symlink,
+}
+
+impl StartupEvidenceRootError {
+    fn new(kind: StartupEvidenceRootErrorKind) -> Self {
+        Self { kind }
+    }
+
+    fn inspect_failed() -> Self {
+        Self::new(StartupEvidenceRootErrorKind::InspectFailed)
+    }
+}
+
+impl fmt::Display for StartupEvidenceRootError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let reason = match self.kind {
+            StartupEvidenceRootErrorKind::InspectFailed => "could not be inspected",
+            StartupEvidenceRootErrorKind::NotDirectory => "is not a directory",
+            StartupEvidenceRootErrorKind::Symlink => "must not be a symlink",
+        };
+
+        write!(formatter, "evidence root {reason}")
+    }
+}
+
+impl Error for StartupEvidenceRootError {}
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 struct EvidenceDirectoryRequest {
@@ -45,6 +141,7 @@ struct EvidenceDirectoryRequest {
 
 #[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidencePlan {
+    schema_version: &'static str,
     status: String,
     generated_at: String,
     artifact_count: usize,
@@ -63,6 +160,7 @@ struct McpEvidencePlan {
 struct McpEvidencePlanStep {
     name: String,
     file_name: String,
+    release_gate: String,
     command: String,
     validator: String,
     status: String,
@@ -84,6 +182,7 @@ struct McpEvidenceEnvironmentRequirement {
 
 #[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidenceManifest {
+    schema_version: &'static str,
     status: String,
     generated_at: String,
     default_max_age_days: i64,
@@ -96,6 +195,7 @@ struct McpEvidenceManifest {
 struct McpEvidenceManifestArtifact {
     name: String,
     file_name: String,
+    release_gate: String,
     command: String,
     validator: String,
     contains_secrets: bool,
@@ -106,6 +206,7 @@ struct McpEvidenceManifestArtifact {
 
 #[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidenceSummary {
+    schema_version: &'static str,
     status: String,
     generated_at: String,
     max_age_days: i64,
@@ -122,6 +223,7 @@ struct McpEvidenceSummary {
 struct McpEvidenceArtifactSummary {
     name: String,
     file_name: String,
+    release_gate: String,
     command: String,
     status: String,
     check_count: usize,
@@ -129,98 +231,131 @@ struct McpEvidenceArtifactSummary {
     failure_codes: BTreeMap<String, usize>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidenceErrorEnvelope {
+    schema_version: &'static str,
     error: McpEvidenceErrorBody,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidenceErrorBody {
     code: &'static str,
+    failure_code: &'static str,
     message: &'static str,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    failure_codes: BTreeMap<String, usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<McpEvidenceSummary>,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct McpEvidenceRequestError {
     code: &'static str,
+    failure_code: &'static str,
     message: &'static str,
 }
 
 impl McpEvidenceRequestError {
     const ALLOWLIST_ROOT_UNAVAILABLE: Self = Self::new(
         "allowlist_root_unavailable",
+        "internal_error",
         "the evidence allowlist root could not be inspected",
     );
     const DRIVE_RELATIVE_OR_ROOT_STYLE_RELATIVE_PATH: Self = Self::new(
         "drive_relative_or_root_style_relative_path",
+        "artifact_path_failure",
         "evidence_dir must be a relative path without a drive prefix or root prefix, or an absolute path inside the allowlisted evidence root",
     );
     const EMPTY_EVIDENCE_DIR: Self = Self::new(
         "empty_evidence_dir",
+        "missing_evidence",
         "evidence_dir must be a non-empty path",
     );
     const EVIDENCE_CONTRACT_FAILED: Self = Self::new(
         "evidence_contract_failed",
+        "stale_or_invalid_scaffold",
         "release evidence failed the required contract",
     );
     const EVIDENCE_READ_FAILED: Self = Self::new(
         "evidence_read_failed",
+        "artifact_path_failure",
         "release evidence files could not be read",
     );
     const INVALID_EVIDENCE_JSON: Self = Self::new(
         "invalid_evidence_json",
+        "internal_error",
         "release evidence JSON could not be processed",
     );
     const INVALID_EVIDENCE_DIR: Self = Self::new(
         "invalid_evidence_dir",
+        "artifact_path_failure",
         "evidence_dir must be a string path when provided",
     );
     const INVALID_MAX_AGE_DAYS: Self = Self::new(
         "invalid_max_age_days",
+        "invalid_request",
         "max_age_days must be an integer from 1 through 365",
     );
     const MISSING_EVIDENCE_DIR: Self = Self::new(
         "missing_evidence_dir",
+        "missing_evidence",
         "evidence_dir must be an existing directory",
     );
     const NON_DIRECTORY_EVIDENCE_DIR: Self = Self::new(
         "non_directory_evidence_dir",
+        "artifact_path_failure",
         "evidence_dir must be a directory",
     );
-    const NO_ARGUMENTS_ACCEPTED: Self =
-        Self::new("unknown_argument", "this tool does not accept arguments");
+    const NO_ARGUMENTS_ACCEPTED: Self = Self::new(
+        "unknown_argument",
+        "invalid_request",
+        "this tool does not accept arguments",
+    );
     const OUTSIDE_ALLOWLISTED_ROOT: Self = Self::new(
         "outside_allowlisted_root",
+        "artifact_path_failure",
         "evidence_dir must resolve inside the allowlisted evidence root",
     );
     const PARENT_TRAVERSAL: Self = Self::new(
         "parent_traversal",
+        "artifact_path_failure",
         "evidence_dir must not contain parent traversal",
     );
     const SYMLINK_ENTRY: Self = Self::new(
         "symlink_entry",
+        "artifact_path_failure",
         "evidence_dir must not contain symlink entries",
     );
     const SYMLINKED_EVIDENCE_DIR: Self = Self::new(
         "symlinked_evidence_dir",
+        "artifact_path_failure",
         "evidence_dir must not be a symlink",
     );
     const UNKNOWN_ARGUMENT: Self = Self::new(
         "unknown_argument",
+        "invalid_request",
         "only evidence_dir and max_age_days are accepted",
     );
 
-    const fn new(code: &'static str, message: &'static str) -> Self {
-        Self { code, message }
+    const fn new(code: &'static str, failure_code: &'static str, message: &'static str) -> Self {
+        Self {
+            code,
+            failure_code,
+            message,
+        }
     }
 }
 
 impl From<McpEvidenceRequestError> for CallToolResult {
     fn from(error: McpEvidenceRequestError) -> Self {
         let envelope = McpEvidenceErrorEnvelope {
+            schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
             error: McpEvidenceErrorBody {
                 code: error.code,
+                failure_code: error.failure_code,
                 message: error.message,
+                failure_codes: BTreeMap::from([(error.failure_code.to_owned(), 1)]),
+                summary: None,
             },
         };
         let value = serde_json::to_value(envelope).expect("MCP evidence error must serialize");
@@ -265,12 +400,37 @@ fn closed_empty_input_schema() -> std::sync::Arc<JsonObject> {
     std::sync::Arc::new(schema)
 }
 
+fn evidence_result_output_schema<T: JsonSchema + 'static>() -> std::sync::Arc<JsonObject> {
+    let success = rmcp::handler::server::common::schema_for_type::<T>()
+        .as_ref()
+        .clone();
+    let error = rmcp::handler::server::common::schema_for_type::<McpEvidenceErrorEnvelope>()
+        .as_ref()
+        .clone();
+
+    let mut schema = JsonObject::new();
+    schema.insert(
+        "type".to_owned(),
+        serde_json::Value::String("object".to_owned()),
+    );
+    schema.insert(
+        "oneOf".to_owned(),
+        serde_json::Value::Array(vec![
+            serde_json::Value::Object(success),
+            serde_json::Value::Object(error),
+        ]),
+    );
+
+    std::sync::Arc::new(schema)
+}
+
 #[tool_router]
 impl CairnIdMcpServer {
     #[tool(
         name = "cairnid.evidence_plan",
         description = "Return the release evidence capture plan.",
         input_schema = closed_empty_input_schema(),
+        output_schema = evidence_result_output_schema::<McpEvidencePlan>(),
         annotations(
             title = "Evidence Plan",
             read_only_hint = true,
@@ -296,6 +456,7 @@ impl CairnIdMcpServer {
         name = "cairnid.evidence_manifest",
         description = "Return the release evidence artifact manifest.",
         input_schema = closed_empty_input_schema(),
+        output_schema = evidence_result_output_schema::<McpEvidenceManifest>(),
         annotations(
             title = "Evidence Manifest",
             read_only_hint = true,
@@ -318,6 +479,7 @@ impl CairnIdMcpServer {
         name = "cairnid.evidence_status",
         description = "Progress/status view for release evidence validation; returns sanitized status counts without changing files.",
         input_schema = evidence_directory_input_schema(),
+        output_schema = evidence_result_output_schema::<McpEvidenceSummary>(),
         annotations(
             title = "Evidence Status",
             read_only_hint = true,
@@ -331,14 +493,14 @@ impl CairnIdMcpServer {
         arguments: JsonObject,
     ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
         let request = parse_evidence_directory_request(arguments)?;
-        let root = evidence_allowlist_root()?;
-        evidence_status_for_root(&root, request)
+        evidence_status_for_root(&self.evidence_root, request)
     }
 
     #[tool(
         name = "cairnid.evidence_check",
-        description = "Strict final-gate alias for release evidence validation; returns the same sanitized summary shape as evidence_status without changing files.",
+        description = "Strict final-gate release evidence validation; returns the sanitized summary when ready and a structured failure-code error when incomplete, without changing files.",
         input_schema = evidence_directory_input_schema(),
+        output_schema = evidence_result_output_schema::<McpEvidenceSummary>(),
         annotations(
             title = "Evidence Check",
             read_only_hint = true,
@@ -352,8 +514,7 @@ impl CairnIdMcpServer {
         arguments: JsonObject,
     ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
         let request = parse_evidence_directory_request(arguments)?;
-        let root = evidence_allowlist_root()?;
-        evidence_check_for_root(&root, request)
+        evidence_check_for_root(&self.evidence_root, request)
     }
 }
 
@@ -370,15 +531,37 @@ impl ServerHandler for CairnIdMcpServer {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> ExitCode {
+    match run(Cli::parse()).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("cairnid-mcp failed: {error}");
+            ExitCode::from(error.exit_code())
+        }
+    }
+}
+
+async fn run(cli: Cli) -> Result<(), StartupError> {
+    let evidence_root =
+        startup_evidence_root(cli.evidence_root).map_err(StartupError::EvidenceRoot)?;
     init_tracing();
-    tracing::debug!("starting cairnid-mcp stdio server");
+    tracing::debug!(
+        evidence_root = %evidence_root.display(),
+        "starting cairnid-mcp stdio server"
+    );
 
-    let service = CairnIdMcpServer.serve(stdio()).await.inspect_err(|error| {
-        tracing::error!(?error, "failed to serve cairnid-mcp");
-    })?;
+    let service = CairnIdMcpServer::new(evidence_root)
+        .serve(stdio())
+        .await
+        .inspect_err(|error| {
+            tracing::error!(?error, "failed to serve cairnid-mcp");
+        })
+        .map_err(|error| StartupError::Serve(Box::new(error)))?;
 
-    service.waiting().await?;
+    service
+        .waiting()
+        .await
+        .map_err(|error| StartupError::Serve(Box::new(error)))?;
     Ok(())
 }
 
@@ -403,27 +586,80 @@ fn evidence_check_for_root(
     root: &Path,
     request: EvidenceDirectoryRequest,
 ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
-    evidence_summary_for_root(root, request)
+    let report = release_evidence_report_for_root(root, request)?;
+    let summary = mcp_evidence_summary(&report);
+    if summary.status == "ready" {
+        Ok(Json(summary))
+    } else {
+        Err(incomplete_evidence_error(summary))
+    }
 }
 
 fn evidence_summary_for_root(
     root: &Path,
     request: EvidenceDirectoryRequest,
 ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
-    let evidence_dir = resolve_evidence_dir_in_root(root, request.evidence_dir.as_deref())?;
-    let max_age_days = request
-        .max_age_days
-        .unwrap_or(DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS);
-    let report = check_release_evidence(&evidence_dir, OffsetDateTime::now_utc(), max_age_days)
-        .map_err(mcp_release_evidence_error)?;
+    let report = release_evidence_report_for_root(root, request)?;
 
     Ok(Json(mcp_evidence_summary(&report)))
 }
 
-fn evidence_allowlist_root() -> Result<PathBuf, McpEvidenceRequestError> {
-    let current_dir =
-        env::current_dir().map_err(|_| McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE)?;
-    canonical_existing_directory(&current_dir, EvidenceDirectoryKind::AllowlistRoot)
+fn release_evidence_report_for_root(
+    root: &Path,
+    request: EvidenceDirectoryRequest,
+) -> Result<ReleaseEvidenceReport, CallToolResult> {
+    let evidence_dir = resolve_evidence_dir_in_root(root, request.evidence_dir.as_deref())?;
+    let max_age_days = request
+        .max_age_days
+        .unwrap_or(DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS);
+    check_release_evidence(&evidence_dir, OffsetDateTime::now_utc(), max_age_days)
+        .map_err(mcp_release_evidence_error)
+        .map_err(CallToolResult::from)
+}
+
+fn incomplete_evidence_error(summary: McpEvidenceSummary) -> CallToolResult {
+    let failure_code = dominant_failure_code(&summary.failure_codes);
+    let envelope = McpEvidenceErrorEnvelope {
+        schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
+        error: McpEvidenceErrorBody {
+            code: "release_evidence_incomplete",
+            failure_code,
+            message: "release evidence is incomplete; inspect failure_codes and summary for the stable machine-readable failure contract",
+            failure_codes: summary.failure_codes.clone(),
+            summary: Some(summary),
+        },
+    };
+    let value = serde_json::to_value(envelope).expect("MCP evidence check error must serialize");
+
+    CallToolResult::structured_error(value)
+}
+
+fn startup_evidence_root(value: Option<PathBuf>) -> Result<PathBuf, StartupEvidenceRootError> {
+    let root = match value {
+        Some(root) => root,
+        None => env::current_dir().map_err(|_| StartupEvidenceRootError::inspect_failed())?,
+    };
+
+    canonical_startup_evidence_root(&root)
+}
+
+fn canonical_startup_evidence_root(path: &Path) -> Result<PathBuf, StartupEvidenceRootError> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| StartupEvidenceRootError::inspect_failed())?;
+
+    if metadata.file_type().is_symlink() {
+        return Err(StartupEvidenceRootError::new(
+            StartupEvidenceRootErrorKind::Symlink,
+        ));
+    }
+    if !metadata.is_dir() {
+        return Err(StartupEvidenceRootError::new(
+            StartupEvidenceRootErrorKind::NotDirectory,
+        ));
+    }
+
+    path.canonicalize()
+        .map_err(|_| StartupEvidenceRootError::inspect_failed())
 }
 
 fn parse_evidence_directory_request(
@@ -615,6 +851,7 @@ fn mcp_release_evidence_error(error: ReleaseEvidenceError) -> McpEvidenceRequest
 
 fn mcp_evidence_plan(report: ReleaseEvidencePlanReport) -> McpEvidencePlan {
     McpEvidencePlan {
+        schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
         status: report.status.to_owned(),
         generated_at: rfc3339(report.generated_at),
         artifact_count: report.artifact_count,
@@ -638,6 +875,7 @@ fn mcp_evidence_plan_step(step: ReleaseEvidencePlanStep) -> McpEvidencePlanStep 
     McpEvidencePlanStep {
         name: step.name.to_owned(),
         file_name: step.file_name.to_owned(),
+        release_gate: step.release_gate.to_owned(),
         command: step.command.to_owned(),
         validator: step.validator.to_owned(),
         status: step.status.to_owned(),
@@ -671,6 +909,7 @@ fn mcp_environment_requirement(
 
 fn mcp_evidence_manifest(manifest: ReleaseEvidenceManifest) -> McpEvidenceManifest {
     McpEvidenceManifest {
+        schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
         status: manifest.status.to_owned(),
         generated_at: rfc3339(manifest.generated_at),
         default_max_age_days: manifest.default_max_age_days,
@@ -688,6 +927,7 @@ fn mcp_manifest_artifact(artifact: ReleaseEvidenceManifestArtifact) -> McpEviden
     McpEvidenceManifestArtifact {
         name: artifact.name.to_owned(),
         file_name: artifact.file_name.to_owned(),
+        release_gate: artifact.release_gate.to_owned(),
         command: artifact.command.to_owned(),
         validator: artifact.validator.to_owned(),
         contains_secrets: artifact.contains_secrets,
@@ -720,6 +960,7 @@ fn mcp_evidence_summary(report: &ReleaseEvidenceReport) -> McpEvidenceSummary {
         .collect::<Vec<_>>();
 
     McpEvidenceSummary {
+        schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
         status: stable_report_status(report.status).to_owned(),
         generated_at: rfc3339(report.generated_at),
         max_age_days: report.max_age_days,
@@ -737,6 +978,7 @@ fn mcp_artifact_summary(artifact: &ReleaseEvidenceArtifactReport) -> McpEvidence
     McpEvidenceArtifactSummary {
         name: artifact.name.to_owned(),
         file_name: artifact.file_name.to_owned(),
+        release_gate: artifact.release_gate.to_owned(),
         command: artifact.command.to_owned(),
         status: stable_artifact_status(artifact.status).to_owned(),
         check_count: artifact.checks.len(),
@@ -780,8 +1022,14 @@ fn failure_code_counts<'a>(failures: impl IntoIterator<Item = &'a str>) -> BTree
 }
 
 fn failure_code(failure: &str) -> &'static str {
-    if failure.contains("required evidence artifact is missing") {
-        "missing_artifact"
+    if failure.contains("required evidence artifact is missing")
+        || failure.contains("scaffold manifest is missing")
+        || failure.contains("scaffold README is missing")
+        || failure.contains("scaffold gitignore is missing")
+    {
+        "missing_evidence"
+    } else if failure.contains("scaffold") {
+        "stale_or_invalid_scaffold"
     } else if failure.contains("not valid JSON") {
         "invalid_json"
     } else if failure.contains("JSON root must be an object") {
@@ -796,18 +1044,13 @@ fn failure_code(failure: &str) -> &'static str {
         "timestamp_contract"
     } else if failure.contains("must not be present") {
         "forbidden_field"
-    } else if failure.contains("scaffold")
-        || failure.contains("manifest")
-        || failure.contains(".gitignore")
-        || failure.contains("README.md")
+    } else if failure.contains("unexpected release evidence entry")
+        || failure.contains("symlink")
+        || failure.contains("got directory")
+        || failure.contains("must be a regular file")
+        || failure.contains("could not be read")
     {
-        "scaffold_contract"
-    } else if failure.contains("unexpected release evidence entry") {
-        "unexpected_entry"
-    } else if failure.contains("symlink") {
-        "symlink_entry"
-    } else if failure.contains("could not be read") {
-        "read_error"
+        "artifact_path_failure"
     } else if failure.contains("must be")
         || failure.contains("must contain")
         || failure.contains("must match")
@@ -818,6 +1061,27 @@ fn failure_code(failure: &str) -> &'static str {
     } else {
         "validation_failed"
     }
+}
+
+fn dominant_failure_code(failure_codes: &BTreeMap<String, usize>) -> &'static str {
+    const PRIORITY: &[&str] = &[
+        "missing_evidence",
+        "stale_or_invalid_scaffold",
+        "artifact_path_failure",
+        "invalid_json",
+        "invalid_json_root",
+        "stale_or_invalid_timestamp",
+        "timestamp_contract",
+        "forbidden_field",
+        "contract_mismatch",
+        "validation_failed",
+    ];
+
+    PRIORITY
+        .iter()
+        .copied()
+        .find(|code| failure_codes.contains_key(*code))
+        .unwrap_or("validation_failed")
 }
 
 #[cfg(test)]
@@ -861,10 +1125,30 @@ mod tests {
 
     #[test]
     fn structured_evidence_tools_have_output_schemas() {
-        assert_output_schema_object(CairnIdMcpServer::evidence_plan_tool_attr().output_schema);
-        assert_output_schema_object(CairnIdMcpServer::evidence_manifest_tool_attr().output_schema);
-        assert_output_schema_object(CairnIdMcpServer::evidence_status_tool_attr().output_schema);
-        assert_output_schema_object(CairnIdMcpServer::evidence_check_tool_attr().output_schema);
+        assert_output_schema_contract(
+            CairnIdMcpServer::evidence_plan_tool_attr().output_schema,
+            "cairnid.evidence_plan",
+            "steps",
+            false,
+        );
+        assert_output_schema_contract(
+            CairnIdMcpServer::evidence_manifest_tool_attr().output_schema,
+            "cairnid.evidence_manifest",
+            "artifacts",
+            false,
+        );
+        assert_output_schema_contract(
+            CairnIdMcpServer::evidence_status_tool_attr().output_schema,
+            "cairnid.evidence_status",
+            "artifacts",
+            false,
+        );
+        assert_output_schema_contract(
+            CairnIdMcpServer::evidence_check_tool_attr().output_schema,
+            "cairnid.evidence_check",
+            "artifacts",
+            true,
+        );
     }
 
     #[test]
@@ -911,13 +1195,13 @@ mod tests {
         let check_description = check.description.expect("check description");
 
         assert!(status_description.contains("Progress/status view"));
-        assert!(check_description.contains("Strict final-gate alias"));
-        assert!(check_description.contains("same sanitized summary shape"));
+        assert!(check_description.contains("Strict final-gate"));
+        assert!(check_description.contains("structured failure-code error"));
     }
 
     #[test]
     fn server_info_uses_binary_name() {
-        let info = CairnIdMcpServer.get_info();
+        let info = CairnIdMcpServer::new(PathBuf::from(".")).get_info();
 
         assert_eq!(info.server_info.name, "cairnid-mcp");
         assert!(info.capabilities.tools.is_some());
@@ -1052,10 +1336,14 @@ mod tests {
             max_age_days: Some(DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS),
         };
         let status = evidence_status_for_root(&root, request.clone()).expect("MCP status response");
-        let check = evidence_check_for_root(&root, request).expect("MCP check response");
+        let check = match evidence_check_for_root(&root, request) {
+            Ok(_) => panic!("MCP check should fail when evidence is incomplete"),
+            Err(error) => error,
+        };
         let status_json = serde_json::to_string(&status.0).expect("serialize status response");
-        let check_json = serde_json::to_string(&check.0).expect("serialize check response");
+        let check_json = serde_json::to_string(&check).expect("serialize check response");
 
+        assert_eq!(status.0.schema_version, MCP_EVIDENCE_RESULT_SCHEMA_VERSION);
         assert!(!status_json.contains(SENTINEL));
         assert!(!check_json.contains(SENTINEL));
         assert!(status_json.contains("contract_mismatch"));
@@ -1064,13 +1352,287 @@ mod tests {
         remove_temp_root(root);
     }
 
-    fn assert_output_schema_object(output_schema: Option<std::sync::Arc<rmcp::model::JsonObject>>) {
+    #[test]
+    fn failure_code_mapping_exposes_stable_client_categories() {
+        assert_eq!(
+            failure_code("required evidence artifact is missing"),
+            "missing_evidence"
+        );
+        assert_eq!(
+            failure_code(
+                ".release-evidence-manifest.json: scaffold manifest is older than 30 days and must be regenerated"
+            ),
+            "stale_or_invalid_scaffold"
+        );
+        assert_eq!(
+            failure_code("artifact must be a regular file, got symlink"),
+            "artifact_path_failure"
+        );
+        assert_eq!(
+            failure_code("release evidence entry must be a regular file, got directory: x"),
+            "artifact_path_failure"
+        );
+        assert_eq!(
+            failure_code("unexpected release evidence entry: extra.json"),
+            "artifact_path_failure"
+        );
+        assert_eq!(
+            failure_code("artifact is not valid JSON: expected value"),
+            "invalid_json"
+        );
+        assert_eq!(
+            failure_code("some validator-specific contract failed"),
+            "validation_failed"
+        );
+    }
+
+    #[test]
+    fn request_errors_expose_stable_failure_code_categories() {
+        assert_eq!(
+            McpEvidenceRequestError::MISSING_EVIDENCE_DIR.failure_code,
+            "missing_evidence"
+        );
+        assert_eq!(
+            McpEvidenceRequestError::SYMLINK_ENTRY.failure_code,
+            "artifact_path_failure"
+        );
+        assert_eq!(
+            McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE.failure_code,
+            "internal_error"
+        );
+    }
+
+    #[test]
+    fn incomplete_check_error_includes_summary_and_failure_codes() {
+        let root = temp_root("incomplete-check-error");
+        let evidence_dir = root.join(DEFAULT_EVIDENCE_CHILD);
+        init_release_evidence_directory(&evidence_dir, OffsetDateTime::now_utc(), false)
+            .expect("initialize evidence directory");
+
+        let request = EvidenceDirectoryRequest {
+            evidence_dir: None,
+            max_age_days: Some(DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS),
+        };
+        let result = match evidence_check_for_root(&root, request) {
+            Ok(_) => panic!("MCP check should fail when evidence is incomplete"),
+            Err(error) => error,
+        };
+        let structured = result.structured_content.expect("structured error content");
+        assert_eq!(
+            structured.get("schema_version").and_then(Value::as_str),
+            Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+        );
+        let error = structured
+            .get("error")
+            .and_then(Value::as_object)
+            .expect("error object");
+
+        assert_eq!(
+            error.get("code").and_then(Value::as_str),
+            Some("release_evidence_incomplete")
+        );
+        assert_eq!(
+            error.get("failure_code").and_then(Value::as_str),
+            Some("missing_evidence")
+        );
+        assert!(
+            error
+                .get("failure_codes")
+                .and_then(Value::as_object)
+                .and_then(|codes| codes.get("missing_evidence"))
+                .and_then(Value::as_u64)
+                .expect("missing evidence failure count")
+                > 0
+        );
+        assert_eq!(
+            error
+                .get("summary")
+                .and_then(|summary| summary.get("schema_version"))
+                .and_then(Value::as_str),
+            Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+        );
+        assert_eq!(
+            error
+                .get("summary")
+                .and_then(|summary| summary.get("status"))
+                .and_then(Value::as_str),
+            Some("incomplete")
+        );
+
+        remove_temp_root(root);
+    }
+
+    fn assert_output_schema_contract(
+        output_schema: Option<std::sync::Arc<rmcp::model::JsonObject>>,
+        tool_name: &str,
+        success_collection: &str,
+        expect_error_summary: bool,
+    ) {
         let schema = output_schema.expect("output schema");
+        let schema = Value::Object(schema.as_ref().clone());
 
         assert_eq!(
             schema.get("type"),
             Some(&serde_json::Value::String("object".to_owned()))
         );
+        let variants = schema
+            .get("oneOf")
+            .and_then(Value::as_array)
+            .expect("output schema oneOf variants");
+        assert_eq!(variants.len(), 2);
+        assert!(variants.iter().all(schema_requires_schema_version));
+        assert!(variants.iter().any(schema_has_error_property));
+
+        let success_schema = success_output_schema(tool_name, variants);
+        assert_schema_array_items_require_release_gate(
+            success_schema,
+            success_schema,
+            success_collection,
+            &format!("{tool_name} success {success_collection}"),
+        );
+
+        if expect_error_summary {
+            assert_error_summary_artifacts_require_release_gate(
+                tool_name,
+                error_output_schema(tool_name, variants),
+            );
+        }
+    }
+
+    fn success_output_schema<'a>(tool_name: &str, variants: &'a [Value]) -> &'a Value {
+        variants
+            .iter()
+            .find(|schema| !schema_has_error_property(schema))
+            .unwrap_or_else(|| panic!("{tool_name} outputSchema success variant"))
+    }
+
+    fn error_output_schema<'a>(tool_name: &str, variants: &'a [Value]) -> &'a Value {
+        variants
+            .iter()
+            .find(|schema| schema_has_error_property(schema))
+            .unwrap_or_else(|| panic!("{tool_name} outputSchema error variant"))
+    }
+
+    fn assert_error_summary_artifacts_require_release_gate(tool_name: &str, error_schema: &Value) {
+        let error_body = schema_property(
+            error_schema,
+            error_schema,
+            "error",
+            &format!("{tool_name} error envelope"),
+        );
+        let summary = schema_property(
+            error_schema,
+            error_body,
+            "summary",
+            &format!("{tool_name} incomplete-check error body"),
+        );
+        assert_schema_array_items_require_release_gate(
+            error_schema,
+            summary,
+            "artifacts",
+            &format!("{tool_name} incomplete-check error summary"),
+        );
+    }
+
+    fn assert_schema_array_items_require_release_gate(
+        root: &Value,
+        schema: &Value,
+        array_property: &str,
+        context: &str,
+    ) {
+        let array_schema = schema_property(root, schema, array_property, context);
+        let item_schema = array_schema
+            .get("items")
+            .unwrap_or_else(|| panic!("{context} should advertise array items"));
+        let item_schema = resolve_schema(root, item_schema);
+        let properties = item_schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .unwrap_or_else(|| panic!("{context} item schema properties"));
+
+        assert!(
+            properties.contains_key("release_gate"),
+            "{context} item schema should advertise release_gate"
+        );
+        assert!(
+            schema_requires_property(item_schema, "release_gate"),
+            "{context} item schema should require release_gate"
+        );
+    }
+
+    fn schema_property<'a>(
+        root: &'a Value,
+        schema: &'a Value,
+        property: &str,
+        context: &str,
+    ) -> &'a Value {
+        let resolved = resolve_schema(root, schema);
+        resolved
+            .get("properties")
+            .and_then(Value::as_object)
+            .and_then(|properties| properties.get(property))
+            .unwrap_or_else(|| panic!("{context} should advertise {property}"))
+    }
+
+    fn resolve_schema<'a>(root: &'a Value, schema: &'a Value) -> &'a Value {
+        let mut current = schema;
+
+        loop {
+            if let Some(reference) = current.get("$ref").and_then(Value::as_str) {
+                let pointer = reference
+                    .strip_prefix('#')
+                    .unwrap_or_else(|| panic!("schema reference should be local: {reference}"));
+                current = root
+                    .pointer(pointer)
+                    .unwrap_or_else(|| panic!("schema reference target should exist: {reference}"));
+                continue;
+            }
+
+            if let Some(non_null) =
+                current
+                    .get("anyOf")
+                    .and_then(Value::as_array)
+                    .and_then(|variants| {
+                        variants.iter().find(|variant| {
+                            variant.get("type").and_then(Value::as_str) != Some("null")
+                        })
+                    })
+            {
+                current = non_null;
+                continue;
+            }
+
+            return current;
+        }
+    }
+
+    fn schema_requires_property(schema: &Value, property: &str) -> bool {
+        schema
+            .get("required")
+            .and_then(Value::as_array)
+            .is_some_and(|required| {
+                required
+                    .iter()
+                    .any(|field| field.as_str() == Some(property))
+            })
+    }
+
+    fn schema_requires_schema_version(schema: &Value) -> bool {
+        schema
+            .get("required")
+            .and_then(Value::as_array)
+            .is_some_and(|required| {
+                required
+                    .iter()
+                    .any(|field| field.as_str() == Some("schema_version"))
+            })
+    }
+
+    fn schema_has_error_property(schema: &Value) -> bool {
+        schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .is_some_and(|properties| properties.contains_key("error"))
     }
 
     fn assert_closed_empty_input_schema(input_schema: &rmcp::model::JsonObject) {

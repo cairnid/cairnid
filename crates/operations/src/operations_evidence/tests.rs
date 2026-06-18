@@ -1,9 +1,10 @@
 mod fixtures;
 
 use super::{
-    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseEvidenceError, check_release_evidence,
-    init_release_evidence_directory, release_evidence_capture_plan, release_evidence_manifest,
-    release_evidence_status_report,
+    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION,
+    ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions, ReleaseEvidenceError,
+    check_release_evidence, init_release_evidence_directory, release_assets_verification_receipt,
+    release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
 };
 use fixtures::*;
 use serde_json::{Value, json};
@@ -21,6 +22,11 @@ fn release_evidence_passes_complete_directory() {
         &root,
         "dependency-policy-check.json",
         dependency_policy_check(),
+    );
+    write_json(
+        &root,
+        "release-assets-verification.json",
+        release_assets_verification(),
     );
     write_json(
         &root,
@@ -153,14 +159,16 @@ fn release_evidence_passes_complete_directory() {
     .expect("release evidence report");
 
     assert_eq!(report.status, "ready");
+    assert_eq!(report.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert!(report.failures.is_empty());
-    assert_eq!(report.artifacts.len(), 23);
+    assert_eq!(report.artifacts.len(), 24);
 
     let status = release_evidence_status_report(&root, release_evidence_now(), 30)
         .expect("release evidence status report");
     assert_eq!(status.status, "ready");
-    assert_eq!(status.artifact_count, 23);
-    assert_eq!(status.passed_artifact_count, 23);
+    assert_eq!(status.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
+    assert_eq!(status.artifact_count, 24);
+    assert_eq!(status.passed_artifact_count, 24);
     assert_eq!(status.missing_artifact_count, 0);
     assert_eq!(status.failed_artifact_count, 0);
     assert!(status.next_actions.is_empty());
@@ -327,16 +335,18 @@ fn release_evidence_status_reports_next_actions_for_incomplete_directory() {
         .expect("release evidence status report");
 
     assert_eq!(status.status, "incomplete");
-    assert_eq!(status.artifact_count, 23);
+    assert_eq!(status.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
+    assert_eq!(status.artifact_count, 24);
     assert_eq!(status.passed_artifact_count, 1);
-    assert_eq!(status.missing_artifact_count, 22);
+    assert_eq!(status.missing_artifact_count, 23);
     assert_eq!(status.failed_artifact_count, 0);
-    assert_eq!(status.next_actions.len(), 22);
+    assert_eq!(status.next_actions.len(), 23);
     assert!(
         status
             .next_actions
             .iter()
             .any(|action| action.file_name == "cairn-oidcc-static.json"
+                && action.release_gate == "Static OpenID artifacts"
                 && action.command.contains("oidcc-static-config")
                 && action.status == "missing")
     );
@@ -353,9 +363,10 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
     let manifest = release_evidence_manifest(OffsetDateTime::now_utc());
 
     assert_eq!(manifest.status, "ok");
+    assert_eq!(manifest.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert_eq!(manifest.default_max_age_days, 30);
-    assert_eq!(manifest.artifact_count, 23);
-    assert_eq!(manifest.artifacts.len(), 23);
+    assert_eq!(manifest.artifact_count, 24);
+    assert_eq!(manifest.artifacts.len(), 24);
     assert!(
         manifest
             .notes
@@ -366,7 +377,12 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
         manifest
             .artifacts
             .iter()
-            .filter(|artifact| artifact.name != "dependency_policy_check")
+            .filter(|artifact| {
+                !matches!(
+                    artifact.name,
+                    "dependency_policy_check" | "release_assets_verification"
+                )
+            })
             .all(|artifact| artifact.requires_production_like_environment)
     );
 
@@ -384,6 +400,20 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
     assert!(!dependency_policy.contains_secrets);
     assert!(!dependency_policy.writes_application_state);
     assert!(dependency_policy.touches_external_provider);
+    assert_eq!(dependency_policy.release_gate, "Dependency policy");
+
+    let release_assets = manifest
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "release_assets_verification")
+        .expect("release assets artifact");
+    assert_eq!(release_assets.file_name, "release-assets-verification.json");
+    assert_eq!(release_assets.release_gate, "CLI/MCP public release assets");
+    assert_eq!(release_assets.validator, "release_assets_verification");
+    assert!(!release_assets.requires_production_like_environment);
+    assert!(!release_assets.contains_secrets);
+    assert!(!release_assets.writes_application_state);
+    assert!(release_assets.touches_external_provider);
 
     let static_config = manifest
         .artifacts
@@ -393,6 +423,7 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
     assert!(static_config.contains_secrets);
     assert!(!static_config.writes_application_state);
     assert_eq!(static_config.validator, "openid_static_config");
+    assert_eq!(static_config.release_gate, "Static OpenID artifacts");
 
     let oidc_metadata_smoke = manifest
         .artifacts
@@ -468,9 +499,10 @@ fn release_evidence_plan_reports_missing_environment_without_values() {
     let report = release_evidence_capture_plan(release_evidence_now(), |_| false);
 
     assert_eq!(report.status, "missing_environment");
-    assert_eq!(report.artifact_count, 23);
+    assert_eq!(report.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
+    assert_eq!(report.artifact_count, 24);
     assert_eq!(report.ready_artifact_count, 1);
-    assert_eq!(report.manual_artifact_count, 4);
+    assert_eq!(report.manual_artifact_count, 5);
     assert_eq!(report.missing_environment_artifact_count, 18);
     assert!(
         report
@@ -510,6 +542,7 @@ fn release_evidence_plan_reports_missing_environment_without_values() {
         .find(|step| step.name == "openid_static_config")
         .expect("OpenID static config step");
     assert!(static_config.contains_secrets);
+    assert_eq!(static_config.release_gate, "Static OpenID artifacts");
     assert!(
         static_config
             .required_environment
@@ -533,9 +566,9 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
 
     assert_eq!(report.status, "ready");
     assert!(report.missing_environment.is_empty());
-    assert_eq!(report.artifact_count, 23);
+    assert_eq!(report.artifact_count, 24);
     assert_eq!(report.ready_artifact_count, 19);
-    assert_eq!(report.manual_artifact_count, 4);
+    assert_eq!(report.manual_artifact_count, 5);
     assert_eq!(report.missing_environment_artifact_count, 0);
 
     let config_op = report
@@ -567,6 +600,20 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
             .any(|note| note.contains("external provisioning client"))
     );
 
+    let release_assets = report
+        .steps
+        .iter()
+        .find(|step| step.name == "release_assets_verification")
+        .expect("release assets step");
+    assert_eq!(release_assets.status, "manual_external");
+    assert_eq!(release_assets.release_gate, "CLI/MCP public release assets");
+    assert!(
+        release_assets
+            .operator_notes
+            .iter()
+            .any(|note| note.contains("GitHub Release assets"))
+    );
+
     let lifecycle_email_smoke = report
         .steps
         .iter()
@@ -591,8 +638,9 @@ fn release_evidence_init_writes_guarded_scaffold() {
         init_release_evidence_directory(&root, release_evidence_now(), false).expect("init");
 
     assert_eq!(report.status, "initialized");
+    assert_eq!(report.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
     assert!(!report.force);
-    assert_eq!(report.artifact_count, 23);
+    assert_eq!(report.artifact_count, 24);
     assert_eq!(report.secret_artifact_count, 1);
     assert!(report.state_changing_artifact_count > 0);
     assert!(report.external_provider_artifact_count > 0);
@@ -609,7 +657,11 @@ fn release_evidence_init_writes_guarded_scaffold() {
     let manifest_json = fs::read_to_string(root.join("release-evidence-manifest.json"))
         .expect("read generated manifest");
     let manifest: Value = serde_json::from_str(&manifest_json).expect("generated manifest is JSON");
-    assert_eq!(manifest["artifact_count"], json!(23));
+    assert_eq!(
+        manifest["schema_version"],
+        json!(RELEASE_EVIDENCE_SCHEMA_VERSION)
+    );
+    assert_eq!(manifest["artifact_count"], json!(24));
     let artifacts = manifest["artifacts"]
         .as_array()
         .expect("manifest artifacts array");
@@ -618,10 +670,16 @@ fn release_evidence_init_writes_guarded_scaffold() {
         .find(|artifact| artifact["file_name"] == "cairn-oidcc-static.json")
         .expect("static config artifact");
     assert_eq!(static_config["contains_secrets"], true);
+    assert_eq!(
+        static_config["release_gate"],
+        json!("Static OpenID artifacts")
+    );
 
     let readme = fs::read_to_string(root.join("README.md")).expect("read README");
     assert!(readme.contains("Do not commit the evidence artifacts"));
     assert!(readme.contains("dependency-policy-check.json"));
+    assert!(readme.contains("CLI/MCP public release assets"));
+    assert!(readme.contains("release-assets-verification.json"));
     assert!(readme.contains("cairn-oidcc-static.json"));
     assert!(readme.contains("scim-okta-connector-profile.json"));
     assert!(readme.contains("External Provider"));
@@ -728,6 +786,183 @@ fn release_evidence_rejects_invalid_dependency_policy_check() {
             .failures
             .iter()
             .any(|failure| { failure.contains("$.checks[1].stdout must not be present") })
+    );
+}
+
+#[test]
+fn release_evidence_rejects_invalid_release_assets_verification() {
+    let root = temp_evidence_dir("invalid-release-assets");
+    let mut receipt = release_assets_verification();
+    receipt["release_tag"] = json!("v0.1");
+    receipt["source_commit"] = json!("not-a-commit");
+    receipt["attestations"]["provenance_verified"] = json!(false);
+    receipt["archives"]
+        .as_array_mut()
+        .expect("archives array")
+        .pop();
+    receipt["request_headers"] = json!({ "Authorization": "Bearer must-not-be-archived" });
+    write_json(&root, "release-assets-verification.json", receipt);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "release_assets_verification")
+        .expect("release assets artifact");
+    assert_eq!(artifact.status, "failed");
+    assert_eq!(artifact.release_gate, "CLI/MCP public release assets");
+    assert!(
+        artifact
+            .failures
+            .iter()
+            .any(|failure| { failure.contains("release_tag must match vMAJOR.MINOR.PATCH") })
+    );
+    assert!(
+        artifact
+            .failures
+            .iter()
+            .any(|failure| failure.contains("source_commit must be a 40-character"))
+    );
+    assert!(
+        artifact
+            .failures
+            .iter()
+            .any(|failure| failure.contains("attestations.provenance_verified must be true"))
+    );
+    assert!(
+        artifact
+            .failures
+            .iter()
+            .any(|failure| failure.contains("archives must contain exactly 4"))
+    );
+    assert!(artifact.failures.iter().any(|failure| {
+        failure.contains(
+            "$.request_headers must not be present in token-free release evidence artifact release_assets_verification",
+        )
+    }));
+}
+
+#[test]
+fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
+    let release = fake_release_assets_dir("receipt-happy");
+    let receipt = release_assets_verification_receipt(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("release assets receipt");
+
+    assert_eq!(receipt.status, "ok");
+    assert!(receipt.failures.is_empty());
+    assert_eq!(receipt.release_tag, RELEASE_ASSET_TAG);
+    assert_eq!(receipt.source_commit, RELEASE_ASSET_SOURCE_COMMIT);
+    assert_eq!(
+        receipt.release_url.as_deref(),
+        Some(RELEASE_ASSET_RELEASE_URL)
+    );
+    assert_eq!(receipt.run_url.as_deref(), Some(RELEASE_ASSET_RUN_URL));
+    assert_eq!(receipt.archives.len(), 4);
+    assert_eq!(receipt.sboms.len(), 4);
+    assert!(
+        receipt
+            .archives
+            .iter()
+            .all(|archive| archive.github_attestation_verified
+                && archive.sbom_attestation_verified
+                && archive.sha256_verified
+                && archive.manifest_entry_present)
+    );
+    assert!(
+        receipt
+            .sboms
+            .iter()
+            .all(|sbom| sbom.github_attestation_verified
+                && sbom.sha256_verified
+                && sbom.manifest_entry_present
+                && sbom.format == "CycloneDX JSON")
+    );
+
+    let evidence_dir = temp_evidence_dir("generated-release-assets-receipt");
+    init_release_evidence_directory(&evidence_dir, release_evidence_now(), false).expect("init");
+    write_json(
+        &evidence_dir,
+        "release-assets-verification.json",
+        serde_json::to_value(&receipt).expect("receipt JSON"),
+    );
+    let report = check_release_evidence(&evidence_dir, release_evidence_now(), 30)
+        .expect("release evidence report");
+    let release_assets = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "release_assets_verification")
+        .expect("release assets artifact");
+    assert_eq!(release_assets.status, "passed");
+    assert!(release_assets.failures.is_empty());
+}
+
+#[test]
+fn release_assets_receipt_generation_rejects_hash_mismatch_and_missing_asset() {
+    let tampered = fake_release_assets_dir("receipt-hash-mismatch");
+    let tampered_archive = format!("cairnid-{}-x86_64-unknown-linux-gnu.tar.gz", tampered.tag);
+    fs::write(tampered.root.join(&tampered_archive), "tampered archive").expect("tamper archive");
+
+    let error = release_assets_verification_receipt(
+        &release_assets_options(&tampered),
+        release_evidence_now(),
+    )
+    .expect_err("hash mismatch fails");
+    let failures = release_assets_failures(&error);
+    assert!(
+        failures.iter().any(|failure| failure.contains(&format!(
+            "SHA256SUMS.txt hash mismatch for {tampered_archive}"
+        ))),
+        "{failures:?}"
+    );
+
+    let missing = fake_release_assets_dir("receipt-missing-asset");
+    let missing_sbom = format!(
+        "cairnid-mcp-{}-x86_64-pc-windows-msvc.sbom.cdx.json",
+        missing.tag
+    );
+    fs::remove_file(missing.root.join(&missing_sbom)).expect("remove SBOM");
+
+    let error = release_assets_verification_receipt(
+        &release_assets_options(&missing),
+        release_evidence_now(),
+    )
+    .expect_err("missing asset fails");
+    let failures = release_assets_failures(&error);
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains(&format!("missing release asset {missing_sbom}"))),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn release_assets_receipt_generation_requires_attestation_confirmation() {
+    let release = fake_release_assets_dir("receipt-attestations");
+    let mut options = release_assets_options(&release);
+    options.provenance_attestations_verified = false;
+    options.sbom_attestations_verified = false;
+
+    let error = release_assets_verification_receipt(&options, release_evidence_now())
+        .expect_err("missing attestation confirmations fail");
+    let failures = release_assets_failures(&error);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("--provenance-attestations-verified must be supplied")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("--sbom-attestations-verified must be supplied")),
+        "{failures:?}"
     );
 }
 
@@ -2286,6 +2521,22 @@ fn release_evidence_rejects_invalid_signing_key_rotation_receipt() {
             .iter()
             .any(|failure| failure.contains("completed_at"))
     );
+}
+
+fn release_assets_options(release: &FakeReleaseAssets) -> ReleaseAssetsVerificationOptions {
+    ReleaseAssetsVerificationOptions {
+        release_dir: release.root.clone(),
+        release_tag: release.tag.to_owned(),
+        source_commit: release.source_commit.to_owned(),
+        release_url: Some(release.release_url.to_owned()),
+        run_url: Some(release.run_url.to_owned()),
+        provenance_attestations_verified: true,
+        sbom_attestations_verified: true,
+    }
+}
+
+fn release_assets_failures(error: &ReleaseAssetsVerificationError) -> &[String] {
+    error.failures().expect("verification failures")
 }
 
 #[test]

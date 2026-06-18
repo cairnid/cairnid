@@ -1,6 +1,6 @@
 # OpenID Conformance
 
-Cairn Identity targets the OpenID Foundation Config OP and Basic OP profiles for v1. Implicit, hybrid, dynamic registration, and form-post profiles stay out of scope because v1 intentionally supports only Authorization Code + PKCE with query response mode.
+Cairn Identity targets the OpenID Foundation Config OP and Basic OP profiles for v1. For browser and OpenID conformance profiles, v1 intentionally supports only Authorization Code + PKCE with query response mode. The OAuth token endpoint also supports `client_credentials` for configured confidential clients, but that grant is outside the browser/OpenID conformance path. Implicit, hybrid, dynamic registration, and `response_mode=form_post` profiles stay out of scope. The Basic OP authorization endpoint still accepts both GET query requests and `application/x-www-form-urlencoded` POST authorization requests.
 
 Primary references:
 
@@ -21,7 +21,7 @@ The `openid_conformance` block reports:
 - Whether all static-client environment variables are present.
 - The missing variable names, if any.
 - The artifact commands for static registration and suite JSON generation.
-- That external Config OP and Basic OP suite results are still required before public beta.
+- That external Config OP and Basic OP suite results are still required before the first public RC.
 
 The block does not print client IDs, client secrets, or generated suite JSON. Keep the generated `cairn-oidcc-static.json` out of source control because it contains client secrets.
 
@@ -99,6 +99,18 @@ python <openid-conformance-suite>/scripts/run-test-plan.py oidcc-basic-certifica
 
 The hosted certification UI can use the same JSON from the suite's JSON configuration tab.
 
+## Expected Basic OP Skips And Warnings
+
+These notes describe the current Basic OP request-surface behavior so external OIDF results can be interpreted without overstating support:
+
+- `/oauth2/authorize` accepts `application/x-www-form-urlencoded` POST requests with the same validation, session, consent, and redirect behavior as GET. JSON and other content types are rejected.
+- Discovery continues to advertise `request_parameter_supported=false` and `request_uri_parameter_supported=false`. If Basic OP request-object modules send `request` or `request_uri`, Cairn returns `request_not_supported` or `request_uri_not_supported` through the registered redirect URI so the suite can skip those unsupported modules.
+- Discovery continues to advertise `claims_parameter_supported=false`; Cairn only accepts the narrow Basic OP `claims={"userinfo":{"name":{"essential":true}}}` path. This is enough for `oidcc-claims-essential` to complete, but it is not general claims-parameter support.
+- `phone` and `address` are intentionally absent from `scopes_supported`, so `oidcc-scope-phone`, `oidcc-scope-address`, and all-scope coverage that requires them are expected skips.
+- `profile` and `email` are supported scopes, but Basic OP can still report warnings when the suite expects the full standard claim set. Cairn currently returns the implemented subset only: `name` for `profile`, and `email` plus `email_verified` for `email`.
+
+Do not treat these notes as a certification claim. Basic OP readiness for the first public RC still requires an external OIDF run against the production-like issuer and archived token-free evidence.
+
 ## Result Templates
 
 When archiving an official published result URL instead of a full suite export, generate token-free normalized summary templates before the external run:
@@ -112,7 +124,7 @@ After the matching OIDF suite run is complete, save the final normalized files a
 
 ## Evidence Gate
 
-Public beta requires:
+The first-public-RC evidence gate requires:
 
 - Passing Config OP and Basic OP results for the production-like deployment under test.
 - Published OIDF result links or token-free archived plan exports.

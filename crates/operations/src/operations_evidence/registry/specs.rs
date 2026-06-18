@@ -4,6 +4,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "operations_preflight",
         file_name: "operations-preflight.json",
+        release_gate: "Operations preflight",
         command: "cairn-api operations preflight > operations-preflight.json",
         validator: EvidenceValidator::OperationsPreflight,
         contains_secrets: false,
@@ -14,6 +15,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "dependency_policy_check",
         file_name: "dependency-policy-check.json",
+        release_gate: "Dependency policy",
         command: "cairn-api operations dependency-policy-evidence > dependency-policy-check.json",
         validator: EvidenceValidator::DependencyPolicyCheck,
         contains_secrets: false,
@@ -22,8 +24,20 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
         touches_external_provider: true,
     },
     EvidenceSpec {
+        name: "release_assets_verification",
+        file_name: "release-assets-verification.json",
+        release_gate: "CLI/MCP public release assets",
+        command: "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> (--release-url <url>|--run-url <url>) --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json",
+        validator: EvidenceValidator::ReleaseAssetsVerification,
+        contains_secrets: false,
+        requires_production_like_environment: false,
+        writes_application_state: false,
+        touches_external_provider: true,
+    },
+    EvidenceSpec {
         name: "openid_static_registration",
         file_name: "openid-static-registration.json",
+        release_gate: "Static OpenID artifacts",
         command: "cairn-api conformance oidcc-static-registration > openid-static-registration.json",
         validator: EvidenceValidator::OpenIdStaticRegistration,
         contains_secrets: false,
@@ -34,6 +48,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "openid_static_config",
         file_name: "cairn-oidcc-static.json",
+        release_gate: "Static OpenID artifacts",
         command: "cairn-api conformance oidcc-static-config > cairn-oidcc-static.json",
         validator: EvidenceValidator::OpenIdStaticConfig,
         contains_secrets: true,
@@ -44,6 +59,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "oidc_metadata_smoke",
         file_name: "oidc-metadata-smoke.json",
+        release_gate: "Deployed OIDC metadata",
         command: "cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json",
         validator: EvidenceValidator::OidcMetadataSmoke,
         contains_secrets: false,
@@ -54,6 +70,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "openid_config_op_conformance",
         file_name: "openid-config-op-result.json",
+        release_gate: "OpenID conformance",
         command: "save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json",
         validator: EvidenceValidator::OpenIdConfigOpConformance,
         contains_secrets: false,
@@ -64,6 +81,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "openid_basic_op_conformance",
         file_name: "openid-basic-op-result.json",
+        release_gate: "OpenID conformance",
         command: "save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json",
         validator: EvidenceValidator::OpenIdBasicOpConformance,
         contains_secrets: false,
@@ -74,6 +92,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "scim_generic_connector_profile",
         file_name: "scim-generic-connector-profile.json",
+        release_gate: "SCIM provisioning",
         command: "cairn-api scim connector-profile generic > scim-generic-connector-profile.json",
         validator: EvidenceValidator::ScimGenericConnectorProfile,
         contains_secrets: false,
@@ -84,6 +103,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "scim_okta_connector_profile",
         file_name: "scim-okta-connector-profile.json",
+        release_gate: "SCIM provisioning",
         command: "cairn-api scim connector-profile okta > scim-okta-connector-profile.json",
         validator: EvidenceValidator::ScimOktaConnectorProfile,
         contains_secrets: false,
@@ -94,6 +114,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "scim_entra_connector_profile",
         file_name: "scim-entra-connector-profile.json",
+        release_gate: "SCIM provisioning",
         command: "cairn-api scim connector-profile entra > scim-entra-connector-profile.json",
         validator: EvidenceValidator::ScimEntraConnectorProfile,
         contains_secrets: false,
@@ -104,6 +125,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "scim_public_smoke",
         file_name: "scim-smoke.json",
+        release_gate: "SCIM provisioning",
         command: "cairn-api scim smoke > scim-smoke.json",
         validator: EvidenceValidator::ScimSmoke,
         contains_secrets: false,
@@ -114,6 +136,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "scim_okta_connector_smoke",
         file_name: "scim-okta-connector-smoke.json",
+        release_gate: "SCIM provisioning",
         command: "save normalized Okta connector smoke summary as scim-okta-connector-smoke.json",
         validator: EvidenceValidator::ScimOktaConnectorSmoke,
         contains_secrets: false,
@@ -124,6 +147,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "scim_entra_connector_smoke",
         file_name: "scim-entra-connector-smoke.json",
+        release_gate: "SCIM provisioning",
         command: "save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json",
         validator: EvidenceValidator::ScimEntraConnectorSmoke,
         contains_secrets: false,
@@ -134,6 +158,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "browser_origin_smoke",
         file_name: "browser-origin-smoke.json",
+        release_gate: "Browser origin defense",
         command: "cairn-api operations browser-origin-smoke > browser-origin-smoke.json",
         validator: EvidenceValidator::BrowserOriginSmoke,
         contains_secrets: false,
@@ -144,6 +169,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "security_headers_smoke",
         file_name: "security-headers-smoke.json",
+        release_gate: "Security headers",
         command: "cairn-api operations security-headers-smoke > security-headers-smoke.json",
         validator: EvidenceValidator::SecurityHeadersSmoke,
         contains_secrets: false,
@@ -154,6 +180,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "email_provider_smoke",
         file_name: "email-provider-smoke.json",
+        release_gate: "Email delivery",
         command: "cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json",
         validator: EvidenceValidator::EmailProviderSmoke,
         contains_secrets: false,
@@ -164,6 +191,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "lifecycle_email_smoke",
         file_name: "lifecycle-email-smoke.json",
+        release_gate: "Email delivery",
         command: "cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json",
         validator: EvidenceValidator::LifecycleEmailSmoke,
         contains_secrets: false,
@@ -174,6 +202,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "restore_drill",
         file_name: "restore-drill.json",
+        release_gate: "Restore drill",
         command: "cairn-api operations restore-check > restore-drill.json",
         validator: EvidenceValidator::RestoreDrill,
         contains_secrets: false,
@@ -184,6 +213,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "signing_key_rotation_drill",
         file_name: "signing-key-rotation-drill.json",
+        release_gate: "Key operations",
         command: "cairn-api signing-key rotate > signing-key-rotation-drill.json",
         validator: EvidenceValidator::SigningKeyRotation,
         contains_secrets: false,
@@ -194,6 +224,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "kek_rotation_drill",
         file_name: "kek-rotation-drill.json",
+        release_gate: "Key operations",
         command: "cairn-api key-encryption rotate > kek-rotation-drill.json",
         validator: EvidenceValidator::KeyEncryptionRotation,
         contains_secrets: false,
@@ -204,6 +235,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "break_glass_admin_recovery_drill",
         file_name: "break-glass-admin-recovery-drill.json",
+        release_gate: "Emergency access",
         command: "cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json",
         validator: EvidenceValidator::BreakGlassAdminRecovery,
         contains_secrets: false,
@@ -214,6 +246,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "audit_export_archive_drill",
         file_name: "audit-export-archive-drill.json",
+        release_gate: "Audit operations",
         command: "cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json",
         validator: EvidenceValidator::AuditExportArchive,
         contains_secrets: false,
@@ -224,6 +257,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
     EvidenceSpec {
         name: "audit_retention_purge_drill",
         file_name: "audit-retention-purge-drill.json",
+        release_gate: "Audit operations",
         command: "cairn-api audit purge-expired > audit-retention-purge-drill.json",
         validator: EvidenceValidator::AuditRetentionPurge,
         contains_secrets: false,

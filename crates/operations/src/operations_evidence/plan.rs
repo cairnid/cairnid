@@ -4,7 +4,7 @@ mod requirements;
 use self::notes::{evidence_capture_is_manual, evidence_operator_notes};
 use self::requirements::{evidence_environment_requirements, missing_environment_for_requirements};
 use super::registry::{EvidenceSpec, evidence_validator_name};
-use super::{ReleaseEvidencePlanReport, ReleaseEvidencePlanStep};
+use super::{RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidencePlanReport, ReleaseEvidencePlanStep};
 use std::collections::BTreeSet;
 use time::OffsetDateTime;
 
@@ -35,6 +35,7 @@ where
             ReleaseEvidencePlanStep {
                 name: spec.name,
                 file_name: spec.file_name,
+                release_gate: spec.release_gate,
                 command: spec.command,
                 validator: evidence_validator_name(spec.validator),
                 status,
@@ -56,6 +57,7 @@ where
         .collect::<Vec<_>>();
 
     ReleaseEvidencePlanReport {
+        schema_version: RELEASE_EVIDENCE_SCHEMA_VERSION,
         status: if missing_environment.is_empty() {
             "ready"
         } else {
@@ -85,7 +87,7 @@ where
         missing_environment,
         notes: vec![
             "This plan only reports whether required command inputs are present; it never prints environment values.",
-            "Run public-beta evidence with CAIRN_ENV=production and production-like HTTPS origins.",
+            "Run first-public-RC evidence with CAIRN_ENV=production and production-like HTTPS origins where the artifact requires them.",
             "A ready plan is not release approval; collect artifacts and run cairnid evidence check.",
         ],
     }

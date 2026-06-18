@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, normalize, relative } from 'node:path';
+import { dirname, join, normalize, relative, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 type SiteDocsConfig = {
@@ -36,8 +36,8 @@ type Manifest = {
 
 const repoRoot = process.cwd();
 const args = parseArgs(process.argv.slice(2));
-const configPath = normalize(join(repoRoot, args.config ?? 'docs/site-docs.json'));
-const outputRoot = normalize(join(repoRoot, args.out ?? 'dist/site-docs'));
+const configPath = resolveRepoPath(args.config ?? 'docs/site-docs.json');
+const outputRoot = resolveRepoPath(args.out ?? 'dist/site-docs');
 const config = readConfig(configPath);
 
 validateConfig(config);
@@ -292,6 +292,10 @@ function assetHref(basePath: string, asset: AssetConfig): string {
 
 function normalizePath(path: string): string {
   return normalize(path).replaceAll('\\', '/');
+}
+
+function resolveRepoPath(path: string): string {
+  return normalize(resolve(repoRoot, path));
 }
 
 function currentCommit(): string | null {

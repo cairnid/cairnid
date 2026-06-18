@@ -397,6 +397,227 @@ test('admin users page reviews security activity through a bounded list API', as
   expect(securityEventRequests).toBe(1);
 });
 
+test('admin groups page manages groups and memberships through CSRF-protected APIs', async ({
+  page
+}) => {
+  const organizationId = '11111111-1111-4111-8111-111111111001';
+  const existingGroup = {
+    id: '11111111-1111-4111-8111-111111111501',
+    organization_id: organizationId,
+    slug: 'admins',
+    display_name: 'Administrators',
+    created_at: '2026-06-07T00:00:00Z'
+  };
+  const createdGroup = {
+    id: '11111111-1111-4111-8111-111111111502',
+    organization_id: organizationId,
+    slug: 'smoke-operators',
+    display_name: 'Smoke Operators',
+    created_at: '2026-06-07T00:01:00Z'
+  };
+  const adminUser = {
+    id: '11111111-1111-4111-8111-111111111601',
+    organization_id: organizationId,
+    email: 'admin@example.com',
+    email_verified: true,
+    display_name: 'Admin User',
+    status: 'active',
+    created_at: '2026-06-07T00:00:00Z',
+    updated_at: '2026-06-07T00:00:00Z'
+  };
+  const targetUser = {
+    id: '11111111-1111-4111-8111-111111111602',
+    organization_id: organizationId,
+    email: 'operator@example.com',
+    email_verified: true,
+    display_name: 'Operator User',
+    status: 'active',
+    created_at: '2026-06-07T00:00:00Z',
+    updated_at: '2026-06-07T00:00:00Z'
+  };
+  const existingMembership = {
+    organization_id: organizationId,
+    group_id: existingGroup.id,
+    user_id: adminUser.id,
+    role: 'owner',
+    created_at: '2026-06-07T00:00:30Z'
+  };
+  const createdMembership = {
+    organization_id: organizationId,
+    group_id: createdGroup.id,
+    user_id: targetUser.id,
+    role: 'owner',
+    created_at: '2026-06-07T00:02:00Z'
+  };
+  let groups = [existingGroup];
+  let memberships = [existingMembership];
+  let csrfRequests = 0;
+  let groupListRequests = 0;
+  let userListRequests = 0;
+  let membershipListRequests = 0;
+  let failedCreateRequests = 0;
+  let groupCreateRequests = 0;
+  let membershipAssignRequests = 0;
+  let membershipRemoveRequests = 0;
+
+  await page.route(`${apiOrigin}/**`, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+
+    if (request.method() === 'OPTIONS') {
+      await route.fulfill({
+        headers: corsHeaders,
+        status: 204
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/v1/session/csrf') {
+      csrfRequests += 1;
+      await fulfillJson(route, { csrf_token: csrfToken });
+      return;
+    }
+
+    if (url.pathname === '/api/v1/groups' && request.method() === 'GET') {
+      groupListRequests += 1;
+      expect(url.searchParams.get('limit')).toBe('100');
+      await fulfillJson(route, { items: groups, next_cursor: null });
+      return;
+    }
+
+    if (url.pathname === '/api/v1/users' && request.method() === 'GET') {
+      userListRequests += 1;
+      expect(url.searchParams.get('limit')).toBe('100');
+      await fulfillJson(route, { items: [adminUser, targetUser], next_cursor: null });
+      return;
+    }
+
+    if (url.pathname === '/api/v1/groups' && request.method() === 'POST') {
+      expect(request.headers()['x-cairn-csrf']).toBe(csrfToken);
+      const payload = request.postDataJSON() as { slug?: string; display_name?: string };
+
+      if (payload.slug === 'admins') {
+        failedCreateRequests += 1;
+        await fulfillJson(route, { error: 'group slug already exists' }, 409);
+        return;
+      }
+
+      expect(payload.slug).toBe(createdGroup.slug);
+      expect(payload.display_name).toBe(createdGroup.display_name);
+      groupCreateRequests += 1;
+      groups = [existingGroup, createdGroup];
+      await fulfillJson(route, createdGroup, 201);
+      return;
+    }
+
+    if (
+      url.pathname === `/api/v1/groups/${existingGroup.id}/memberships` &&
+      request.method() === 'GET'
+    ) {
+      membershipListRequests += 1;
+      expect(url.searchParams.get('limit')).toBe('100');
+      await fulfillJson(route, {
+        items: memberships.filter((membership) => membership.group_id === existingGroup.id),
+        next_cursor: null
+      });
+      return;
+    }
+
+    if (
+      url.pathname === `/api/v1/groups/${createdGroup.id}/memberships` &&
+      request.method() === 'GET'
+    ) {
+      membershipListRequests += 1;
+      expect(url.searchParams.get('limit')).toBe('100');
+      await fulfillJson(route, {
+        items: memberships.filter((membership) => membership.group_id === createdGroup.id),
+        next_cursor: null
+      });
+      return;
+    }
+
+    if (
+      url.pathname === `/api/v1/groups/${createdGroup.id}/memberships/${targetUser.id}` &&
+      request.method() === 'PUT'
+    ) {
+      expect(request.headers()['x-cairn-csrf']).toBe(csrfToken);
+      const payload = request.postDataJSON() as { role?: string };
+      expect(payload.role).toBe('owner');
+      membershipAssignRequests += 1;
+      memberships = [
+        ...memberships.filter(
+          (membership) =>
+            membership.group_id !== createdGroup.id || membership.user_id !== targetUser.id
+        ),
+        createdMembership
+      ];
+      await fulfillJson(route, createdMembership);
+      return;
+    }
+
+    if (
+      url.pathname === `/api/v1/groups/${createdGroup.id}/memberships/${targetUser.id}` &&
+      request.method() === 'DELETE'
+    ) {
+      expect(request.headers()['x-cairn-csrf']).toBe(csrfToken);
+      membershipRemoveRequests += 1;
+      memberships = memberships.filter(
+        (membership) =>
+          membership.group_id !== createdGroup.id || membership.user_id !== targetUser.id
+      );
+      await fulfillJson(route, { status: 'deleted' });
+      return;
+    }
+
+    await route.fulfill({
+      headers: corsHeaders,
+      status: 404
+    });
+  });
+
+  await page.goto('/admin/groups');
+
+  const existingGroupRow = page.getByRole('row').filter({ hasText: existingGroup.slug });
+  await expect(existingGroupRow.getByRole('cell', { name: existingGroup.display_name })).toBeVisible();
+  const existingMemberRow = page.getByRole('row').filter({ hasText: adminUser.email });
+  await expect(existingMemberRow.getByRole('cell', { name: adminUser.display_name })).toBeVisible();
+  await expect(existingMemberRow.getByRole('cell', { name: existingMembership.role })).toBeVisible();
+
+  await page.getByLabel('Slug').fill(existingGroup.slug);
+  await page.getByLabel('Display name').fill('Duplicate Administrators');
+  await page.getByRole('button', { name: 'Create group' }).click();
+  await expect(page.getByText('group slug already exists')).toBeVisible();
+
+  await page.getByLabel('Slug').fill(createdGroup.slug);
+  await page.getByLabel('Display name').fill(createdGroup.display_name);
+  await page.getByRole('button', { name: 'Create group' }).click();
+  await expect(page.getByRole('row').filter({ hasText: createdGroup.slug })).toBeVisible();
+
+  await page.getByLabel('Group').selectOption(createdGroup.id);
+  await expect(page.getByLabel('Group')).toHaveValue(createdGroup.id);
+  await expect(page.getByRole('row').filter({ hasText: targetUser.email })).toHaveCount(0);
+
+  await page.getByLabel('User').selectOption(targetUser.id);
+  await page.getByLabel('Role').selectOption('owner');
+  await page.getByRole('button', { name: 'Save membership' }).click();
+
+  const assignedMemberRow = page.getByRole('row').filter({ hasText: targetUser.email });
+  await expect(assignedMemberRow.getByRole('cell', { name: targetUser.display_name })).toBeVisible();
+  await expect(assignedMemberRow.getByRole('cell', { name: createdMembership.role })).toBeVisible();
+
+  await assignedMemberRow.getByTitle('Remove membership').click();
+  await expect(page.getByRole('row').filter({ hasText: targetUser.email })).toHaveCount(0);
+
+  expect(csrfRequests).toBe(1);
+  expect(groupListRequests).toBe(2);
+  expect(userListRequests).toBe(2);
+  expect(membershipListRequests).toBe(5);
+  expect(failedCreateRequests).toBe(1);
+  expect(groupCreateRequests).toBe(1);
+  expect(membershipAssignRequests).toBe(1);
+  expect(membershipRemoveRequests).toBe(1);
+});
+
 test('admin applications page filters OIDC clients through the list API', async ({ page }) => {
   const publicClient = {
     id: '11111111-1111-4111-8111-111111111101',

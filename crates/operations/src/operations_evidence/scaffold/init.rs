@@ -1,4 +1,5 @@
 use super::super::{ReleaseEvidenceError, ReleaseEvidenceInitReport, release_evidence_manifest};
+use super::path_safety::{ReleaseEvidencePathKind, release_evidence_path_kind};
 use super::readme::release_evidence_readme;
 use super::{
     RELEASE_EVIDENCE_GITIGNORE, RELEASE_EVIDENCE_GITIGNORE_FILE, RELEASE_EVIDENCE_MANIFEST_FILE,
@@ -19,15 +20,9 @@ pub(in crate::operations_evidence) fn init_release_evidence_directory(
         RELEASE_EVIDENCE_GITIGNORE_FILE,
     ];
 
-    if !force {
-        for file_name in scaffold_files {
-            let path = evidence_dir.join(file_name);
-            if path.exists() {
-                return Err(ReleaseEvidenceError::ExistingScaffoldFile(
-                    path.to_string_lossy().into_owned(),
-                ));
-            }
-        }
+    for file_name in scaffold_files {
+        let path = evidence_dir.join(file_name);
+        ensure_scaffold_file_can_be_written(&path, force)?;
     }
 
     let manifest = release_evidence_manifest(generated_at);
@@ -46,11 +41,13 @@ pub(in crate::operations_evidence) fn init_release_evidence_directory(
     let mut files_written = Vec::with_capacity(files.len());
     for (file_name, contents) in files {
         let path = evidence_dir.join(file_name);
+        ensure_scaffold_file_can_be_written(&path, force)?;
         fs::write(&path, contents)?;
         files_written.push(file_name.to_owned());
     }
 
     Ok(ReleaseEvidenceInitReport {
+        schema_version: manifest.schema_version,
         status: "initialized",
         evidence_dir: evidence_dir.to_string_lossy().into_owned(),
         generated_at,
@@ -74,4 +71,21 @@ pub(in crate::operations_evidence) fn init_release_evidence_directory(
         files_written,
         next_command: format!("cairnid evidence check {}", evidence_dir.to_string_lossy()),
     })
+}
+
+fn ensure_scaffold_file_can_be_written(
+    path: &Path,
+    force: bool,
+) -> Result<(), ReleaseEvidenceError> {
+    match release_evidence_path_kind(path)? {
+        ReleaseEvidencePathKind::Missing => Ok(()),
+        ReleaseEvidencePathKind::RegularFile if force => Ok(()),
+        ReleaseEvidencePathKind::RegularFile => Err(ReleaseEvidenceError::ExistingScaffoldFile(
+            path.to_string_lossy().into_owned(),
+        )),
+        kind if force => Err(kind.scaffold_io_error(path).into()),
+        _ => Err(ReleaseEvidenceError::ExistingScaffoldFile(
+            path.to_string_lossy().into_owned(),
+        )),
+    }
 }

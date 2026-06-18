@@ -3,6 +3,7 @@ use super::super::timestamp::{
     RELEASE_EVIDENCE_CLOCK_SKEW_SECONDS, parse_release_evidence_timestamp,
 };
 use super::super::{ReleaseEvidenceError, release_evidence_manifest};
+use super::path_safety::{ReleaseEvidencePathKind, release_evidence_path_kind};
 use super::{
     RELEASE_EVIDENCE_GITIGNORE, RELEASE_EVIDENCE_GITIGNORE_FILE, RELEASE_EVIDENCE_MANIFEST_FILE,
     RELEASE_EVIDENCE_README_FILE,
@@ -18,8 +19,16 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
     failures: &mut Vec<String>,
 ) -> Result<(), ReleaseEvidenceError> {
     let manifest_path = evidence_dir.join(RELEASE_EVIDENCE_MANIFEST_FILE);
-    match fs::read_to_string(&manifest_path) {
-        Ok(contents) => match serde_json::from_str::<Value>(&contents) {
+    let manifest_missing_failure = format!(
+        "{RELEASE_EVIDENCE_MANIFEST_FILE}: scaffold manifest is missing; run cairnid evidence init <evidence-dir>"
+    );
+    if let Some(contents) = read_scaffold_file(
+        &manifest_path,
+        RELEASE_EVIDENCE_MANIFEST_FILE,
+        manifest_missing_failure,
+        failures,
+    )? {
+        match serde_json::from_str::<Value>(&contents) {
             Ok(manifest) => {
                 let generated_at = manifest
                     .get("generated_at")
@@ -53,44 +62,41 @@ pub(in crate::operations_evidence) fn validate_release_evidence_scaffold(
             Err(_) => failures.push(format!(
                 "{RELEASE_EVIDENCE_MANIFEST_FILE}: scaffold manifest must be valid release-evidence JSON"
             )),
-        },
-        Err(error) if error.kind() == io::ErrorKind::NotFound => failures.push(format!(
-            "{RELEASE_EVIDENCE_MANIFEST_FILE}: scaffold manifest is missing; run cairnid evidence init <evidence-dir>"
-        )),
-        Err(error) => return Err(error.into()),
+        }
     }
 
     let readme_path = evidence_dir.join(RELEASE_EVIDENCE_README_FILE);
-    match fs::read_to_string(&readme_path) {
-        Ok(contents) => {
-            if !contents.contains("Do not commit the evidence artifacts")
-                || !contents.contains("cairnid evidence check")
-                || !contents.contains("Do not add screenshots, raw provider exports")
-            {
-                failures.push(format!(
-                    "{RELEASE_EVIDENCE_README_FILE}: scaffold README is missing required release workflow guidance"
-                ));
-            }
-        }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => failures.push(format!(
-            "{RELEASE_EVIDENCE_README_FILE}: scaffold README is missing; run cairnid evidence init <evidence-dir>"
-        )),
-        Err(error) => return Err(error.into()),
+    let readme_missing_failure = format!(
+        "{RELEASE_EVIDENCE_README_FILE}: scaffold README is missing; run cairnid evidence init <evidence-dir>"
+    );
+    if let Some(contents) = read_scaffold_file(
+        &readme_path,
+        RELEASE_EVIDENCE_README_FILE,
+        readme_missing_failure,
+        failures,
+    )? && (!contents.contains("Do not commit the evidence artifacts")
+        || !contents.contains("cairnid evidence check")
+        || !contents.contains("Do not add screenshots, raw provider exports"))
+    {
+        failures.push(format!(
+            "{RELEASE_EVIDENCE_README_FILE}: scaffold README is missing required release workflow guidance"
+        ));
     }
 
     let gitignore_path = evidence_dir.join(RELEASE_EVIDENCE_GITIGNORE_FILE);
-    match fs::read_to_string(&gitignore_path) {
-        Ok(contents) => {
-            if contents.replace("\r\n", "\n") != RELEASE_EVIDENCE_GITIGNORE {
-                failures.push(format!(
-                    "{RELEASE_EVIDENCE_GITIGNORE_FILE}: scaffold gitignore must match the guarded release-evidence template"
-                ));
-            }
-        }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => failures.push(format!(
-            "{RELEASE_EVIDENCE_GITIGNORE_FILE}: scaffold gitignore is missing; run cairnid evidence init <evidence-dir>"
-        )),
-        Err(error) => return Err(error.into()),
+    let gitignore_missing_failure = format!(
+        "{RELEASE_EVIDENCE_GITIGNORE_FILE}: scaffold gitignore is missing; run cairnid evidence init <evidence-dir>"
+    );
+    if let Some(contents) = read_scaffold_file(
+        &gitignore_path,
+        RELEASE_EVIDENCE_GITIGNORE_FILE,
+        gitignore_missing_failure,
+        failures,
+    )? && contents.replace("\r\n", "\n") != RELEASE_EVIDENCE_GITIGNORE
+    {
+        failures.push(format!(
+            "{RELEASE_EVIDENCE_GITIGNORE_FILE}: scaffold gitignore must match the guarded release-evidence template"
+        ));
     }
 
     Ok(())
@@ -137,6 +143,32 @@ pub(in crate::operations_evidence) fn validate_release_evidence_file_inventory(
     }
 
     Ok(())
+}
+
+fn read_scaffold_file(
+    path: &Path,
+    file_name: &'static str,
+    missing_failure: String,
+    failures: &mut Vec<String>,
+) -> Result<Option<String>, ReleaseEvidenceError> {
+    match release_evidence_path_kind(path)? {
+        ReleaseEvidencePathKind::Missing => {
+            failures.push(missing_failure);
+            Ok(None)
+        }
+        ReleaseEvidencePathKind::RegularFile => match fs::read_to_string(path) {
+            Ok(contents) => Ok(Some(contents)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                failures.push(missing_failure);
+                Ok(None)
+            }
+            Err(error) => Err(error.into()),
+        },
+        kind => {
+            failures.push(kind.scaffold_failure(file_name));
+            Ok(None)
+        }
+    }
 }
 
 fn allowed_release_evidence_files(specs: &[EvidenceSpec]) -> BTreeSet<&'static str> {

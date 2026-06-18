@@ -22,7 +22,7 @@ fn authorization_return_url_preserves_max_age_without_empty_optional_parameters(
         ui_locales: Some("en-GB fr".to_owned()),
         claims_locales: Some("en fr".to_owned()),
         login_hint: Some("user@example.com".to_owned()),
-        claims: None,
+        claims: Some(r#"{"userinfo":{"name":{"essential":true}}}"#.to_owned()),
         request: None,
         request_uri: None,
         code_challenge: Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_owned()),
@@ -37,7 +37,7 @@ fn authorization_return_url_preserves_max_age_without_empty_optional_parameters(
 
     assert_eq!(
         url,
-        "http://localhost:8080/oauth2/authorize?response_type=code&client_id=public-client&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&scope=openid%20profile&nonce=nonce%20value&display=popup&acr_values=urn%3Acairn%3Aacr%3Apassword%2Btotp%20urn%3Acairn%3Aacr%3Apassword&ui_locales=en-GB%20fr&claims_locales=en%20fr&max_age=300&response_mode=query&prompt=login%20consent&login_hint=user%40example.com&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256"
+        "http://localhost:8080/oauth2/authorize?response_type=code&client_id=public-client&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&scope=openid%20profile&nonce=nonce%20value&display=popup&acr_values=urn%3Acairn%3Aacr%3Apassword%2Btotp%20urn%3Acairn%3Aacr%3Apassword&ui_locales=en-GB%20fr&claims_locales=en%20fr&max_age=300&response_mode=query&prompt=login%20consent&login_hint=user%40example.com&claims=%7B%22userinfo%22%3A%7B%22name%22%3A%7B%22essential%22%3Atrue%7D%7D%7D&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256"
     );
     assert!(!url.contains("state=&"));
 
@@ -50,6 +50,7 @@ fn authorization_return_url_preserves_max_age_without_empty_optional_parameters(
     assert!(after_prompt_login.contains("prompt=consent"));
     assert!(after_prompt_login.contains("response_mode=query"));
     assert!(after_prompt_login.contains("login_hint=user%40example.com"));
+    assert!(after_prompt_login.contains("claims=%7B%22userinfo%22%3A"));
 
     let after_prompt_consent = current_authorize_url(
         "http://localhost:8080/",
@@ -129,10 +130,10 @@ fn authorization_error_mapping_uses_oauth_authorization_error_codes() {
     );
     assert_eq!(
         authorization_error_parts(OidcError::UnsupportedRequestParameter).0,
-        "invalid_request"
+        "request_not_supported"
     );
     assert_eq!(
         authorization_error_parts(OidcError::UnsupportedRequestUriParameter).0,
-        "invalid_request"
+        "request_uri_not_supported"
     );
 }
