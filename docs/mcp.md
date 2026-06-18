@@ -89,4 +89,4 @@ Stable request error codes:
 - `evidence_contract_failed`: the operations validator returned a hard contract error.
 - `allowlist_root_unavailable`: the process working directory could not be inspected as the allowlisted root.
 
-Evidence validation failures that can be represented safely are not tool errors. For example, an invalid artifact JSON file returns `isError: false`, `status: "incomplete"`, and stable `failure_codes` such as `invalid_json`, `invalid_json_root`, `contract_mismatch`, `scaffold_contract`, `read_error`, or `symlink_entry`.
+Evidence validation failures that can be represented safely are not tool errors. Validation summaries return `isError: false`, `status: "incomplete"`, and stable `failure_codes`: `missing_evidence`, `stale_or_invalid_scaffold`, `invalid_json`, `invalid_json_root`, `stale_or_invalid_timestamp`, `timestamp_contract`, `forbidden_field`, `artifact_path_failure`, `contract_mismatch`, or `validation_failed`. `symlink_entry` is a request-level path-safety error for pre-check symlink entries; validation text about symlink, read, directory, or unexpected-entry issues is summarized as `artifact_path_failure`.
