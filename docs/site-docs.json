@@ -96,6 +96,13 @@
       "description": "SCIM 2.0 provisioning subset, token rotation, smoke tests, and connector evidence."
     },
     {
+      "slug": "oidc-local-client-quickstart",
+      "title": "OIDC Local Client Quickstart",
+      "section": "Protocol",
+      "source": "docs/oidc-quickstart.md",
+      "description": "Local relying-party setup and verification for first-run OIDC evaluation."
+    },
+    {
       "slug": "openid-conformance",
       "title": "OpenID Conformance",
       "section": "Protocol",

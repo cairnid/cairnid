@@ -17,6 +17,7 @@ CairnID documentation lives in this repository so implementation changes, review
 - [MFA](mfa.md)
 - [Account lifecycle](account-lifecycle.md)
 - [SCIM](scim.md)
+- [OIDC local client quickstart](oidc-quickstart.md)
 - [OpenID conformance](openid-conformance.md)
 - [Dependency policy](dependencies.md)
 - [Threat model](threat-model.md)

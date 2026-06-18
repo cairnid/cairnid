@@ -70,25 +70,189 @@ For each tag, the workflow creates a draft GitHub Release containing:
 - `release-manifest.json` with source commit, workflow run, target, archive, SBOM, CLI archive auxiliary-file paths, and SHA-256 metadata.
 - GitHub artifact attestations created with `actions/attest@v4`, GitHub Actions OIDC, and Sigstore, without long-lived signing keys.
 
-Maintainers must review and publish the draft before the assets are public. RC tags are marked as prereleases and are not marked latest. The workflow does not publish crates.io packages, Homebrew formulae, MSI installers, macOS notarized assets, Authenticode signatures, containers, or any site/runtime artifact.
+Maintainers must review and publish the draft before the assets are public. RC tags are marked as prereleases and are not marked latest. No public crates.io packages, Homebrew formulae, MSI installers, macOS notarized binaries, signed Windows binaries, container images, install scripts, or site/runtime release artifacts exist yet.
 
 CI distribution smoke artifacts are different. The regular CI workflow uploads short-lived Actions artifacts named `*-ci-rehearsal-*` to prove release-mode binaries can build and smoke-test before a tag exists. Those CI artifacts are not public release assets, are not attached to a GitHub Release, and are not the install path for users.
 
 Container checks are also different from public release assets. CI validates Compose configuration, builds the API and web images, and runs image-level smoke checks, but no workflow currently pushes images to a registry or records public container digests. Container publication requires a separate registry policy and workflow before it can be documented as a release artifact.
 
-After a draft release is published, download and verify the archive, checksum file, manifest, and SBOM from the GitHub Release page or with `gh release download`. Example:
+### User verification after a release is published
+
+These are local user verification commands. They do not create release evidence by themselves. `v0.1.0-rc.1` is a future example tag; replace it with an actual published GitHub Release tag after maintainers publish the release.
 
 ```powershell
-gh release download v0.1.0-rc.1 --repo cairnid/cairnid --dir cairnid-release
-cd cairnid-release
-gh attestation verify .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml --source-ref refs/tags/v0.1.0-rc.1
-gh attestation verify .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip --repo cairnid/cairnid --signer-workflow cairnid/cairnid/.github/workflows/release.yml --source-ref refs/tags/v0.1.0-rc.1 --predicate-type https://cyclonedx.org/bom
-Get-FileHash .\cairnid-v0.1.0-rc.1-x86_64-pc-windows-msvc.zip -Algorithm SHA256
+$tag = "v0.1.0-rc.1"
+$repo = "cairnid/cairnid"
+$target = "x86_64-pc-windows-msvc"
+$dir = "cairnid-release-$tag"
+$sourceRef = "refs/tags/$tag"
+
+gh release download $tag --repo $repo --dir $dir
+Set-Location $dir
+
+$archives = @("cairnid-$tag-$target.zip", "cairnid-mcp-$tag-$target.zip")
+$sboms = @("cairnid-$tag-$target.sbom.cdx.json", "cairnid-mcp-$tag-$target.sbom.cdx.json")
+$expected = @{}
+Get-Content .\SHA256SUMS.txt | ForEach-Object {
+    if ($_ -match '^([0-9a-fA-F]{64})\s+\*?(.+)$') {
+        $expected[$Matches[2]] = $Matches[1].ToLowerInvariant()
+    }
+}
+foreach ($file in $archives + $sboms + @("release-manifest.json")) {
+    if (-not $expected.ContainsKey($file)) { throw "SHA256SUMS.txt is missing $file" }
+    $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+    if ($actual -ne $expected[$file]) { throw "SHA-256 mismatch for $file" }
+}
+
+$manifest = Get-Content .\release-manifest.json -Raw | ConvertFrom-Json
+foreach ($field in @("crates_io", "homebrew", "msi", "macos", "containers")) {
+    if ($manifest.distribution.$field -ne $false) { throw "unexpected distribution channel: $field" }
+}
+$manifestAssets = @{}
+foreach ($asset in $manifest.assets) { $manifestAssets[$asset.name] = $asset }
+foreach ($file in $archives + $sboms) {
+    if (-not $manifestAssets.ContainsKey($file)) { throw "release-manifest.json is missing $file" }
+    if ($manifestAssets[$file].sha256.ToLowerInvariant() -ne $expected[$file]) {
+        throw "manifest SHA-256 mismatch for $file"
+    }
+}
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+function Read-ZipMembers([string]$path) {
+    $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $path).ProviderPath)
+    try { $zip.Entries | ForEach-Object { $_.FullName.Replace("\", "/") } } finally { $zip.Dispose() }
+}
+$cliStem = "cairnid-$tag-$target"
+$mcpStem = "cairnid-mcp-$tag-$target"
+$cliMembers = @(Read-ZipMembers $archives[0])
+$mcpMembers = @(Read-ZipMembers $archives[1])
+$cliRequired = @(
+    "$cliStem/cairnid.exe",
+    "$cliStem/LICENSE",
+    "$cliStem/README.md",
+    "$cliStem/completions/cairnid.bash",
+    "$cliStem/completions/_cairnid",
+    "$cliStem/completions/cairnid.fish",
+    "$cliStem/completions/cairnid.ps1",
+    "$cliStem/completions/cairnid.elv",
+    "$cliStem/man/man1/cairnid.1"
+)
+foreach ($member in $cliRequired) {
+    if ($member -notin $cliMembers) { throw "CLI archive is missing $member" }
+}
+foreach ($member in @("$mcpStem/cairnid-mcp.exe", "$mcpStem/LICENSE", "$mcpStem/README.md")) {
+    if ($member -notin $mcpMembers) { throw "MCP archive is missing $member" }
+}
+$mcpForbidden = $mcpMembers | Where-Object {
+    $_ -like "$mcpStem/completions/*" -or $_ -eq "$mcpStem/man/man1/cairnid.1"
+}
+if ($mcpForbidden) { throw "MCP archive contains CLI-only files: $mcpForbidden" }
+
+foreach ($asset in $archives + $sboms + @("release-manifest.json", "SHA256SUMS.txt")) {
+    gh attestation verify ".\$asset" --repo $repo --signer-workflow "$repo/.github/workflows/release.yml" --source-ref $sourceRef
+}
+foreach ($archive in $archives) {
+    gh attestation verify ".\$archive" --repo $repo --signer-workflow "$repo/.github/workflows/release.yml" --source-ref $sourceRef --predicate-type https://cyclonedx.org/bom
+}
 ```
 
-The first `gh attestation verify` command checks the default SLSA provenance attestation. The second verifies the CycloneDX SBOM attestation for the same archive with the CycloneDX predicate type. Compare the `Get-FileHash` value with `SHA256SUMS.txt`, `release-manifest.json`, and the digest GitHub exposes for the release asset. On Linux, use `sha256sum -c SHA256SUMS.txt --ignore-missing` and the same `gh attestation verify` commands against `./cairnid-v0.1.0-rc.1-x86_64-unknown-linux-gnu.tar.gz`.
+```bash
+tag="v0.1.0-rc.1"
+repo="cairnid/cairnid"
+target="x86_64-unknown-linux-gnu"
+dir="cairnid-release-$tag"
+source_ref="refs/tags/$tag"
 
-After every required archive and SBOM is verified, save a token-free `release-assets-verification.json` receipt into the release-evidence directory. The receipt must record `status="ok"`, `completed_at`, the release tag, source commit, release URL or workflow run URL, checksum-file presence and verification, release-manifest presence and checksum verification, the four expected CLI/MCP archives, the four matching CycloneDX SBOMs, per-asset SHA-256 verification, release-manifest entries, and GitHub provenance plus SBOM attestation verification booleans. Do not include GitHub tokens, request headers, cookies, raw attestation payloads, debug logs, or copied command stdout/stderr.
+gh release download "$tag" --repo "$repo" --dir "$dir"
+cd "$dir"
+
+sha256sum -c SHA256SUMS.txt --ignore-missing
+
+TAG="$tag" TARGET="$target" python3 - <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+
+tag = os.environ["TAG"]
+target = os.environ["TARGET"]
+archives = [
+    f"cairnid-{tag}-{target}.tar.gz",
+    f"cairnid-mcp-{tag}-{target}.tar.gz",
+]
+sboms = [
+    f"cairnid-{tag}-{target}.sbom.cdx.json",
+    f"cairnid-mcp-{tag}-{target}.sbom.cdx.json",
+]
+expected = {}
+for line in Path("SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():
+    digest, name = line.split(maxsplit=1)
+    expected[name.lstrip("*")] = digest.lower()
+
+for name in archives + sboms + ["release-manifest.json"]:
+    if name not in expected:
+        raise SystemExit(f"SHA256SUMS.txt is missing {name}")
+    actual = hashlib.sha256(Path(name).read_bytes()).hexdigest()
+    if actual != expected[name]:
+        raise SystemExit(f"SHA-256 mismatch for {name}")
+
+manifest = json.loads(Path("release-manifest.json").read_text(encoding="utf-8"))
+for field in ["crates_io", "homebrew", "msi", "macos", "containers"]:
+    if manifest["distribution"].get(field) is not False:
+        raise SystemExit(f"unexpected distribution channel: {field}")
+
+assets = {asset["name"]: asset for asset in manifest["assets"]}
+for name in archives + sboms:
+    asset = assets.get(name)
+    if asset is None:
+        raise SystemExit(f"release-manifest.json is missing {name}")
+    if asset["sha256"].lower() != expected[name]:
+        raise SystemExit(f"manifest SHA-256 mismatch for {name}")
+PY
+
+cli_stem="cairnid-$tag-$target"
+mcp_stem="cairnid-mcp-$tag-$target"
+cli_archive="$cli_stem.tar.gz"
+mcp_archive="$mcp_stem.tar.gz"
+for member in \
+  "$cli_stem/cairnid" \
+  "$cli_stem/LICENSE" \
+  "$cli_stem/README.md" \
+  "$cli_stem/completions/cairnid.bash" \
+  "$cli_stem/completions/_cairnid" \
+  "$cli_stem/completions/cairnid.fish" \
+  "$cli_stem/completions/cairnid.ps1" \
+  "$cli_stem/completions/cairnid.elv" \
+  "$cli_stem/man/man1/cairnid.1"; do
+    tar -tzf "$cli_archive" "$member" >/dev/null
+done
+for member in "$mcp_stem/cairnid-mcp" "$mcp_stem/LICENSE" "$mcp_stem/README.md"; do
+    tar -tzf "$mcp_archive" "$member" >/dev/null
+done
+if tar -tzf "$mcp_archive" | grep -E "/(completions/|man/man1/cairnid\.1$)"; then
+    echo "MCP archive contains CLI-only files" >&2
+    exit 1
+fi
+
+assets=(
+  "cairnid-$tag-$target.tar.gz"
+  "cairnid-mcp-$tag-$target.tar.gz"
+  "cairnid-$tag-$target.sbom.cdx.json"
+  "cairnid-mcp-$tag-$target.sbom.cdx.json"
+  "release-manifest.json"
+  "SHA256SUMS.txt"
+)
+for asset in "${assets[@]}"; do
+    gh attestation verify "./$asset" --repo "$repo" --signer-workflow "$repo/.github/workflows/release.yml" --source-ref "$source_ref"
+done
+for archive in "cairnid-$tag-$target.tar.gz" "cairnid-mcp-$tag-$target.tar.gz"; do
+    gh attestation verify "./$archive" --repo "$repo" --signer-workflow "$repo/.github/workflows/release.yml" --source-ref "$source_ref" --predicate-type https://cyclonedx.org/bom
+done
+```
+
+The default `gh attestation verify` command checks the SLSA provenance predicate. The command with `--predicate-type https://cyclonedx.org/bom` checks the SBOM attestation for each archive. Run the same pattern for every published target that the user installs or records in evidence.
+
+For release evidence, do not paste command output into the receipt. Save a normalized, token-free `release-assets-verification.json` after all four archives and four SBOMs are verified. The receipt fields belong in the release-evidence directory and must record `status="ok"`, `completed_at`, `release_tag`, `source_commit`, `release_url` or `run_url`, `checksums.file_name="SHA256SUMS.txt"`, `checksums.algorithm="SHA-256"`, `checksums.present=true`, `checksums.verified=true`, `release_manifest.file_name="release-manifest.json"`, `release_manifest.present=true`, `release_manifest.sha256_verified=true`, `attestations.signer_workflow="cairnid/cairnid/.github/workflows/release.yml"`, `attestations.source_ref="refs/tags/<tag>"`, `attestations.provenance_verified=true`, `attestations.sbom_attestations_verified=true`, exactly four `archives` entries, exactly four `sboms` entries, each asset `sha256`, `present=true`, `sha256_verified=true`, `manifest_entry_present=true`, and the required GitHub attestation booleans. Do not include GitHub tokens, request headers, cookies, raw attestation payloads, debug logs, or copied stdout/stderr.
 
 ## Current Blockers
 
