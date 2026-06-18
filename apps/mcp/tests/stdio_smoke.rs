@@ -1,13 +1,15 @@
 use cairn_operations::init_release_evidence_directory;
+use jsonschema::{Draft, Validator};
 use rmcp::{
     ServiceExt,
     model::{
         CallToolRequestParams, CallToolResult, ClientCapabilities, ClientInfo, Implementation,
-        JsonObject, ProtocolVersion,
+        JsonObject, ProtocolVersion, Tool,
     },
 };
 use serde_json::{Value, json};
 use std::{
+    collections::BTreeMap,
     ffi::OsString,
     fs,
     io::{self, BufRead, BufReader, Write},
@@ -162,9 +164,9 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
             "params": {}
         }),
     );
-    let mut tool_names = tools["tools"]
-        .as_array()
-        .expect("tools array")
+    let tools_array = tools["tools"].as_array().expect("tools array");
+    let output_schema_validators = output_schema_validators_from_json_tools(tools_array);
+    let mut tool_names = tools_array
         .iter()
         .map(|tool| tool["name"].as_str().expect("tool name"))
         .collect::<Vec<_>>();
@@ -178,7 +180,7 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
             "cairnid.evidence_status",
         ]
     );
-    assert_tools_list_output_schemas(tools["tools"].as_array().expect("tools array"));
+    assert_tools_list_output_schemas(tools_array);
 
     let status = server.request(
         3,
@@ -196,7 +198,14 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
     );
 
     assert_eq!(status["isError"].as_bool(), Some(false));
-    let structured = status["structuredContent"]
+    let structured_value =
+        assert_json_result_structured_content_matches_text(&status, "evidence_status");
+    assert_structured_content_conforms_to_output_schema(
+        &output_schema_validators,
+        "cairnid.evidence_status",
+        structured_value,
+    );
+    let structured = structured_value
         .as_object()
         .expect("structured evidence status");
     assert_allowed_keys(
@@ -283,12 +292,14 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
     assert_eq!(server_info.protocol_version, ProtocolVersion::V_2025_11_25);
     assert_eq!(server_info.server_info.name, "cairnid-mcp");
 
-    let mut tool_names = client
+    let tools = client
         .list_all_tools()
         .await
-        .expect("list tools through rmcp client")
-        .into_iter()
-        .map(|tool| tool.name.into_owned())
+        .expect("list tools through rmcp client");
+    let output_schema_validators = output_schema_validators_from_rmcp_tools(&tools);
+    let mut tool_names = tools
+        .iter()
+        .map(|tool| tool.name.as_ref())
         .collect::<Vec<_>>();
     tool_names.sort_unstable();
     assert_eq!(
@@ -309,6 +320,11 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
         .expect("call evidence_plan through rmcp client");
     assert_eq!(plan.is_error, Some(false));
     let plan_structured = assert_structured_content_matches_text(&plan, "evidence_plan");
+    assert_structured_content_conforms_to_output_schema(
+        &output_schema_validators,
+        "cairnid.evidence_plan",
+        plan_structured,
+    );
     assert_eq!(
         plan_structured
             .get("schema_version")
@@ -343,6 +359,11 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
     assert_eq!(manifest.is_error, Some(false));
     let manifest_structured =
         assert_structured_content_matches_text(&manifest, "evidence_manifest");
+    assert_structured_content_conforms_to_output_schema(
+        &output_schema_validators,
+        "cairnid.evidence_manifest",
+        manifest_structured,
+    );
     assert_eq!(
         manifest_structured
             .get("schema_version")
@@ -373,6 +394,11 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
         .expect("call evidence_status through rmcp client");
     assert_eq!(status.is_error, Some(false));
     let status_structured = assert_structured_content_matches_text(&status, "evidence_status");
+    assert_structured_content_conforms_to_output_schema(
+        &output_schema_validators,
+        "cairnid.evidence_status",
+        status_structured,
+    );
     assert_eq!(
         status_structured
             .get("schema_version")
@@ -407,6 +433,11 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
         .expect("call evidence_check through rmcp client");
     assert_eq!(check.is_error, Some(true));
     let check_structured = assert_structured_content_matches_text(&check, "evidence_check");
+    assert_structured_content_conforms_to_output_schema(
+        &output_schema_validators,
+        "cairnid.evidence_check",
+        check_structured,
+    );
     assert_eq!(
         check_structured
             .get("schema_version")
@@ -818,6 +849,102 @@ fn json_object(value: Value) -> JsonObject {
         .unwrap_or_else(|| panic!("expected JSON object: {value}"))
 }
 
+fn output_schema_validators_from_json_tools(tools: &[Value]) -> BTreeMap<String, Validator> {
+    let mut validators = BTreeMap::new();
+
+    for tool in tools {
+        let name = tool.get("name").and_then(Value::as_str).expect("tool name");
+        let schema = tool
+            .get("outputSchema")
+            .unwrap_or_else(|| panic!("tool {name} outputSchema"))
+            .clone();
+        let replaced = validators.insert(name.to_owned(), compile_output_schema(name, &schema));
+        assert!(replaced.is_none(), "duplicate tool {name}");
+    }
+
+    validators
+}
+
+fn output_schema_validators_from_rmcp_tools(tools: &[Tool]) -> BTreeMap<String, Validator> {
+    let mut validators = BTreeMap::new();
+
+    for tool in tools {
+        let name = tool.name.as_ref();
+        let schema = Value::Object(
+            tool.output_schema
+                .as_ref()
+                .unwrap_or_else(|| panic!("tool {name} outputSchema"))
+                .as_ref()
+                .clone(),
+        );
+        let replaced = validators.insert(name.to_owned(), compile_output_schema(name, &schema));
+        assert!(replaced.is_none(), "duplicate tool {name}");
+    }
+
+    validators
+}
+
+fn compile_output_schema(tool_name: &str, schema: &Value) -> Validator {
+    assert!(
+        schema.is_object(),
+        "tool {tool_name} outputSchema should be a JSON object"
+    );
+
+    jsonschema::options()
+        .with_draft(Draft::Draft202012)
+        .build(schema)
+        .unwrap_or_else(|error| {
+            panic!(
+                "tool {tool_name} outputSchema should compile as draft 2020-12 JSON Schema: {error}"
+            )
+        })
+}
+
+fn assert_structured_content_conforms_to_output_schema(
+    validators: &BTreeMap<String, Validator>,
+    tool_name: &str,
+    structured: &Value,
+) {
+    assert!(
+        structured.is_object(),
+        "tool {tool_name} structuredContent should be a JSON object"
+    );
+    let validator = validators
+        .get(tool_name)
+        .unwrap_or_else(|| panic!("tool {tool_name} outputSchema validator"));
+
+    if let Err(error) = validator.validate(structured) {
+        panic!(
+            "tool {tool_name} structuredContent failed advertised outputSchema at {}: {error}",
+            error.instance_path()
+        );
+    }
+}
+
+fn assert_json_result_structured_content_matches_text<'a>(
+    result: &'a Value,
+    context: &str,
+) -> &'a Value {
+    let structured = result
+        .get("structuredContent")
+        .unwrap_or_else(|| panic!("{context} omitted structuredContent"));
+    let text = result
+        .get("content")
+        .and_then(Value::as_array)
+        .and_then(|content| content.first())
+        .and_then(|content| content.get("text"))
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("{context} omitted content[0].text"));
+    let text_json = serde_json::from_str::<Value>(text)
+        .unwrap_or_else(|error| panic!("{context} content[0].text was not JSON: {error}"));
+
+    assert_eq!(
+        &text_json, structured,
+        "{context} content[0].text should match structuredContent"
+    );
+    structured
+}
+
 fn assert_tools_list_output_schemas(tools: &[Value]) {
     for name in [
         "cairnid.evidence_plan",
@@ -829,7 +956,10 @@ fn assert_tools_list_output_schemas(tools: &[Value]) {
             .iter()
             .find(|tool| tool["name"].as_str() == Some(name))
             .unwrap_or_else(|| panic!("tool {name} advertised"));
-        let schema = tool["outputSchema"]
+        let schema_value = tool
+            .get("outputSchema")
+            .unwrap_or_else(|| panic!("tool {name} outputSchema"));
+        let schema = schema_value
             .as_object()
             .unwrap_or_else(|| panic!("tool {name} outputSchema object"));
 
@@ -857,7 +987,7 @@ fn assert_tools_list_output_schemas(tools: &[Value]) {
         };
         let success_schema = success_output_schema(name, variants);
         assert_schema_array_items_require_release_gate(
-            success_schema,
+            schema_value,
             success_schema,
             success_collection,
             &format!("tool {name} success {success_collection}"),
@@ -866,6 +996,7 @@ fn assert_tools_list_output_schemas(tools: &[Value]) {
         if name == "cairnid.evidence_check" {
             assert_error_summary_artifacts_require_release_gate(
                 name,
+                schema_value,
                 error_output_schema(name, variants),
             );
         }
@@ -886,21 +1017,25 @@ fn error_output_schema<'a>(tool_name: &str, variants: &'a [Value]) -> &'a Value 
         .unwrap_or_else(|| panic!("tool {tool_name} outputSchema error variant"))
 }
 
-fn assert_error_summary_artifacts_require_release_gate(tool_name: &str, error_schema: &Value) {
+fn assert_error_summary_artifacts_require_release_gate(
+    tool_name: &str,
+    root: &Value,
+    error_schema: &Value,
+) {
     let error_body = schema_property(
-        error_schema,
+        root,
         error_schema,
         "error",
         &format!("tool {tool_name} error envelope"),
     );
     let summary = schema_property(
-        error_schema,
+        root,
         error_body,
         "summary",
         &format!("tool {tool_name} incomplete-check error body"),
     );
     assert_schema_array_items_require_release_gate(
-        error_schema,
+        root,
         summary,
         "artifacts",
         &format!("tool {tool_name} incomplete-check error summary"),

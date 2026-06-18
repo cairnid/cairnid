@@ -401,12 +401,15 @@ fn closed_empty_input_schema() -> std::sync::Arc<JsonObject> {
 }
 
 fn evidence_result_output_schema<T: JsonSchema + 'static>() -> std::sync::Arc<JsonObject> {
-    let success = rmcp::handler::server::common::schema_for_type::<T>()
+    let mut success = rmcp::handler::server::common::schema_for_type::<T>()
         .as_ref()
         .clone();
-    let error = rmcp::handler::server::common::schema_for_type::<McpEvidenceErrorEnvelope>()
+    let mut error = rmcp::handler::server::common::schema_for_type::<McpEvidenceErrorEnvelope>()
         .as_ref()
         .clone();
+    let mut definitions = JsonObject::new();
+    hoist_schema_definitions(&mut success, &mut definitions);
+    hoist_schema_definitions(&mut error, &mut definitions);
 
     let mut schema = JsonObject::new();
     schema.insert(
@@ -420,8 +423,29 @@ fn evidence_result_output_schema<T: JsonSchema + 'static>() -> std::sync::Arc<Js
             serde_json::Value::Object(error),
         ]),
     );
+    if !definitions.is_empty() {
+        schema.insert("$defs".to_owned(), serde_json::Value::Object(definitions));
+    }
 
     std::sync::Arc::new(schema)
+}
+
+fn hoist_schema_definitions(schema: &mut JsonObject, definitions: &mut JsonObject) {
+    let Some(serde_json::Value::Object(local_definitions)) = schema.remove("$defs") else {
+        return;
+    };
+
+    for (name, definition) in local_definitions {
+        match definitions.get(&name) {
+            Some(existing) if existing == &definition => {}
+            Some(_) => {
+                panic!("conflicting MCP output schema definition for {name}");
+            }
+            None => {
+                definitions.insert(name, definition);
+            }
+        }
+    }
 }
 
 #[tool_router]
@@ -1485,7 +1509,7 @@ mod tests {
 
         let success_schema = success_output_schema(tool_name, variants);
         assert_schema_array_items_require_release_gate(
-            success_schema,
+            &schema,
             success_schema,
             success_collection,
             &format!("{tool_name} success {success_collection}"),
@@ -1494,6 +1518,7 @@ mod tests {
         if expect_error_summary {
             assert_error_summary_artifacts_require_release_gate(
                 tool_name,
+                &schema,
                 error_output_schema(tool_name, variants),
             );
         }
@@ -1513,21 +1538,25 @@ mod tests {
             .unwrap_or_else(|| panic!("{tool_name} outputSchema error variant"))
     }
 
-    fn assert_error_summary_artifacts_require_release_gate(tool_name: &str, error_schema: &Value) {
+    fn assert_error_summary_artifacts_require_release_gate(
+        tool_name: &str,
+        root: &Value,
+        error_schema: &Value,
+    ) {
         let error_body = schema_property(
-            error_schema,
+            root,
             error_schema,
             "error",
             &format!("{tool_name} error envelope"),
         );
         let summary = schema_property(
-            error_schema,
+            root,
             error_body,
             "summary",
             &format!("{tool_name} incomplete-check error body"),
         );
         assert_schema_array_items_require_release_gate(
-            error_schema,
+            root,
             summary,
             "artifacts",
             &format!("{tool_name} incomplete-check error summary"),
