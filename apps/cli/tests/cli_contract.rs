@@ -69,6 +69,27 @@ fn evidence_plan_emits_expected_json_contract() {
 }
 
 #[test]
+fn evidence_plan_missing_environment_exits_gate_failed_and_emits_json() {
+    let output = run_cairnid_without_plan_environment(["evidence", "plan"]);
+
+    assert_exit_code(&output, 3);
+
+    let stdout = stdout(&output);
+    let json: Value = serde_json::from_str(&stdout).expect("valid plan JSON");
+    assert_eq!(json["status"], "missing_environment");
+    assert!(
+        json["missing_environment_artifact_count"]
+            .as_u64()
+            .expect("missing environment artifact count")
+            > 0
+    );
+
+    let stderr = stderr(&output);
+    assert!(stderr.contains("cairnid failed: release evidence capture environment is incomplete"));
+    assert!(!stderr.contains(SECRET_SENTINEL));
+}
+
+#[test]
 fn evidence_manifest_emits_expected_json_contract_without_values() {
     let output = run_cairnid(["evidence", "manifest"]);
 
@@ -133,7 +154,7 @@ fn evidence_init_creates_scaffold_and_status_reports_incomplete_lifecycle() {
 
     let status = run_cairnid(["evidence", "status", "--evidence-dir", &evidence_dir_arg]);
 
-    assert_failure(&status);
+    assert_exit_code(&status, 3);
 
     let status_stdout = stdout(&status);
     let status_json: Value = serde_json::from_str(&status_stdout).expect("valid status JSON");
@@ -175,7 +196,7 @@ fn evidence_init_refuses_existing_scaffold_without_leaking_path_fragments() {
     assert_success(&run_cairnid(["evidence", "init", &evidence_dir_arg]));
     let output = run_cairnid(["evidence", "init", &evidence_dir_arg]);
 
-    assert_failure(&output);
+    assert_exit_code(&output, 4);
     assert!(stdout(&output).is_empty());
 
     let stderr = stderr(&output);
@@ -201,7 +222,7 @@ fn evidence_status_redacts_secret_like_artifact_failures() {
 
     let output = run_cairnid(["evidence", "status", "--evidence-dir", &evidence_dir_arg]);
 
-    assert_failure(&output);
+    assert_exit_code(&output, 3);
     let combined = format!("{}\n{}", stdout(&output), stderr(&output));
     assert!(!combined.contains(SECRET_SENTINEL));
     assert!(combined.contains("Bearer <redacted>"));
@@ -227,7 +248,7 @@ fn evidence_check_reports_incomplete_scaffold_and_redacts_secret_like_failures()
 
     let output = run_cairnid(["evidence", "check", "--evidence-dir", &evidence_dir_arg]);
 
-    assert_failure(&output);
+    assert_exit_code(&output, 3);
     let combined = format!("{}\n{}", stdout(&output), stderr(&output));
     assert!(!combined.contains(SECRET_SENTINEL));
     assert!(combined.contains("Bearer <redacted>"));
@@ -266,7 +287,7 @@ fn max_age_days_zero_fails_at_clap_layer() {
         "0",
     ]);
 
-    assert_failure(&output);
+    assert_exit_code(&output, 2);
     assert!(stdout(&output).is_empty());
 
     let stderr = stderr(&output);
@@ -287,7 +308,7 @@ fn max_age_days_above_limit_fails_at_clap_layer() {
         "366",
     ]);
 
-    assert_failure(&output);
+    assert_exit_code(&output, 2);
     assert!(stdout(&output).is_empty());
 
     let stderr = stderr(&output);
@@ -305,13 +326,27 @@ fn missing_evidence_directory_does_not_leak_secret_like_path() {
 
     let output = run_cairnid(["evidence", "check", &missing_dir_arg]);
 
-    assert_failure(&output);
+    assert_exit_code(&output, 4);
     assert!(stdout(&output).is_empty());
 
     let stderr = stderr(&output);
     assert!(stderr.contains("cairnid failed: release evidence path is not a directory"));
     assert!(!stderr.contains(SECRET_SENTINEL));
     assert!(!stderr.contains(&missing_dir_arg));
+}
+
+#[test]
+fn missing_evidence_dir_argument_fails_at_clap_layer() {
+    let output = run_cairnid(["evidence", "check"]);
+
+    assert_exit_code(&output, 2);
+    assert!(stdout(&output).is_empty());
+
+    let stderr = stderr(&output);
+    assert!(stderr.contains("error:"));
+    assert!(stderr.contains("required"));
+    assert!(!stderr.contains("cairnid failed"));
+    assert!(!stderr.contains("not a directory"));
 }
 
 fn run_cairnid<const N: usize>(args: [&str; N]) -> Output {
@@ -322,6 +357,14 @@ fn run_cairnid_with_plan_environment<const N: usize>(args: [&str; N]) -> Output 
     let mut command = command(args);
     for name in PLAN_ENVIRONMENT {
         command.env(name, "present");
+    }
+    command.output().expect("run cairnid")
+}
+
+fn run_cairnid_without_plan_environment<const N: usize>(args: [&str; N]) -> Output {
+    let mut command = command(args);
+    for name in PLAN_ENVIRONMENT {
+        command.env_remove(name);
     }
     command.output().expect("run cairnid")
 }
@@ -349,10 +392,11 @@ fn assert_success(output: &Output) {
     );
 }
 
-fn assert_failure(output: &Output) {
-    assert!(
-        !output.status.success(),
-        "expected failure\nstdout:\n{}\nstderr:\n{}",
+fn assert_exit_code(output: &Output, code: i32) {
+    assert_eq!(
+        output.status.code(),
+        Some(code),
+        "expected exit code {code}\nstdout:\n{}\nstderr:\n{}",
         stdout(output),
         stderr(output)
     );

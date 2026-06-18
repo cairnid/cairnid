@@ -41,6 +41,14 @@ cargo run -p cairnid --locked -- evidence check --evidence-dir <evidence-dir>
 
 `cairnid evidence plan` confirms that required environment variable names are present without printing values. `cairnid evidence init` creates the guarded evidence directory. `cairnid evidence status` shows missing or failed artifacts while evidence is being collected. `cairnid evidence check` is the final local release gate.
 
+Stable `cairnid evidence` exit codes:
+
+- `0`: success.
+- `1`: unexpected internal error.
+- `2`: clap usage or parse error before runtime execution.
+- `3`: the command printed JSON, but the release evidence set or capture environment is incomplete.
+- `4`: operator input, path, or scaffold error, such as an evidence path that is not a directory or an existing scaffold without `--force`.
+
 Do not commit release evidence directories. They can include operational context and must stay in controlled storage.
 
 ## CLI and MCP Release Assets

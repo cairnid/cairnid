@@ -144,6 +144,14 @@ cairnid evidence check <evidence-dir>
 
 `cairnid evidence status` runs the same validators as `cairnid evidence check`, then emits a smaller JSON summary with passed, missing, and failed artifact counts plus the next command for every artifact that still needs work. It exits non-zero while the evidence set is incomplete. `cairnid evidence check` remains the release gate and emits the full per-artifact check/failure detail. Both commands reject unexpected files, directories, symlinks, screenshots, logs, raw provider exports, and forbidden secret-bearing field names in token-free artifacts; failure text redacts obvious secret-looking values before printing.
 
+Stable `cairnid evidence` exit codes:
+
+- `0`: success.
+- `1`: unexpected internal error.
+- `2`: clap usage or parse error before runtime execution.
+- `3`: the command printed JSON, but the release evidence set or capture environment is incomplete.
+- `4`: operator input, path, or scaffold error, such as an evidence path that is not a directory or an existing scaffold without `--force`.
+
 The same read-only evidence plan, manifest, status, and check operations are available through the local `cairnid-mcp` stdio server. MCP status and check responses return sanitized counts and failure codes, not validator failure text. See [mcp.md](mcp.md) for tool names and path restrictions.
 
 By default, artifact files, generated static OpenID artifact `generated_at` timestamps, receipt `completed_at` timestamps, and OpenID conformance-suite `exportedAt` timestamps must be no more than 30 days old. Timestamped artifacts more than five minutes in the future are also rejected, which catches clock or copy/paste mistakes before a public-beta gate is marked ready. Override the age window only for an explicitly approved release process:

@@ -6,8 +6,12 @@ use cairn_operations::{
     release_evidence_status_report,
 };
 use clap::{Parser, Subcommand};
-use std::{env, error::Error, io, path::PathBuf, process::ExitCode};
+use std::{env, error::Error, fmt, path::PathBuf, process::ExitCode};
 use time::OffsetDateTime;
+
+const EXIT_INTERNAL_ERROR: u8 = 1;
+const EXIT_GATE_FAILED: u8 = 3;
+const EXIT_OPERATOR_INPUT: u8 = 4;
 
 #[derive(Debug, Parser)]
 #[command(name = "cairnid", version, about = "CairnID operator CLI", long_about = None)]
@@ -118,18 +122,18 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("cairnid failed: {err}");
-            ExitCode::FAILURE
+            ExitCode::from(err.exit_code())
         }
     }
 }
 
-fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
+fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Commands::Evidence { command } => run_evidence(command),
     }
 }
 
-fn run_evidence(command: EvidenceCommand) -> Result<(), Box<dyn Error>> {
+fn run_evidence(command: EvidenceCommand) -> Result<(), CliError> {
     match command {
         EvidenceCommand::Plan => run_evidence_plan(),
         EvidenceCommand::Manifest => {
@@ -173,7 +177,7 @@ fn selected_evidence_dir(
         .expect("clap requires an evidence directory")
 }
 
-fn run_evidence_plan() -> Result<(), Box<dyn Error>> {
+fn run_evidence_plan() -> Result<(), CliError> {
     let report = release_evidence_capture_plan(
         OffsetDateTime::now_utc(),
         |name| matches!(env::var(name), Ok(value) if !value.trim().is_empty()),
@@ -184,14 +188,14 @@ fn run_evidence_plan() -> Result<(), Box<dyn Error>> {
     if ready {
         Ok(())
     } else {
-        Err(user_error(format!(
+        Err(CliError::gate_failed(format!(
             "release evidence capture environment is incomplete: {}",
             report.missing_environment.join("; ")
         )))
     }
 }
 
-fn run_evidence_status(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), Box<dyn Error>> {
+fn run_evidence_status(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), CliError> {
     let report =
         release_evidence_status_report(&evidence_dir, OffsetDateTime::now_utc(), max_age_days)
             .map_err(release_evidence_cli_error)?;
@@ -201,14 +205,14 @@ fn run_evidence_status(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), B
     if ready {
         Ok(())
     } else {
-        Err(user_error(format!(
+        Err(CliError::gate_failed(format!(
             "release evidence is incomplete: {}",
             report.failures.join("; ")
         )))
     }
 }
 
-fn run_evidence_check(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), Box<dyn Error>> {
+fn run_evidence_check(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), CliError> {
     let report = check_release_evidence(&evidence_dir, OffsetDateTime::now_utc(), max_age_days)
         .map_err(release_evidence_cli_error)?;
     let ready = report.failures.is_empty();
@@ -217,31 +221,82 @@ fn run_evidence_check(evidence_dir: PathBuf, max_age_days: i64) -> Result<(), Bo
     if ready {
         Ok(())
     } else {
-        Err(user_error(format!(
+        Err(CliError::gate_failed(format!(
             "release evidence is incomplete: {}",
             report.failures.join("; ")
         )))
     }
 }
 
-fn print_report<T: serde::Serialize>(report: &T) -> Result<(), Box<dyn Error>> {
-    println!("{}", serde_json::to_string_pretty(report)?);
+fn print_report<T: serde::Serialize>(report: &T) -> Result<(), CliError> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(report).map_err(CliError::internal)?
+    );
     Ok(())
 }
 
-fn user_error(message: String) -> Box<dyn Error> {
-    Box::new(io::Error::new(io::ErrorKind::InvalidInput, message))
-}
-
-fn release_evidence_cli_error(error: ReleaseEvidenceError) -> Box<dyn Error> {
+fn release_evidence_cli_error(error: ReleaseEvidenceError) -> CliError {
     match error {
+        ReleaseEvidenceError::InvalidMaxAge => CliError::operator_input(
+            "release evidence max age must be between 1 and 365 days".to_owned(),
+        ),
         ReleaseEvidenceError::NotDirectory(_) => {
-            user_error("release evidence path is not a directory".to_owned())
+            CliError::operator_input("release evidence path is not a directory".to_owned())
         }
-        ReleaseEvidenceError::ExistingScaffoldFile(_) => user_error(
+        ReleaseEvidenceError::ExistingScaffoldFile(_) => CliError::operator_input(
             "release evidence scaffold file already exists; pass --force to replace it".to_owned(),
         ),
-        error => Box::new(error),
+        error => CliError::internal(error),
+    }
+}
+
+#[derive(Debug)]
+struct CliError {
+    exit_code: u8,
+    message: String,
+    source: Option<Box<dyn Error>>,
+}
+
+impl CliError {
+    fn gate_failed(message: String) -> Self {
+        Self::new(EXIT_GATE_FAILED, message)
+    }
+
+    fn operator_input(message: String) -> Self {
+        Self::new(EXIT_OPERATOR_INPUT, message)
+    }
+
+    fn internal(error: impl Error + 'static) -> Self {
+        Self {
+            exit_code: EXIT_INTERNAL_ERROR,
+            message: "unexpected internal error".to_owned(),
+            source: Some(Box::new(error)),
+        }
+    }
+
+    fn new(exit_code: u8, message: String) -> Self {
+        Self {
+            exit_code,
+            message,
+            source: None,
+        }
+    }
+
+    fn exit_code(&self) -> u8 {
+        self.exit_code
+    }
+}
+
+impl fmt::Display for CliError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl Error for CliError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source.as_deref()
     }
 }
 
