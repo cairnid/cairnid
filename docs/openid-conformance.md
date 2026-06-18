@@ -1,6 +1,6 @@
 # OpenID Conformance
 
-Cairn Identity targets the OpenID Foundation Config OP and Basic OP profiles for v1. Implicit, hybrid, dynamic registration, and `response_mode=form_post` profiles stay out of scope because v1 intentionally supports only Authorization Code + PKCE with query response mode. The Basic OP authorization endpoint still accepts both GET query requests and `application/x-www-form-urlencoded` POST authorization requests.
+Cairn Identity targets the OpenID Foundation Config OP and Basic OP profiles for v1. For browser and OpenID conformance profiles, v1 intentionally supports only Authorization Code + PKCE with query response mode. The OAuth token endpoint also supports `client_credentials` for configured confidential clients, but that grant is outside the browser/OpenID conformance path. Implicit, hybrid, dynamic registration, and `response_mode=form_post` profiles stay out of scope. The Basic OP authorization endpoint still accepts both GET query requests and `application/x-www-form-urlencoded` POST authorization requests.
 
 Primary references:
 

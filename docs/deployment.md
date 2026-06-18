@@ -156,7 +156,7 @@ Run this only during KEK rotation maintenance with `CAIRN_OLD_KEY_ENCRYPTION_KEY
 
 ## Web Container
 
-`apps/web/Dockerfile` installs dependencies with Bun, builds the SvelteKit app through the Node runtime required by Vite, and runs the adapter-node server with Node. The runtime image still includes Bun for the healthcheck script. The Docker `HEALTHCHECK` runs `bun scripts/healthcheck.ts`, which probes `http://127.0.0.1:${PORT}/healthz` and requires a `200` response with `status="ok"`.
+`apps/web/Dockerfile` installs dependencies with Bun, builds the SvelteKit app through the Node runtime required by Vite, and runs the adapter-node server with Node. The tested web runtime is Node 24: CI uses `actions/setup-node` with `node-version: 24`, and the Dockerfile copies `node:24-bookworm-slim` into the build and runtime stages. The runtime image still includes Bun for the healthcheck script. The Docker `HEALTHCHECK` runs `bun scripts/healthcheck.ts`, which probes `http://127.0.0.1:${PORT}/healthz` and requires a `200` response with `status="ok"`.
 
 Runtime variables:
 

@@ -10,7 +10,7 @@ CairnID documentation lives in this repository so implementation changes, review
 - [Operations](operations.md): release evidence, preflight, backup/restore, key rotation, audit export, and drills.
 - [MCP](mcp.md): local read-only release-evidence tools over stdio.
 - [Security posture](security.md): implemented controls, gaps, release evidence, and reporting boundaries.
-- [Release gates](release-gates.md): required evidence before production recommendation.
+- [Release gates](release-gates.md): first-RC compatibility/support matrix and required evidence before production recommendation.
 
 ## Protocol And Product Areas
 

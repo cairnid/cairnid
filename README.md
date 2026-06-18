@@ -24,6 +24,8 @@
 </p>
 
 > Cairn Identity is pre-beta. It is not OpenID Certified and should not be used as a production identity provider until the gates in [docs/release-gates.md](docs/release-gates.md) are complete.
+>
+> The first-RC compatibility and support boundary is tracked in [docs/release-gates.md#rc-compatibility-and-support-matrix](docs/release-gates.md#rc-compatibility-and-support-matrix).
 
 ## Scope
 

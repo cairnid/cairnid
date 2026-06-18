@@ -277,6 +277,7 @@ The service provider metadata advertises these as unsupported:
 - ETags.
 - Cursor pagination.
 - Shared Signals Framework events.
+- Password synchronization.
 
 Multi-valued PATCH semantics outside the stored User primary-work-email and Group user-member subset, nested group memberships, and certified directory templates remain tracked milestones.
 
