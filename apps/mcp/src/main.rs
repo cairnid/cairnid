@@ -24,6 +24,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tracing_subscriber::EnvFilter;
 
 const DEFAULT_EVIDENCE_CHILD: &str = "release-evidence";
+const MCP_EVIDENCE_RESULT_SCHEMA_VERSION: &str = "cairnid.mcp.evidence.v1";
 
 #[derive(Debug, Clone, Default)]
 struct CairnIdMcpServer;
@@ -45,6 +46,7 @@ struct EvidenceDirectoryRequest {
 
 #[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidencePlan {
+    schema_version: &'static str,
     status: String,
     generated_at: String,
     artifact_count: usize,
@@ -84,6 +86,7 @@ struct McpEvidenceEnvironmentRequirement {
 
 #[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidenceManifest {
+    schema_version: &'static str,
     status: String,
     generated_at: String,
     default_max_age_days: i64,
@@ -106,6 +109,7 @@ struct McpEvidenceManifestArtifact {
 
 #[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidenceSummary {
+    schema_version: &'static str,
     status: String,
     generated_at: String,
     max_age_days: i64,
@@ -129,12 +133,13 @@ struct McpEvidenceArtifactSummary {
     failure_codes: BTreeMap<String, usize>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidenceErrorEnvelope {
+    schema_version: &'static str,
     error: McpEvidenceErrorBody,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 struct McpEvidenceErrorBody {
     code: &'static str,
     failure_code: &'static str,
@@ -246,6 +251,7 @@ impl McpEvidenceRequestError {
 impl From<McpEvidenceRequestError> for CallToolResult {
     fn from(error: McpEvidenceRequestError) -> Self {
         let envelope = McpEvidenceErrorEnvelope {
+            schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
             error: McpEvidenceErrorBody {
                 code: error.code,
                 failure_code: error.failure_code,
@@ -296,12 +302,37 @@ fn closed_empty_input_schema() -> std::sync::Arc<JsonObject> {
     std::sync::Arc::new(schema)
 }
 
+fn evidence_result_output_schema<T: JsonSchema + 'static>() -> std::sync::Arc<JsonObject> {
+    let success = rmcp::handler::server::common::schema_for_type::<T>()
+        .as_ref()
+        .clone();
+    let error = rmcp::handler::server::common::schema_for_type::<McpEvidenceErrorEnvelope>()
+        .as_ref()
+        .clone();
+
+    let mut schema = JsonObject::new();
+    schema.insert(
+        "type".to_owned(),
+        serde_json::Value::String("object".to_owned()),
+    );
+    schema.insert(
+        "oneOf".to_owned(),
+        serde_json::Value::Array(vec![
+            serde_json::Value::Object(success),
+            serde_json::Value::Object(error),
+        ]),
+    );
+
+    std::sync::Arc::new(schema)
+}
+
 #[tool_router]
 impl CairnIdMcpServer {
     #[tool(
         name = "cairnid.evidence_plan",
         description = "Return the release evidence capture plan.",
         input_schema = closed_empty_input_schema(),
+        output_schema = evidence_result_output_schema::<McpEvidencePlan>(),
         annotations(
             title = "Evidence Plan",
             read_only_hint = true,
@@ -327,6 +358,7 @@ impl CairnIdMcpServer {
         name = "cairnid.evidence_manifest",
         description = "Return the release evidence artifact manifest.",
         input_schema = closed_empty_input_schema(),
+        output_schema = evidence_result_output_schema::<McpEvidenceManifest>(),
         annotations(
             title = "Evidence Manifest",
             read_only_hint = true,
@@ -349,6 +381,7 @@ impl CairnIdMcpServer {
         name = "cairnid.evidence_status",
         description = "Progress/status view for release evidence validation; returns sanitized status counts without changing files.",
         input_schema = evidence_directory_input_schema(),
+        output_schema = evidence_result_output_schema::<McpEvidenceSummary>(),
         annotations(
             title = "Evidence Status",
             read_only_hint = true,
@@ -370,6 +403,7 @@ impl CairnIdMcpServer {
         name = "cairnid.evidence_check",
         description = "Strict final-gate release evidence validation; returns the sanitized summary when ready and a structured failure-code error when incomplete, without changing files.",
         input_schema = evidence_directory_input_schema(),
+        output_schema = evidence_result_output_schema::<McpEvidenceSummary>(),
         annotations(
             title = "Evidence Check",
             read_only_hint = true,
@@ -468,6 +502,7 @@ fn release_evidence_report_for_root(
 fn incomplete_evidence_error(summary: McpEvidenceSummary) -> CallToolResult {
     let failure_code = dominant_failure_code(&summary.failure_codes);
     let envelope = McpEvidenceErrorEnvelope {
+        schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
         error: McpEvidenceErrorBody {
             code: "release_evidence_incomplete",
             failure_code,
@@ -676,6 +711,7 @@ fn mcp_release_evidence_error(error: ReleaseEvidenceError) -> McpEvidenceRequest
 
 fn mcp_evidence_plan(report: ReleaseEvidencePlanReport) -> McpEvidencePlan {
     McpEvidencePlan {
+        schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
         status: report.status.to_owned(),
         generated_at: rfc3339(report.generated_at),
         artifact_count: report.artifact_count,
@@ -732,6 +768,7 @@ fn mcp_environment_requirement(
 
 fn mcp_evidence_manifest(manifest: ReleaseEvidenceManifest) -> McpEvidenceManifest {
     McpEvidenceManifest {
+        schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
         status: manifest.status.to_owned(),
         generated_at: rfc3339(manifest.generated_at),
         default_max_age_days: manifest.default_max_age_days,
@@ -781,6 +818,7 @@ fn mcp_evidence_summary(report: &ReleaseEvidenceReport) -> McpEvidenceSummary {
         .collect::<Vec<_>>();
 
     McpEvidenceSummary {
+        schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
         status: stable_report_status(report.status).to_owned(),
         generated_at: rfc3339(report.generated_at),
         max_age_days: report.max_age_days,
@@ -944,10 +982,12 @@ mod tests {
 
     #[test]
     fn structured_evidence_tools_have_output_schemas() {
-        assert_output_schema_object(CairnIdMcpServer::evidence_plan_tool_attr().output_schema);
-        assert_output_schema_object(CairnIdMcpServer::evidence_manifest_tool_attr().output_schema);
-        assert_output_schema_object(CairnIdMcpServer::evidence_status_tool_attr().output_schema);
-        assert_output_schema_object(CairnIdMcpServer::evidence_check_tool_attr().output_schema);
+        assert_output_schema_contract(CairnIdMcpServer::evidence_plan_tool_attr().output_schema);
+        assert_output_schema_contract(
+            CairnIdMcpServer::evidence_manifest_tool_attr().output_schema,
+        );
+        assert_output_schema_contract(CairnIdMcpServer::evidence_status_tool_attr().output_schema);
+        assert_output_schema_contract(CairnIdMcpServer::evidence_check_tool_attr().output_schema);
     }
 
     #[test]
@@ -1142,6 +1182,7 @@ mod tests {
         let status_json = serde_json::to_string(&status.0).expect("serialize status response");
         let check_json = serde_json::to_string(&check).expect("serialize check response");
 
+        assert_eq!(status.0.schema_version, MCP_EVIDENCE_RESULT_SCHEMA_VERSION);
         assert!(!status_json.contains(SENTINEL));
         assert!(!check_json.contains(SENTINEL));
         assert!(status_json.contains("contract_mismatch"));
@@ -1216,6 +1257,10 @@ mod tests {
             Err(error) => error,
         };
         let structured = result.structured_content.expect("structured error content");
+        assert_eq!(
+            structured.get("schema_version").and_then(Value::as_str),
+            Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+        );
         let error = structured
             .get("error")
             .and_then(Value::as_object)
@@ -1241,6 +1286,13 @@ mod tests {
         assert_eq!(
             error
                 .get("summary")
+                .and_then(|summary| summary.get("schema_version"))
+                .and_then(Value::as_str),
+            Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+        );
+        assert_eq!(
+            error
+                .get("summary")
                 .and_then(|summary| summary.get("status"))
                 .and_then(Value::as_str),
             Some("incomplete")
@@ -1249,13 +1301,40 @@ mod tests {
         remove_temp_root(root);
     }
 
-    fn assert_output_schema_object(output_schema: Option<std::sync::Arc<rmcp::model::JsonObject>>) {
+    fn assert_output_schema_contract(
+        output_schema: Option<std::sync::Arc<rmcp::model::JsonObject>>,
+    ) {
         let schema = output_schema.expect("output schema");
 
         assert_eq!(
             schema.get("type"),
             Some(&serde_json::Value::String("object".to_owned()))
         );
+        let variants = schema
+            .get("oneOf")
+            .and_then(Value::as_array)
+            .expect("output schema oneOf variants");
+        assert_eq!(variants.len(), 2);
+        assert!(variants.iter().all(schema_requires_schema_version));
+        assert!(variants.iter().any(schema_has_error_property));
+    }
+
+    fn schema_requires_schema_version(schema: &Value) -> bool {
+        schema
+            .get("required")
+            .and_then(Value::as_array)
+            .is_some_and(|required| {
+                required
+                    .iter()
+                    .any(|field| field.as_str() == Some("schema_version"))
+            })
+    }
+
+    fn schema_has_error_property(schema: &Value) -> bool {
+        schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .is_some_and(|properties| properties.contains_key("error"))
     }
 
     fn assert_closed_empty_input_schema(input_schema: &rmcp::model::JsonObject) {

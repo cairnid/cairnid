@@ -12,9 +12,11 @@ use std::{
 use time::OffsetDateTime;
 
 const DEFAULT_EVIDENCE_CHILD: &str = "release-evidence";
+const MCP_EVIDENCE_RESULT_SCHEMA_VERSION: &str = "cairnid.mcp.evidence.v1";
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const SENTINEL: &str = "CAIRNID_MCP_STDIO_SMOKE_DO_NOT_EXPOSE";
 const EVIDENCE_SUMMARY_KEYS: &[&str] = &[
+    "schema_version",
     "status",
     "generated_at",
     "max_age_days",
@@ -98,6 +100,7 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
             "cairnid.evidence_status",
         ]
     );
+    assert_tools_list_output_schemas(tools["tools"].as_array().expect("tools array"));
 
     let status = server.request(
         3,
@@ -122,6 +125,10 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
         "structured evidence status",
         structured,
         EVIDENCE_SUMMARY_KEYS,
+    );
+    assert_eq!(
+        structured.get("schema_version").and_then(Value::as_str),
+        Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
     );
     assert_eq!(
         structured.get("status").and_then(Value::as_str),
@@ -365,6 +372,13 @@ fn stdio_invalid_evidence_json_remains_sanitized_validation_summary() {
     assert_eq!(
         error
             .get("summary")
+            .and_then(|summary| summary.get("schema_version"))
+            .and_then(Value::as_str),
+        Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+    );
+    assert_eq!(
+        error
+            .get("summary")
             .and_then(|summary| summary.get("status"))
             .and_then(Value::as_str),
         Some("incomplete")
@@ -423,6 +437,56 @@ fn assert_allowed_keys(
     expected.sort_unstable();
 
     assert_eq!(actual, expected, "{context} keys changed");
+}
+
+fn assert_tools_list_output_schemas(tools: &[Value]) {
+    for name in [
+        "cairnid.evidence_plan",
+        "cairnid.evidence_manifest",
+        "cairnid.evidence_status",
+        "cairnid.evidence_check",
+    ] {
+        let tool = tools
+            .iter()
+            .find(|tool| tool["name"].as_str() == Some(name))
+            .unwrap_or_else(|| panic!("tool {name} advertised"));
+        let schema = tool["outputSchema"]
+            .as_object()
+            .unwrap_or_else(|| panic!("tool {name} outputSchema object"));
+
+        assert_eq!(schema.get("type"), Some(&json!("object")));
+        let variants = schema
+            .get("oneOf")
+            .and_then(Value::as_array)
+            .unwrap_or_else(|| panic!("tool {name} outputSchema oneOf"));
+        assert_eq!(variants.len(), 2, "tool {name} outputSchema variants");
+        assert!(
+            variants.iter().all(schema_requires_schema_version),
+            "tool {name} outputSchema variants should require schema_version"
+        );
+        assert!(
+            variants.iter().any(schema_has_error_property),
+            "tool {name} outputSchema should include error envelope"
+        );
+    }
+}
+
+fn schema_requires_schema_version(schema: &Value) -> bool {
+    schema
+        .get("required")
+        .and_then(Value::as_array)
+        .is_some_and(|required| {
+            required
+                .iter()
+                .any(|field| field.as_str() == Some("schema_version"))
+        })
+}
+
+fn schema_has_error_property(schema: &Value) -> bool {
+    schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .is_some_and(|properties| properties.contains_key("error"))
 }
 
 fn initialize_mcp(server: &mut McpProcess) {
@@ -497,6 +561,10 @@ fn assert_tool_error_code<'a>(
     let structured = result["structuredContent"]
         .as_object()
         .expect("structured tool error");
+    assert_eq!(
+        structured.get("schema_version").and_then(Value::as_str),
+        Some(MCP_EVIDENCE_RESULT_SCHEMA_VERSION)
+    );
     let error = structured
         .get("error")
         .and_then(Value::as_object)

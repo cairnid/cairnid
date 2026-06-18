@@ -26,14 +26,29 @@ Relative paths are resolved under the process working directory. Absolute paths 
 
 `evidence_status` and `evidence_check` do not return validator failure text, artifact JSON, resource links, logs, standard streams, or provider exports. Their MCP responses contain stable statuses, artifact names, file names, commands, check counts, failure counts, and failure-code counts. The server does not expose the scaffold initializer or any other write-capable release-evidence operation.
 
+## Structured result contract
+
+Every tool advertises an MCP `outputSchema` for `structuredContent`. Successful structured results and tool-error envelopes include this root metadata field:
+
+- `schema_version`: currently `cairnid.mcp.evidence.v1`.
+
+The version identifies the MCP evidence result contract, not the evidence artifact format. Additive fields may be added within the same version. Removing or renaming fields, changing field meaning, changing failure-code semantics, or exposing previously sanitized validator details requires a new schema version.
+
+The `v1` success contracts keep the existing top-level `status` and count fields. Tool errors keep the existing top-level `error` envelope and add `schema_version` alongside it.
+
 ## Evidence tool errors
 
 Request-level failures from `cairnid.evidence_status` and `cairnid.evidence_check` are returned as MCP tool results, not JSON-RPC protocol errors. The result has `isError: true`, and `structuredContent` contains this stable envelope:
 
 ```json
 {
+  "schema_version": "cairnid.mcp.evidence.v1",
   "error": {
     "code": "empty_evidence_dir",
+    "failure_code": "missing_evidence",
+    "failure_codes": {
+      "missing_evidence": 1
+    },
     "message": "evidence_dir must be a non-empty path"
   }
 }
