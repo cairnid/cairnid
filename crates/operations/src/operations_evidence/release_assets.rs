@@ -19,13 +19,118 @@ pub(in crate::operations_evidence) const CHECKSUM_FILE_NAME: &str = "SHA256SUMS.
 pub(in crate::operations_evidence) const RELEASE_MANIFEST_FILE_NAME: &str = "release-manifest.json";
 pub(in crate::operations_evidence) const SIGNER_WORKFLOW: &str =
     "cairnid/cairnid/.github/workflows/release.yml";
-const CLI_AUXILIARY_FILES: &[&str] = &[
-    "completions/cairnid.bash",
-    "completions/_cairnid",
-    "completions/cairnid.fish",
-    "completions/cairnid.ps1",
-    "completions/cairnid.elv",
-    "man/man1/cairnid.1",
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CliAuxiliaryFile {
+    path: &'static str,
+    kind: &'static str,
+    shell: Option<&'static str>,
+    section: Option<&'static str>,
+}
+
+const CLI_AUXILIARY_FILES: &[CliAuxiliaryFile] = &[
+    CliAuxiliaryFile {
+        path: "completions/cairnid.bash",
+        kind: "shell-completion",
+        shell: Some("bash"),
+        section: None,
+    },
+    CliAuxiliaryFile {
+        path: "completions/_cairnid",
+        kind: "shell-completion",
+        shell: Some("zsh"),
+        section: None,
+    },
+    CliAuxiliaryFile {
+        path: "completions/cairnid.fish",
+        kind: "shell-completion",
+        shell: Some("fish"),
+        section: None,
+    },
+    CliAuxiliaryFile {
+        path: "completions/cairnid.ps1",
+        kind: "shell-completion",
+        shell: Some("powershell"),
+        section: None,
+    },
+    CliAuxiliaryFile {
+        path: "completions/cairnid.elv",
+        kind: "shell-completion",
+        shell: Some("elvish"),
+        section: None,
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-completions.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-evidence.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-evidence-plan.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-evidence-manifest.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-evidence-init.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-evidence-status.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-evidence-check.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-release-assets.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-release-assets-verify.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-manpage.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
+    CliAuxiliaryFile {
+        path: "man/man1/cairnid-manpages.1",
+        kind: "manpage",
+        shell: None,
+        section: Some("1"),
+    },
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -716,7 +821,7 @@ fn validate_manifest_auxiliary_files(
     let expected_paths = cli_auxiliary_member_paths(&stem);
     let Some(entries) = auxiliary_files.and_then(Value::as_array) else {
         failures.push(format!(
-            "{RELEASE_MANIFEST_FILE_NAME} asset {file_name}.auxiliary_files must list CLI completions and manpage"
+            "{RELEASE_MANIFEST_FILE_NAME} asset {file_name}.auxiliary_files must list CLI completions and manpages"
         ));
         return;
     };
@@ -728,8 +833,31 @@ fn validate_manifest_auxiliary_files(
         .collect::<Vec<_>>();
     if actual_paths != expected_paths {
         failures.push(format!(
-            "{RELEASE_MANIFEST_FILE_NAME} asset {file_name}.auxiliary_files must match the CLI archive member paths"
+            "{RELEASE_MANIFEST_FILE_NAME} asset {file_name}.auxiliary_files must match the CLI archive member metadata"
         ));
+        return;
+    }
+
+    for (entry, expected) in entries.iter().zip(CLI_AUXILIARY_FILES) {
+        require_manifest_asset_string(entry, file_name, "kind", expected.kind, failures);
+        match expected.shell {
+            Some(shell) => require_manifest_asset_string(entry, file_name, "shell", shell, failures),
+            None if entry.get("shell").is_some() => failures.push(format!(
+                "{RELEASE_MANIFEST_FILE_NAME} asset {file_name}.auxiliary_files shell must not be present for {}",
+                expected.path
+            )),
+            None => {}
+        }
+        match expected.section {
+            Some(section) => {
+                require_manifest_asset_string(entry, file_name, "section", section, failures)
+            }
+            None if entry.get("section").is_some() => failures.push(format!(
+                "{RELEASE_MANIFEST_FILE_NAME} asset {file_name}.auxiliary_files section must not be present for {}",
+                expected.path
+            )),
+            None => {}
+        }
     }
 }
 
@@ -807,7 +935,7 @@ fn expected_archive_members(expected: &ExpectedReleaseAsset, stem: &str) -> Vec<
 fn cli_auxiliary_member_paths(stem: &str) -> Vec<String> {
     CLI_AUXILIARY_FILES
         .iter()
-        .map(|path| format!("{stem}/{path}"))
+        .map(|file| format!("{stem}/{}", file.path))
         .collect()
 }
 

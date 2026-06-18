@@ -21,6 +21,27 @@ pub(super) const RELEASE_ASSET_RELEASE_URL: &str =
     "https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1";
 pub(super) const RELEASE_ASSET_RUN_URL: &str =
     "https://github.com/cairnid/cairnid/actions/runs/123456789";
+const CLI_COMPLETION_FILES: &[(&str, &str, &str)] = &[
+    ("completions/cairnid.bash", "shell-completion", "bash"),
+    ("completions/_cairnid", "shell-completion", "zsh"),
+    ("completions/cairnid.fish", "shell-completion", "fish"),
+    ("completions/cairnid.ps1", "shell-completion", "powershell"),
+    ("completions/cairnid.elv", "shell-completion", "elvish"),
+];
+const CLI_MANPAGE_FILES: &[&str] = &[
+    "man/man1/cairnid.1",
+    "man/man1/cairnid-completions.1",
+    "man/man1/cairnid-evidence.1",
+    "man/man1/cairnid-evidence-plan.1",
+    "man/man1/cairnid-evidence-manifest.1",
+    "man/man1/cairnid-evidence-init.1",
+    "man/man1/cairnid-evidence-status.1",
+    "man/man1/cairnid-evidence-check.1",
+    "man/man1/cairnid-release-assets.1",
+    "man/man1/cairnid-release-assets-verify.1",
+    "man/man1/cairnid-manpage.1",
+    "man/man1/cairnid-manpages.1",
+];
 
 pub(super) struct FakeReleaseAssets {
     pub(super) root: PathBuf,
@@ -104,14 +125,7 @@ pub(super) fn fake_release_assets_dir(name: &str) -> FakeReleaseAssets {
                 "sbom": sbom_name
             });
             if package == "apps/cli" {
-                archive_asset["auxiliary_files"] = json!([
-                    {"path": format!("{stem}/completions/cairnid.bash"), "kind": "shell-completion", "shell": "bash"},
-                    {"path": format!("{stem}/completions/_cairnid"), "kind": "shell-completion", "shell": "zsh"},
-                    {"path": format!("{stem}/completions/cairnid.fish"), "kind": "shell-completion", "shell": "fish"},
-                    {"path": format!("{stem}/completions/cairnid.ps1"), "kind": "shell-completion", "shell": "powershell"},
-                    {"path": format!("{stem}/completions/cairnid.elv"), "kind": "shell-completion", "shell": "elvish"},
-                    {"path": format!("{stem}/man/man1/cairnid.1"), "kind": "manpage", "section": "1"}
-                ]);
+                archive_asset["auxiliary_files"] = json!(cli_auxiliary_manifest_entries(&stem));
             }
             manifest_assets.push(archive_asset);
             manifest_assets.push(json!({
@@ -258,34 +272,51 @@ fn release_archive_members(
         (format!("{stem}/README.md"), b"# CairnID\n".to_vec()),
     ];
     if package == "apps/cli" {
-        members.extend([
-            (
-                format!("{stem}/completions/cairnid.bash"),
-                b"complete -F _cairnid cairnid\n".to_vec(),
-            ),
-            (
-                format!("{stem}/completions/_cairnid"),
-                b"#compdef cairnid\n".to_vec(),
-            ),
-            (
-                format!("{stem}/completions/cairnid.fish"),
-                b"complete -c cairnid\n".to_vec(),
-            ),
-            (
-                format!("{stem}/completions/cairnid.ps1"),
-                b"Register-ArgumentCompleter -Native -CommandName cairnid\n".to_vec(),
-            ),
-            (
-                format!("{stem}/completions/cairnid.elv"),
-                b"edit:completion:arg-completer[cairnid] = {|@words| }\n".to_vec(),
-            ),
-            (
-                format!("{stem}/man/man1/cairnid.1"),
-                b".TH CAIRNID 1\n".to_vec(),
-            ),
-        ]);
+        members.extend(cli_auxiliary_archive_members(stem));
     }
     members
+}
+
+fn cli_auxiliary_manifest_entries(stem: &str) -> Vec<Value> {
+    CLI_COMPLETION_FILES
+        .iter()
+        .map(|(path, kind, shell)| {
+            json!({"path": format!("{stem}/{path}"), "kind": kind, "shell": shell})
+        })
+        .chain(CLI_MANPAGE_FILES.iter().map(|path| {
+            json!({"path": format!("{stem}/{path}"), "kind": "manpage", "section": "1"})
+        }))
+        .collect()
+}
+
+fn cli_auxiliary_archive_members(stem: &str) -> Vec<(String, Vec<u8>)> {
+    CLI_COMPLETION_FILES
+        .iter()
+        .map(|(path, _kind, shell)| {
+            let content = match *shell {
+                "bash" => b"complete -F _cairnid cairnid\n".to_vec(),
+                "zsh" => b"#compdef cairnid\n".to_vec(),
+                "fish" => b"complete -c cairnid\n".to_vec(),
+                "powershell" => {
+                    b"Register-ArgumentCompleter -Native -CommandName cairnid\n".to_vec()
+                }
+                "elvish" => b"edit:completion:arg-completer[cairnid] = {|@words| }\n".to_vec(),
+                other => panic!("unsupported shell {other}"),
+            };
+            (format!("{stem}/{path}"), content)
+        })
+        .chain(CLI_MANPAGE_FILES.iter().map(|path| {
+            let page = path
+                .strip_prefix("man/man1/")
+                .expect("manpage path prefix")
+                .trim_end_matches(".1")
+                .to_ascii_uppercase();
+            (
+                format!("{stem}/{path}"),
+                format!(".TH {page} 1\n").into_bytes(),
+            )
+        }))
+        .collect()
 }
 
 fn write_zip_archive(path: &Path, members: &[(String, Vec<u8>)]) {
