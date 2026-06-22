@@ -21,7 +21,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
         contains_secrets: false,
         requires_production_like_environment: false,
         writes_application_state: false,
-        touches_external_provider: true,
+        touches_external_provider: false,
     },
     EvidenceSpec {
         name: "release_assets_verification",
