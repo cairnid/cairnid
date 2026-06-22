@@ -1,5 +1,6 @@
 mod command;
 mod errors;
+mod lifecycle_smoke;
 mod provider;
 mod report;
 mod types;
