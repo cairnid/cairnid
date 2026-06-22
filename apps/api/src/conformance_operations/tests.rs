@@ -199,6 +199,24 @@ fn openid_conformance_result_template_reports_normalized_shape_without_secrets()
     assert_eq!(json["result"], "pending");
     assert_eq!(json["certification_profile"], "Config OP");
     assert_eq!(json["plan_name"], "oidcc-config-certification-test-plan");
+    assert_eq!(
+        json["oidf_export_provenance"]["schema"],
+        "cairnid.oidf-export-provenance.v1"
+    );
+    assert_eq!(
+        json["oidf_export_provenance"]["normalizer"],
+        "cairn-api conformance oidcc-normalize-export"
+    );
+    assert_eq!(json["oidf_export_provenance"]["plan_module_count"], 0);
+    assert_eq!(
+        json["oidf_export_provenance"]["selected_instances"],
+        json!([
+            {
+                "module_name": "<module name from normalizer output>",
+                "test_id": "<selected latest test instance from normalizer output>"
+            }
+        ])
+    );
     assert!(
         json["accepted_results"]
             .as_array()
@@ -250,42 +268,33 @@ fn openid_result_templates_are_rejected_until_external_result_fields_are_replace
 }
 
 #[test]
-fn openid_result_templates_can_be_completed_with_local_safe_values_for_validator_parity() {
-    for (profile, file_name, artifact_name, result, result_url, other_external_artifact) in [
+fn openid_result_templates_remain_rejected_when_only_completion_fields_are_replaced() {
+    for (profile, file_name, result, result_url) in [
         (
             "config-op",
             "openid-config-op-result.json",
-            "openid_config_op_conformance",
             "PASSED",
             "https://www.certification.openid.net/plan-detail.html?plan=local-template-parity-config-op",
-            "openid_basic_op_conformance",
         ),
         (
             "basic-op",
             "openid-basic-op-result.json",
-            "openid_basic_op_conformance",
             "WARNING",
             "https://www.certification.openid.net/plan-detail.html?plan=local-template-parity-basic-op",
-            "openid_config_op_conformance",
         ),
     ] {
         let evidence = completed_openid_result_from_template(profile, result, result_url);
-        let (report, artifact) = check_openid_result_artifact(file_name, evidence);
+        let (_, artifact) = check_openid_result_artifact(file_name, evidence);
 
-        assert_eq!(artifact.name, artifact_name);
-        assert_eq!(artifact.status, "passed", "{:?}", artifact.failures);
-        assert!(
-            artifact.checks.iter().any(|check| {
-                check.contains("OpenID conformance result identifies suite source")
-            })
+        assert_eq!(artifact.status, "failed");
+        assert_artifact_failure_contains(
+            &artifact,
+            "oidf_export_provenance.plan_module_count must be a positive integer",
         );
-        assert!(
-            artifact
-                .checks
-                .iter()
-                .any(|check| { check.contains("OpenID conformance result passed") })
+        assert_artifact_failure_contains(
+            &artifact,
+            "oidf_export_provenance.plan_modules_sha256 must be a 64-character SHA-256 hex digest",
         );
-        assert_release_report_keeps_external_gates_pending(&report, other_external_artifact);
     }
 }
 
@@ -365,6 +374,39 @@ fn oidf_export_directory_normalizes_like_zip_input() {
         "https://www.certification.openid.net/plan-detail.html?plan=config-op-dir",
     )
     .expect("normalize unpacked export");
+    assert_eq!(
+        normalized["oidf_export_provenance"]["schema"],
+        "cairnid.oidf-export-provenance.v1"
+    );
+    assert_eq!(
+        normalized["oidf_export_provenance"]["normalizer"],
+        "cairn-api conformance oidcc-normalize-export"
+    );
+    assert_eq!(
+        normalized["oidf_export_provenance"]["source_format"],
+        "directory"
+    );
+    assert_eq!(
+        normalized["oidf_export_provenance"]["suite_version"],
+        "5.1.24"
+    );
+    assert_eq!(normalized["oidf_export_provenance"]["plan_module_count"], 1);
+    assert_eq!(normalized["oidf_export_provenance"]["test_log_count"], 1);
+    assert_eq!(
+        normalized["oidf_export_provenance"]["module_names"],
+        json!(["oidcc-server"])
+    );
+    assert_eq!(
+        normalized["oidf_export_provenance"]["selected_instances"],
+        json!([
+            {
+                "module_name": "oidcc-server",
+                "test_id": "config-test-dir-001"
+            }
+        ])
+    );
+    assert_sha256(&normalized["oidf_export_provenance"]["plan_modules_sha256"]);
+    assert_sha256(&normalized["oidf_export_provenance"]["test_logs_sha256"]);
     let (_, artifact) = check_openid_result_artifact("openid-config-op-result.json", normalized);
 
     assert_eq!(artifact.status, "passed", "{:?}", artifact.failures);
@@ -570,14 +612,10 @@ fn assert_artifact_failure_contains(artifact: &ReleaseEvidenceArtifactReport, fr
     );
 }
 
-fn assert_release_report_keeps_external_gates_pending(
-    report: &ReleaseEvidenceReport,
-    expected_missing_artifact: &str,
-) {
-    assert_eq!(report.status, "incomplete");
-    assert!(report.artifacts.iter().any(|artifact| {
-        artifact.name == expected_missing_artifact && artifact.status == "missing"
-    }));
+fn assert_sha256(value: &Value) {
+    let hash = value.as_str().expect("SHA-256 value is a string");
+    assert_eq!(hash.len(), 64);
+    assert!(hash.chars().all(|character| character.is_ascii_hexdigit()));
 }
 
 fn temp_release_evidence_dir(name: &str) -> PathBuf {

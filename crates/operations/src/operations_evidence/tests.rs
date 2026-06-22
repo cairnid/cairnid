@@ -41,7 +41,7 @@ fn release_evidence_passes_complete_directory() {
     write_json(
         &root,
         "openid-config-op-result.json",
-        openid_conformance_summary(
+        openid_conformance_summary_with_provenance(
             "Config OP",
             "oidcc-config-certification-test-plan",
             "https://www.certification.openid.net/plan-detail.html?plan=config-op",
@@ -1298,7 +1298,7 @@ fn release_evidence_rejects_stale_or_future_openid_result_timestamps() {
     stale_plan_export["exportedAt"] = json!("May 1, 2026, 12:00:00 PM");
     write_json(&root, "openid-config-op-result.json", stale_plan_export);
 
-    let mut future_normalized = openid_conformance_summary(
+    let mut future_normalized = openid_conformance_summary_with_provenance(
         "Basic OP",
         "oidcc-basic-certification-test-plan",
         "https://www.certification.openid.net/plan-detail.html?plan=basic-op",
@@ -1448,7 +1448,7 @@ fn release_evidence_rejects_openid_results_from_wrong_suite_origin() {
     plan_export["testLogExports"][0]["export"]["exportedFrom"] = json!("https://example.com/");
     write_json(&root, "openid-config-op-result.json", plan_export);
 
-    let normalized = openid_conformance_summary(
+    let normalized = openid_conformance_summary_with_provenance(
         "Basic OP",
         "oidcc-basic-certification-test-plan",
         "https://example.com/plan-detail.html?plan=basic-op",
@@ -1489,9 +1489,35 @@ fn release_evidence_rejects_openid_results_from_wrong_suite_origin() {
 }
 
 #[test]
+fn release_evidence_rejects_openid_normalized_summary_without_oidf_export_provenance() {
+    let root = temp_evidence_dir("openid-summary-missing-export-provenance");
+    let normalized = openid_conformance_summary(
+        "Config OP",
+        "oidcc-config-certification-test-plan",
+        "https://www.certification.openid.net/plan-detail.html?plan=config-op",
+    );
+    write_json(&root, "openid-config-op-result.json", normalized);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "openid_config_op_conformance")
+        .expect("Config OP artifact");
+
+    assert_eq!(artifact.status, "failed");
+    assert!(artifact.failures.iter().any(|failure| {
+        failure.contains(
+            "oidf_export_provenance must be present and emitted by oidcc-normalize-export",
+        )
+    }));
+}
+
+#[test]
 fn release_evidence_rejects_secret_fields_in_openid_normalized_results() {
     let root = temp_evidence_dir("openid-secret-fields");
-    let mut normalized = openid_conformance_summary(
+    let mut normalized = openid_conformance_summary_with_provenance(
         "Config OP",
         "oidcc-config-certification-test-plan",
         "https://www.certification.openid.net/plan-detail.html?plan=config-op",
@@ -1645,6 +1671,13 @@ fn openid_config_op_zip_export_normalizes_and_passes_release_evidence_check() {
         "https://www.certification.openid.net/plan-detail.html?plan=config-op",
     )
     .expect("normalize Config OP ZIP");
+    assert_eq!(normalized["oidf_export_provenance"]["source_format"], "zip");
+    assert_eq!(
+        normalized["oidf_export_provenance"]["suite_version"],
+        "5.1.24"
+    );
+    assert_eq!(normalized["oidf_export_provenance"]["plan_module_count"], 1);
+    assert_eq!(normalized["oidf_export_provenance"]["test_log_count"], 1);
     let root = temp_evidence_dir("oidf-config-op-normalized");
     init_release_evidence_directory(&root, release_evidence_now(), false)
         .expect("initialize evidence scaffold");
@@ -1661,6 +1694,90 @@ fn openid_config_op_zip_export_normalizes_and_passes_release_evidence_check() {
     assert_eq!(artifact.status, "passed", "{:?}", artifact.failures);
     fs::remove_file(zip_path).expect("cleanup ZIP");
     fs::remove_dir_all(root).expect("cleanup evidence directory");
+}
+
+#[test]
+fn oidc_export_normalizer_summarizes_selected_latest_instance_per_module() {
+    let root = temp_evidence_dir("oidf-selected-latest-instance");
+    let logs_dir = root.join("test-logs");
+    fs::create_dir_all(&logs_dir).expect("create test-logs");
+    write_json(
+        &logs_dir,
+        "index.json",
+        json!({
+            "planName": "oidcc-config-certification-test-plan",
+            "modules": [
+                {
+                    "testModule": "oidcc-server",
+                    "instances": ["config-old-001", "config-latest-002"]
+                }
+            ]
+        }),
+    );
+    write_json(
+        &logs_dir,
+        "test-log-oidcc-server-config-latest-002.json",
+        oidf_test_log(
+            "oidcc-server",
+            "config-latest-002",
+            "PASSED",
+            "FINISHED",
+            "https://www.certification.openid.net/",
+        ),
+    );
+
+    let normalized = normalize_openid_conformance_export(
+        "config-op",
+        &root,
+        "https://www.certification.openid.net/plan-detail.html?plan=config-op-latest",
+    )
+    .expect("normalize export with multiple plan instances");
+    let provenance = &normalized["oidf_export_provenance"];
+
+    assert_eq!(provenance["plan_module_count"], 1);
+    assert_eq!(provenance["test_log_count"], 1);
+    assert_eq!(
+        provenance["selected_instances"],
+        json!([
+            {
+                "module_name": "oidcc-server",
+                "test_id": "config-latest-002"
+            }
+        ])
+    );
+    assert_eq!(
+        provenance["plan_modules_sha256"],
+        json!(sha256_test_json(&json!({
+            "plan_name": "oidcc-config-certification-test-plan",
+            "selected_instances": [
+                {
+                    "module_name": "oidcc-server",
+                    "test_id": "config-latest-002"
+                }
+            ]
+        })))
+    );
+    assert!(
+        !serde_json::to_string(provenance)
+            .expect("serialize provenance")
+            .contains("config-old-001")
+    );
+
+    let release_root = temp_evidence_dir("oidf-selected-latest-normalized");
+    init_release_evidence_directory(&release_root, release_evidence_now(), false)
+        .expect("initialize evidence scaffold");
+    write_json(&release_root, "openid-config-op-result.json", normalized);
+    let report = check_release_evidence(&release_root, release_evidence_now(), 30)
+        .expect("release evidence report");
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "openid_config_op_conformance")
+        .expect("Config OP artifact");
+
+    assert_eq!(artifact.status, "passed", "{:?}", artifact.failures);
+    fs::remove_dir_all(root).expect("cleanup export directory");
+    fs::remove_dir_all(release_root).expect("cleanup evidence directory");
 }
 
 #[test]
@@ -3029,6 +3146,48 @@ fn rewrite_checksum_for_file(root: &Path, file_name: &str) {
 fn sha256_test_file(path: &Path) -> String {
     let bytes = fs::read(path).expect("read file for sha256");
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn sha256_test_json(value: &Value) -> String {
+    let bytes = serde_json::to_vec(value).expect("serialize file for sha256");
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn openid_conformance_summary_with_provenance(
+    profile: &str,
+    plan_name: &str,
+    published_result_url: &str,
+) -> Value {
+    let mut summary = openid_conformance_summary(profile, plan_name, published_result_url);
+    let module_names = if plan_name == "oidcc-basic-certification-test-plan" {
+        vec!["oidcc-claims-essential", "oidcc-server"]
+    } else {
+        vec!["oidcc-server"]
+    };
+    let module_count = module_names.len();
+    let selected_instances = module_names
+        .iter()
+        .map(|module_name| {
+            json!({
+                "module_name": module_name,
+                "test_id": format!("{module_name}-selected-test")
+            })
+        })
+        .collect::<Vec<_>>();
+    summary["oidf_export_provenance"] = json!({
+        "schema": "cairnid.oidf-export-provenance.v1",
+        "normalizer": "cairn-api conformance oidcc-normalize-export",
+        "source_format": "zip",
+        "exported_from": "https://www.certification.openid.net/",
+        "suite_version": "5.1.24",
+        "plan_module_count": module_count,
+        "test_log_count": module_count,
+        "module_names": module_names,
+        "selected_instances": selected_instances,
+        "plan_modules_sha256": "a".repeat(64),
+        "test_logs_sha256": "b".repeat(64)
+    });
+    summary
 }
 
 fn write_oidf_export_zip(

@@ -91,10 +91,32 @@ pub(super) struct OpenIdConformanceResultTemplateReport {
     pub(super) plan_name: &'static str,
     pub(super) completed_at: &'static str,
     pub(super) published_result_url: &'static str,
+    pub(super) oidf_export_provenance: OpenIdConformanceResultTemplateProvenance,
     pub(super) accepted_results: Vec<&'static str>,
     pub(super) required_updates: Vec<&'static str>,
     pub(super) forbidden_fields: Vec<&'static str>,
     pub(super) operator_notes: Vec<&'static str>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub(super) struct OpenIdConformanceResultTemplateProvenance {
+    pub(super) schema: &'static str,
+    pub(super) normalizer: &'static str,
+    pub(super) source_format: &'static str,
+    pub(super) exported_from: &'static str,
+    pub(super) suite_version: &'static str,
+    pub(super) plan_module_count: u32,
+    pub(super) test_log_count: u32,
+    pub(super) module_names: Vec<&'static str>,
+    pub(super) selected_instances: Vec<OpenIdConformanceResultTemplateSelectedInstance>,
+    pub(super) plan_modules_sha256: &'static str,
+    pub(super) test_logs_sha256: &'static str,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub(super) struct OpenIdConformanceResultTemplateSelectedInstance {
+    pub(super) module_name: &'static str,
+    pub(super) test_id: &'static str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

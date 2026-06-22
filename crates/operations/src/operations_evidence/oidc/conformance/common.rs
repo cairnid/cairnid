@@ -2,6 +2,9 @@ use super::constants::OPENID_CERTIFICATION_HOST;
 use crate::operations_evidence::validation::value_at_path;
 use serde_json::Value;
 
+pub(super) const OIDF_EXPORT_NORMALIZER: &str = "cairn-api conformance oidcc-normalize-export";
+pub(super) const OIDF_EXPORT_PROVENANCE_SCHEMA: &str = "cairnid.oidf-export-provenance.v1";
+
 pub(super) fn require_openid_plan_name(
     value: &Value,
     expected_plan_name: &'static str,

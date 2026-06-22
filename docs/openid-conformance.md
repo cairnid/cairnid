@@ -113,14 +113,14 @@ Do not treat these notes as a certification claim. Basic OP readiness for the fi
 
 ## Result Templates
 
-When archiving an official published result URL instead of a full suite export, generate token-free normalized summary templates before the external run:
+Generate token-free result templates before the external run when operators need a reminder of the normalized summary shape:
 
 ```powershell
 cairn-api conformance oidcc-result-template config-op > openid-config-op-result.template.json
 cairn-api conformance oidcc-result-template basic-op > openid-basic-op-result.template.json
 ```
 
-After the matching OIDF suite run is complete, save the final normalized files as `openid-config-op-result.json` and `openid-basic-op-result.json`. Replace the placeholder completion timestamp and official result URL, set `status="FINISHED"`, and set `result` to `PASSED` or `WARNING` only when the OIDF result supports that value. Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized result summaries; `cairnid evidence check` rejects secret-bearing field names in normalized OpenID result JSON.
+These templates are operator guidance only. `cairnid evidence check` still rejects them after an operator changes only `status`, `result`, `completed_at`, and `published_result_url`, because passing normalized summaries must include `oidf_export_provenance` generated from an OIDF export normalization run. Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized result summaries; `cairnid evidence check` rejects secret-bearing field names in normalized OpenID result JSON.
 
 When an official OIDF certification package ZIP or unpacked export directory is available, normalize it locally instead of reshaping the result JSON by hand:
 
@@ -129,7 +129,16 @@ cairn-api conformance oidcc-normalize-export config-op .\oidf-config-op-export.z
 cairn-api conformance oidcc-normalize-export basic-op .\oidf-basic-op-export --published-result-url https://www.certification.openid.net/plan-detail.html?plan=<plan-id> > openid-basic-op-result.json
 ```
 
-The normalizer reads `index.json` and `test-logs/test-log-*.json`, requires the expected Config OP or Basic OP plan name, requires every plan module to have a completed instance with a matching test log, requires `https://www.certification.openid.net` suite origins, accepts only `FINISHED` tests with `PASSED` or `WARNING` results, and rejects secret-bearing fields or credential-shaped values before emitting the token-free normalized summary.
+The normalizer reads `index.json` and `test-logs/test-log-*.json`, requires the expected Config OP or Basic OP plan name, selects the latest `instances[]` entry for each plan module, requires that selected instance to have a matching test log, requires `https://www.certification.openid.net` suite origins, accepts only selected tests with `FINISHED` status and `PASSED` or `WARNING` results, and rejects secret-bearing fields or credential-shaped values before emitting the token-free normalized summary.
+
+Normalizer output includes `oidf_export_provenance` with:
+
+- `schema="cairnid.oidf-export-provenance.v1"` and `normalizer="cairn-api conformance oidcc-normalize-export"`.
+- `source_format="zip"` or `source_format="directory"`, `exported_from`, and the OIDF `suite_version`.
+- `plan_module_count`, `test_log_count`, sorted `module_names`, and `selected_instances` containing one selected/latest test id per module.
+- `plan_modules_sha256` over the plan name and selected module/instance pairs, plus `test_logs_sha256` over reduced selected-test metadata only.
+
+Those fields are token-free. They do not include client secrets, cookies, request headers, ID/access/refresh tokens, passwords, screenshots, or raw logs.
 
 ## Evidence Gate
 
@@ -152,9 +161,9 @@ Save normalized passing result JSON files into the release evidence directory as
 The release evidence checker validates the generated static registration report and static suite config, including their root `generated_at` freshness, before accepting suite result files. For result files, it accepts either:
 
 - OpenID conformance-suite plan export JSON with the expected `planInfo.planName`, a fresh root `exportedAt`, root `exportedFrom` on `https://www.certification.openid.net`, non-empty module instances, non-empty `testLogExports`, each exported test carrying an export timestamp and matching suite origin, and each exported test reporting `status="FINISHED"` with `result="PASSED"` or `result="WARNING"`. Plan exports must be token-free; use normalized published-result summaries when an export contains request headers, cookies, client secrets, passwords, or browser/session data.
-- A normalized published-result summary with `source="openid-conformance-suite"`, the exact `plan_name`, the matching `certification_profile`, `status="FINISHED"`, `result="PASSED"` or `result="WARNING"`, RFC3339 `completed_at`, and an HTTPS `published_result_url` on `www.certification.openid.net`.
+- A normalized published-result summary with `source="openid-conformance-suite"`, the exact `plan_name`, the matching `certification_profile`, `status="FINISHED"`, `result="PASSED"` or `result="WARNING"`, RFC3339 `completed_at`, an HTTPS `published_result_url` on `www.certification.openid.net`, and `oidf_export_provenance` emitted by `cairn-api conformance oidcc-normalize-export`.
 
-It rejects generic success-shaped JSON, wrong plan names, failed or unknown results, unfinished tests, untouched templates with `status="template"`, secret-bearing result fields in either accepted format, and non-empty root `failures` or `errors` arrays:
+It rejects generic success-shaped JSON, wrong plan names, failed or unknown results, unfinished tests, untouched templates with `status="template"`, manually completed templates with placeholder or missing export provenance, secret-bearing result fields in either accepted format, and non-empty root `failures` or `errors` arrays:
 
 ```powershell
 cairnid evidence check <evidence-dir>
