@@ -15,6 +15,8 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
+const EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT: usize = 7;
+
 #[test]
 fn release_evidence_passes_complete_directory() {
     let root = temp_evidence_dir("complete");
@@ -174,6 +176,10 @@ fn release_evidence_passes_complete_directory() {
     assert_eq!(status.passed_artifact_count, 24);
     assert_eq!(status.missing_artifact_count, 0);
     assert_eq!(status.failed_artifact_count, 0);
+    assert_eq!(
+        status.external_provider_artifact_count,
+        EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
     assert!(status.next_actions.is_empty());
 }
 
@@ -370,6 +376,14 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
     assert_eq!(manifest.default_max_age_days, 30);
     assert_eq!(manifest.artifact_count, 24);
     assert_eq!(manifest.artifacts.len(), 24);
+    assert_eq!(
+        manifest
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.touches_external_provider)
+            .count(),
+        EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
     assert!(
         manifest
             .notes
@@ -413,7 +427,7 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
     assert!(!dependency_policy.requires_production_like_environment);
     assert!(!dependency_policy.contains_secrets);
     assert!(!dependency_policy.writes_application_state);
-    assert!(dependency_policy.touches_external_provider);
+    assert!(!dependency_policy.touches_external_provider);
     assert_eq!(dependency_policy.release_gate, "Dependency policy");
 
     let release_assets = manifest
@@ -577,6 +591,10 @@ fn release_evidence_plan_reports_missing_environment_without_values() {
     assert_eq!(report.ready_artifact_count, 1);
     assert_eq!(report.manual_artifact_count, 5);
     assert_eq!(report.missing_environment_artifact_count, 18);
+    assert_eq!(
+        report.external_provider_artifact_count,
+        EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
     assert!(
         report
             .missing_environment
@@ -696,6 +714,10 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
     assert_eq!(report.ready_artifact_count, 19);
     assert_eq!(report.manual_artifact_count, 5);
     assert_eq!(report.missing_environment_artifact_count, 0);
+    assert_eq!(
+        report.external_provider_artifact_count,
+        EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
 
     let config_op = report
         .steps
@@ -769,7 +791,10 @@ fn release_evidence_init_writes_guarded_scaffold() {
     assert_eq!(report.artifact_count, 24);
     assert_eq!(report.secret_artifact_count, 1);
     assert!(report.state_changing_artifact_count > 0);
-    assert!(report.external_provider_artifact_count > 0);
+    assert_eq!(
+        report.external_provider_artifact_count,
+        EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
     assert_eq!(
         report.files_written,
         vec![
