@@ -46,6 +46,7 @@ fn top_level_help_describes_evidence_commands() {
     let output = run_cairnid(["--help"]);
 
     assert_success(&output);
+    assert!(stderr(&output).is_empty());
     let stdout = stdout(&output);
     assert!(stdout.contains("CairnID operator CLI"));
     assert!(stdout.contains("Usage: cairnid"));
@@ -59,6 +60,7 @@ fn evidence_help_describes_existing_evidence_commands() {
     let output = run_cairnid(["evidence", "--help"]);
 
     assert_success(&output);
+    assert!(stderr(&output).is_empty());
     let stdout = stdout(&output);
     assert!(stdout.contains("Plan, initialize, inspect, and check release evidence"));
     assert!(stdout.contains("plan"));
@@ -74,6 +76,7 @@ fn evidence_check_help_describes_arguments_and_examples() {
     let output = run_cairnid(["evidence", "check", "--help"]);
 
     assert_success(&output);
+    assert!(stderr(&output).is_empty());
     let stdout = stdout(&output);
     assert!(stdout.contains("Validate release evidence artifacts"));
     assert!(stdout.contains("Usage:"));
@@ -89,6 +92,7 @@ fn release_assets_verify_help_describes_arguments_and_manual_flags() {
     let output = run_cairnid(["release-assets", "verify", "--help"]);
 
     assert_success(&output);
+    assert!(stderr(&output).is_empty());
     let stdout = stdout(&output);
     assert!(stdout.contains("Verify local release asset files"));
     assert!(stdout.contains("RELEASE_DIR"));
@@ -106,6 +110,7 @@ fn completions_help_lists_supported_shells() {
     let output = run_cairnid(["completions", "--help"]);
 
     assert_success(&output);
+    assert!(stderr(&output).is_empty());
     let stdout = stdout(&output);
     assert!(stdout.contains("Write a shell completion script to stdout"));
     assert!(stdout.contains("bash"));
@@ -113,6 +118,18 @@ fn completions_help_lists_supported_shells() {
     assert!(stdout.contains("fish"));
     assert!(stdout.contains("powershell"));
     assert!(stdout.contains("elvish"));
+}
+
+#[test]
+fn version_prints_exact_binary_version_to_stdout() {
+    let output = run_cairnid(["--version"]);
+
+    assert_success(&output);
+    assert!(stderr(&output).is_empty());
+    assert_eq!(
+        stdout(&output).trim(),
+        concat!("cairnid ", env!("CARGO_PKG_VERSION"))
+    );
 }
 
 #[test]
@@ -553,6 +570,87 @@ fn release_assets_verify_emits_failed_json_for_missing_attestation_confirmations
     let stderr = stderr(&no_attestations);
     assert!(stderr.contains("cairnid failed: release assets verification failed"));
     assert!(!stderr.contains("error:"));
+}
+
+#[test]
+fn release_assets_verify_rejects_invalid_tag_without_echoing_value() {
+    let release_dir = fake_release_assets_dir("verify-invalid-tag");
+    let release_dir_arg = release_dir.to_string_lossy().into_owned();
+    let output = run_cairnid([
+        "release-assets",
+        "verify",
+        &release_dir_arg,
+        "--tag",
+        SECRET_SENTINEL,
+        "--source-commit",
+        RELEASE_ASSET_SOURCE_COMMIT,
+        "--run-url",
+        RELEASE_ASSET_RUN_URL,
+        "--provenance-attestations-verified",
+        "--sbom-attestations-verified",
+    ]);
+
+    assert_exit_code(&output, 4);
+    assert!(stdout(&output).is_empty());
+    let stderr = stderr(&output);
+    assert!(stderr.contains(
+        "cairnid failed: release tag must match vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N"
+    ));
+    assert!(!stderr.contains(SECRET_SENTINEL));
+}
+
+#[test]
+fn release_assets_verify_rejects_invalid_source_commit_without_echoing_value() {
+    let release_dir = fake_release_assets_dir("verify-invalid-source-commit");
+    let release_dir_arg = release_dir.to_string_lossy().into_owned();
+    let output = run_cairnid([
+        "release-assets",
+        "verify",
+        &release_dir_arg,
+        "--tag",
+        RELEASE_ASSET_TAG,
+        "--source-commit",
+        SECRET_SENTINEL,
+        "--run-url",
+        RELEASE_ASSET_RUN_URL,
+        "--provenance-attestations-verified",
+        "--sbom-attestations-verified",
+    ]);
+
+    assert_exit_code(&output, 4);
+    assert!(stdout(&output).is_empty());
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains("cairnid failed: source commit must be a 40-character hexadecimal SHA")
+    );
+    assert!(!stderr.contains(SECRET_SENTINEL));
+}
+
+#[test]
+fn release_assets_verify_rejects_invalid_run_url_without_echoing_value() {
+    let release_dir = fake_release_assets_dir("verify-invalid-run-url");
+    let release_dir_arg = release_dir.to_string_lossy().into_owned();
+    let output = run_cairnid([
+        "release-assets",
+        "verify",
+        &release_dir_arg,
+        "--tag",
+        RELEASE_ASSET_TAG,
+        "--source-commit",
+        RELEASE_ASSET_SOURCE_COMMIT,
+        "--run-url",
+        SECRET_SENTINEL,
+        "--provenance-attestations-verified",
+        "--sbom-attestations-verified",
+    ]);
+
+    assert_exit_code(&output, 4);
+    assert!(stdout(&output).is_empty());
+    let stderr = stderr(&output);
+    assert!(stderr.contains(
+        "cairnid failed: run URL must be a GitHub Actions HTTPS URL under /cairnid/cairnid/actions/runs/"
+    ));
+    assert!(!stderr.contains(SECRET_SENTINEL));
 }
 
 #[test]

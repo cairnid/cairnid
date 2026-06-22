@@ -169,7 +169,11 @@ enum ReleaseAssetsCommand {
             help = "Directory containing downloaded GitHub Release assets"
         )]
         release_dir: PathBuf,
-        #[arg(long, value_name = "TAG", help = "Release tag to verify")]
+        #[arg(
+            long,
+            value_name = "TAG",
+            help = "Release tag to verify, matching vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N"
+        )]
         tag: String,
         #[arg(
             long,
@@ -330,6 +334,7 @@ fn run_release_assets(command: ReleaseAssetsCommand) -> Result<(), CliError> {
             provenance_attestations_verified,
             sbom_attestations_verified,
         } => {
+            validate_release_asset_operator_inputs(&tag, &source_commit, run_url.as_deref())?;
             let report = release_assets_verification_report(
                 &ReleaseAssetsVerificationOptions {
                     release_dir,
@@ -355,6 +360,69 @@ fn run_release_assets(command: ReleaseAssetsCommand) -> Result<(), CliError> {
             }
         }
     }
+}
+
+fn validate_release_asset_operator_inputs(
+    tag: &str,
+    source_commit: &str,
+    run_url: Option<&str>,
+) -> Result<(), CliError> {
+    if !is_supported_release_tag(tag) {
+        return Err(CliError::operator_input(
+            "release tag must match vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N".to_owned(),
+        ));
+    }
+    if !is_source_commit_sha(source_commit) {
+        return Err(CliError::operator_input(
+            "source commit must be a 40-character hexadecimal SHA".to_owned(),
+        ));
+    }
+    if run_url.is_some_and(|value| !is_github_actions_run_url(value)) {
+        return Err(CliError::operator_input(
+            "run URL must be a GitHub Actions HTTPS URL under /cairnid/cairnid/actions/runs/"
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn is_supported_release_tag(tag: &str) -> bool {
+    let Some(version) = tag.strip_prefix('v') else {
+        return false;
+    };
+    let (version, prerelease) = match version.split_once("-rc.") {
+        Some((version, prerelease)) => (version, Some(prerelease)),
+        None => (version, None),
+    };
+    let mut segments = version.split('.');
+    let has_core_version = matches!(
+        (segments.next(), segments.next(), segments.next(), segments.next()),
+        (Some(major), Some(minor), Some(patch), None)
+            if is_non_empty_ascii_digits(major)
+                && is_non_empty_ascii_digits(minor)
+                && is_non_empty_ascii_digits(patch)
+    );
+
+    has_core_version && prerelease.is_none_or(is_non_empty_ascii_digits)
+}
+
+fn is_source_commit_sha(source_commit: &str) -> bool {
+    source_commit.len() == 40
+        && source_commit
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+}
+
+fn is_github_actions_run_url(run_url: &str) -> bool {
+    let Some(run_id) = run_url.strip_prefix("https://github.com/cairnid/cairnid/actions/runs/")
+    else {
+        return false;
+    };
+    is_non_empty_ascii_digits(run_id)
+}
+
+fn is_non_empty_ascii_digits(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
 }
 
 fn selected_evidence_dir(
