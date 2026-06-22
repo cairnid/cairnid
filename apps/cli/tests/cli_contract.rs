@@ -16,6 +16,8 @@ use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 const SECRET_SENTINEL: &str = "TEST_SECRET_SENTINEL_DO_NOT_PRINT";
 const RELEASE_ASSET_TAG: &str = "v0.1.0-rc.1";
 const RELEASE_ASSET_SOURCE_COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
+const RELEASE_ASSET_RELEASE_URL: &str =
+    "https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1";
 const RELEASE_ASSET_RUN_URL: &str = "https://github.com/cairnid/cairnid/actions/runs/123456789";
 const CLI_COMPLETION_FILES: &[(&str, &str, &str)] = &[
     ("completions/cairnid.bash", "shell-completion", "bash"),
@@ -324,8 +326,8 @@ fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
         RELEASE_ASSET_TAG,
         "--source-commit",
         RELEASE_ASSET_SOURCE_COMMIT,
-        "--run-url",
-        RELEASE_ASSET_RUN_URL,
+        "--release-url",
+        RELEASE_ASSET_RELEASE_URL,
         "--provenance-attestations-verified",
         "--sbom-attestations-verified",
     ]);
@@ -339,7 +341,8 @@ fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
     assert_eq!(receipt["status"], "ok");
     assert_eq!(receipt["release_tag"], RELEASE_ASSET_TAG);
     assert_eq!(receipt["source_commit"], RELEASE_ASSET_SOURCE_COMMIT);
-    assert_eq!(receipt["run_url"], RELEASE_ASSET_RUN_URL);
+    assert_eq!(receipt["release_url"], RELEASE_ASSET_RELEASE_URL);
+    assert!(receipt.get("run_url").is_none());
     assert_eq!(receipt["failures"], json!([]));
     assert_eq!(
         receipt["archives"]
@@ -372,6 +375,26 @@ fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
     assert_eq!(release_assets_artifact["failures"], json!([]));
     assert!(!stdout(&check).contains(SECRET_SENTINEL));
     assert!(!stderr(&check).contains(SECRET_SENTINEL));
+}
+
+#[test]
+fn release_assets_verify_emits_failed_json_for_workflow_run_only_receipt() {
+    let release_dir = fake_release_assets_dir("verify-workflow-run-only");
+
+    let output = run_release_assets_verify(&release_dir);
+
+    assert_failed_release_assets_stdout(&output, "release_url must be present");
+    let receipt: Value = serde_json::from_slice(&output.stdout).expect("valid failed receipt JSON");
+    assert_eq!(receipt["release_url"], Value::Null);
+    assert_eq!(receipt["run_url"], RELEASE_ASSET_RUN_URL);
+    assert_eq!(
+        receipt["archives"]
+            .as_array()
+            .expect("archives array")
+            .len(),
+        4
+    );
+    assert_eq!(receipt["sboms"].as_array().expect("sboms array").len(), 4);
 }
 
 #[test]

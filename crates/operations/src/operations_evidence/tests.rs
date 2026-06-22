@@ -907,7 +907,7 @@ fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
         receipt.release_url.as_deref(),
         Some(RELEASE_ASSET_RELEASE_URL)
     );
-    assert_eq!(receipt.run_url.as_deref(), Some(RELEASE_ASSET_RUN_URL));
+    assert_eq!(receipt.run_url, None);
     assert_eq!(receipt.archives.len(), 4);
     assert_eq!(receipt.sboms.len(), 4);
     assert!(
@@ -945,6 +945,32 @@ fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
         .expect("release assets artifact");
     assert_eq!(release_assets.status, "passed");
     assert!(release_assets.failures.is_empty());
+}
+
+#[test]
+fn release_assets_receipt_generation_rejects_workflow_run_only_receipt() {
+    let release = fake_release_assets_dir("receipt-workflow-run-only");
+    let mut options = release_assets_options(&release);
+    options.release_url = None;
+    options.run_url = Some(release.run_url.to_owned());
+
+    let error = release_assets_verification_receipt(&options, release_evidence_now())
+        .expect_err("workflow run receipts are not public release evidence");
+    let failures = release_assets_failures(&error);
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("release_url must be present")),
+        "{failures:?}"
+    );
+
+    let report = release_assets_verification_report(&options, release_evidence_now())
+        .expect("workflow run report");
+    assert_failed_release_assets_report(&report, "release_url must be present");
+    assert_eq!(report.release_url, None);
+    assert_eq!(report.run_url.as_deref(), Some(RELEASE_ASSET_RUN_URL));
+    assert_eq!(report.archives.len(), 4);
+    assert_eq!(report.sboms.len(), 4);
 }
 
 #[test]
@@ -2799,7 +2825,7 @@ fn release_assets_options(release: &FakeReleaseAssets) -> ReleaseAssetsVerificat
         release_tag: release.tag.to_owned(),
         source_commit: release.source_commit.to_owned(),
         release_url: Some(release.release_url.to_owned()),
-        run_url: Some(release.run_url.to_owned()),
+        run_url: None,
         provenance_attestations_verified: true,
         sbom_attestations_verified: true,
     }
