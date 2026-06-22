@@ -30,10 +30,10 @@ pub use self::release_assets::{
 };
 pub use self::types::{
     RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidenceArtifactReport,
-    ReleaseEvidenceEnvironmentRequirement, ReleaseEvidenceError, ReleaseEvidenceInitReport,
-    ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact, ReleaseEvidenceNextAction,
-    ReleaseEvidencePlanPendingArtifact, ReleaseEvidencePlanReport, ReleaseEvidencePlanStep,
-    ReleaseEvidenceReport, ReleaseEvidenceStatusReport,
+    ReleaseEvidenceEnvironmentRequirement, ReleaseEvidenceError, ReleaseEvidenceFailureCode,
+    ReleaseEvidenceInitReport, ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact,
+    ReleaseEvidenceNextAction, ReleaseEvidencePlanPendingArtifact, ReleaseEvidencePlanReport,
+    ReleaseEvidencePlanStep, ReleaseEvidenceReport, ReleaseEvidenceStatusReport,
 };
 use std::path::Path;
 use time::OffsetDateTime;
@@ -55,11 +55,19 @@ pub fn check_release_evidence(
     }
 
     let mut failures = Vec::new();
-    scaffold::validate_release_evidence_scaffold(evidence_dir, now, max_age_days, &mut failures)?;
+    let mut failure_codes = Vec::new();
+    scaffold::validate_release_evidence_scaffold(
+        evidence_dir,
+        now,
+        max_age_days,
+        &mut failures,
+        &mut failure_codes,
+    )?;
     scaffold::validate_release_evidence_file_inventory(
         evidence_dir,
         EVIDENCE_SPECS,
         &mut failures,
+        &mut failure_codes,
     )?;
 
     let mut artifacts = Vec::with_capacity(EVIDENCE_SPECS.len());
@@ -74,6 +82,7 @@ pub fn check_release_evidence(
         for failure in &artifact.failures {
             failures.push(format!("{}: {failure}", artifact.name));
         }
+        failure_codes.extend(artifact.failure_codes.iter().copied());
         artifacts.push(artifact);
     }
 
@@ -94,6 +103,7 @@ pub fn check_release_evidence(
         max_age_days,
         artifacts,
         failures,
+        failure_codes,
     })
 }
 

@@ -3,9 +3,10 @@ mod fixtures;
 use super::{
     DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION,
     ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions, ReleaseEvidenceError,
-    check_release_evidence, init_release_evidence_directory, normalize_openid_conformance_export,
-    release_assets_verification_receipt, release_assets_verification_report,
-    release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
+    ReleaseEvidenceFailureCode, check_release_evidence, init_release_evidence_directory,
+    normalize_openid_conformance_export, release_assets_verification_receipt,
+    release_assets_verification_report, release_evidence_capture_plan, release_evidence_manifest,
+    release_evidence_status_report,
 };
 use fixtures::*;
 use serde_json::{Value, json};
@@ -208,6 +209,11 @@ fn release_evidence_rejects_missing_or_tampered_scaffold() {
             .iter()
             .any(|failure| failure.contains(".gitignore"))
     );
+    assert!(
+        missing_report
+            .failure_codes
+            .contains(&ReleaseEvidenceFailureCode::MissingEvidence)
+    );
 
     let tampered = temp_evidence_dir("tampered-scaffold");
     init_release_evidence_directory(&tampered, release_evidence_now(), false)
@@ -236,6 +242,11 @@ fn release_evidence_rejects_missing_or_tampered_scaffold() {
             .failures
             .iter()
             .any(|failure| failure.contains("guarded release-evidence template"))
+    );
+    assert!(
+        tampered_report
+            .failure_codes
+            .contains(&ReleaseEvidenceFailureCode::StaleOrInvalidScaffold)
     );
 }
 
@@ -266,6 +277,11 @@ fn release_evidence_rejects_unexpected_inventory_entries() {
             .failures
             .iter()
             .any(|failure| failure.contains("got directory: raw-provider-export"))
+    );
+    assert!(
+        report
+            .failure_codes
+            .contains(&ReleaseEvidenceFailureCode::ArtifactPathFailure)
     );
 }
 
@@ -305,6 +321,16 @@ fn release_evidence_rejects_secret_fields_in_token_free_artifacts() {
                 "$.private_key must not be present in token-free release evidence artifact operations_preflight",
             )
         }));
+    assert!(
+        artifact
+            .failure_codes
+            .contains(&ReleaseEvidenceFailureCode::ForbiddenField)
+    );
+    assert!(
+        report
+            .failure_codes
+            .contains(&ReleaseEvidenceFailureCode::ForbiddenField)
+    );
 }
 
 #[test]

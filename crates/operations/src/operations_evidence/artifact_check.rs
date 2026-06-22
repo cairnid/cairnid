@@ -3,7 +3,7 @@ use super::redaction::{
 };
 use super::registry::{EvidenceSpec, EvidenceValidator};
 use super::timestamp::validate_artifact_root_timestamp_freshness;
-use super::{ReleaseEvidenceArtifactReport, ReleaseEvidenceError};
+use super::{ReleaseEvidenceArtifactReport, ReleaseEvidenceError, ReleaseEvidenceFailureCode};
 use serde_json::Value;
 use std::{fs, io, path::Path};
 use time::{Duration, OffsetDateTime};
@@ -21,6 +21,7 @@ pub(super) fn check_artifact(
     let path = evidence_dir.join(spec.file_name);
     let mut checks = Vec::new();
     let mut failures = Vec::new();
+    let mut failure_codes = Vec::new();
     let metadata = match fs::symlink_metadata(&path) {
         Ok(metadata) => Some(metadata),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -37,21 +38,25 @@ pub(super) fn check_artifact(
             modified_at: None,
             checks,
             failures: vec!["required evidence artifact is missing".to_owned()],
+            failure_codes: vec![ReleaseEvidenceFailureCode::MissingEvidence],
         });
     };
 
     let file_type = metadata.file_type();
     if file_type.is_symlink() {
         failures.push("artifact must be a regular file, got symlink".to_owned());
-        return Ok(failed_artifact_report(spec, failures));
+        failure_codes.push(ReleaseEvidenceFailureCode::ArtifactPathFailure);
+        return Ok(failed_artifact_report(spec, failures, failure_codes));
     }
     if file_type.is_dir() {
         failures.push("artifact must be a regular file, got directory".to_owned());
-        return Ok(failed_artifact_report(spec, failures));
+        failure_codes.push(ReleaseEvidenceFailureCode::ArtifactPathFailure);
+        return Ok(failed_artifact_report(spec, failures, failure_codes));
     }
     if !file_type.is_file() {
         failures.push("artifact must be a regular file".to_owned());
-        return Ok(failed_artifact_report(spec, failures));
+        failure_codes.push(ReleaseEvidenceFailureCode::ArtifactPathFailure);
+        return Ok(failed_artifact_report(spec, failures, failure_codes));
     }
 
     let modified_at = metadata.modified().ok().map(OffsetDateTime::from);
@@ -61,19 +66,28 @@ pub(super) fn check_artifact(
         failures.push(format!(
             "artifact is older than {max_age_days} days and must be refreshed"
         ));
+        failure_codes.push(ReleaseEvidenceFailureCode::StaleOrInvalidTimestamp);
     }
     checks.push("artifact exists".to_owned());
 
-    let value = read_json_artifact(&path, &mut failures);
+    let value = read_json_artifact(&path, &mut failures, &mut failure_codes);
     if let Some(value) = value.as_ref() {
         if !spec.contains_secrets {
+            let failure_count = failures.len();
             reject_forbidden_token_free_release_evidence_fields(
                 value,
                 "$",
                 spec.name,
                 &mut failures,
             );
+            push_code_for_new_failures(
+                &mut failure_codes,
+                failure_count,
+                failures.len(),
+                ReleaseEvidenceFailureCode::ForbiddenField,
+            );
         }
+        let failure_count = failures.len();
         validate_artifact_root_timestamp_freshness(
             value,
             now,
@@ -81,7 +95,20 @@ pub(super) fn check_artifact(
             &mut checks,
             &mut failures,
         );
+        push_code_for_new_failures(
+            &mut failure_codes,
+            failure_count,
+            failures.len(),
+            ReleaseEvidenceFailureCode::StaleOrInvalidTimestamp,
+        );
+        let failure_count = failures.len();
         validate_artifact(spec.validator, value, &mut checks, &mut failures);
+        push_code_for_new_failures(
+            &mut failure_codes,
+            failure_count,
+            failures.len(),
+            ReleaseEvidenceFailureCode::ContractMismatch,
+        );
     }
 
     let failures = failures
@@ -102,12 +129,14 @@ pub(super) fn check_artifact(
         modified_at,
         checks,
         failures,
+        failure_codes,
     })
 }
 
 fn failed_artifact_report(
     spec: EvidenceSpec,
     failures: Vec<String>,
+    failure_codes: Vec<ReleaseEvidenceFailureCode>,
 ) -> ReleaseEvidenceArtifactReport {
     ReleaseEvidenceArtifactReport {
         name: spec.name,
@@ -118,10 +147,15 @@ fn failed_artifact_report(
         modified_at: None,
         checks: Vec::new(),
         failures,
+        failure_codes,
     }
 }
 
-fn read_json_artifact(path: &Path, failures: &mut Vec<String>) -> Option<Value> {
+fn read_json_artifact(
+    path: &Path,
+    failures: &mut Vec<String>,
+    failure_codes: &mut Vec<ReleaseEvidenceFailureCode>,
+) -> Option<Value> {
     match fs::read_to_string(path) {
         Ok(contents) => match serde_json::from_str::<Value>(&contents) {
             Ok(value) => {
@@ -129,19 +163,31 @@ fn read_json_artifact(path: &Path, failures: &mut Vec<String>) -> Option<Value> 
                     Some(value)
                 } else {
                     failures.push("artifact JSON root must be an object".to_owned());
+                    failure_codes.push(ReleaseEvidenceFailureCode::InvalidJsonRoot);
                     None
                 }
             }
             Err(error) => {
                 failures.push(format!("artifact is not valid JSON: {error}"));
+                failure_codes.push(ReleaseEvidenceFailureCode::InvalidJson);
                 None
             }
         },
         Err(error) => {
             failures.push(format!("artifact could not be read: {error}"));
+            failure_codes.push(ReleaseEvidenceFailureCode::ArtifactPathFailure);
             None
         }
     }
+}
+
+fn push_code_for_new_failures(
+    failure_codes: &mut Vec<ReleaseEvidenceFailureCode>,
+    previous_failure_count: usize,
+    current_failure_count: usize,
+    code: ReleaseEvidenceFailureCode,
+) {
+    failure_codes.extend((previous_failure_count..current_failure_count).map(|_| code));
 }
 
 #[cfg(test)]
@@ -221,6 +267,10 @@ mod tests {
             report.failures,
             vec!["required evidence artifact is missing".to_owned()]
         );
+        assert_eq!(
+            report.failure_codes,
+            vec![ReleaseEvidenceFailureCode::MissingEvidence]
+        );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
@@ -289,6 +339,11 @@ mod tests {
                 .iter()
                 .any(|failure| failure.starts_with("artifact is not valid JSON:"))
         );
+        assert!(
+            report
+                .failure_codes
+                .contains(&ReleaseEvidenceFailureCode::InvalidJson)
+        );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
@@ -306,6 +361,11 @@ mod tests {
             report
                 .failures
                 .contains(&"artifact JSON root must be an object".to_owned())
+        );
+        assert!(
+            report
+                .failure_codes
+                .contains(&ReleaseEvidenceFailureCode::InvalidJsonRoot)
         );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
@@ -334,6 +394,11 @@ mod tests {
                 .failures
                 .contains(&"provider expected redacted evidence, got <redacted>".to_owned())
         );
+        assert!(
+            report
+                .failure_codes
+                .contains(&ReleaseEvidenceFailureCode::ContractMismatch)
+        );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
@@ -353,6 +418,11 @@ mod tests {
         assert_eq!(report.status, "failed");
         assert!(report.failures.iter().any(|failure| failure
             == "$.rawToken must not be present in token-free release evidence artifact test_artifact"));
+        assert!(
+            report
+                .failure_codes
+                .contains(&ReleaseEvidenceFailureCode::ForbiddenField)
+        );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }

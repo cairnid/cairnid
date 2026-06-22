@@ -4,6 +4,38 @@ use time::OffsetDateTime;
 
 pub const RELEASE_EVIDENCE_SCHEMA_VERSION: &str = "cairnid.evidence.v1";
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ReleaseEvidenceFailureCode {
+    MissingEvidence,
+    StaleOrInvalidScaffold,
+    InvalidJson,
+    InvalidJsonRoot,
+    StaleOrInvalidTimestamp,
+    TimestampContract,
+    ForbiddenField,
+    ArtifactPathFailure,
+    ContractMismatch,
+    ValidationFailed,
+}
+
+impl ReleaseEvidenceFailureCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MissingEvidence => "missing_evidence",
+            Self::StaleOrInvalidScaffold => "stale_or_invalid_scaffold",
+            Self::InvalidJson => "invalid_json",
+            Self::InvalidJsonRoot => "invalid_json_root",
+            Self::StaleOrInvalidTimestamp => "stale_or_invalid_timestamp",
+            Self::TimestampContract => "timestamp_contract",
+            Self::ForbiddenField => "forbidden_field",
+            Self::ArtifactPathFailure => "artifact_path_failure",
+            Self::ContractMismatch => "contract_mismatch",
+            Self::ValidationFailed => "validation_failed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReleaseEvidenceReport {
     pub schema_version: &'static str,
@@ -14,6 +46,8 @@ pub struct ReleaseEvidenceReport {
     pub max_age_days: i64,
     pub artifacts: Vec<ReleaseEvidenceArtifactReport>,
     pub failures: Vec<String>,
+    #[serde(skip_serializing)]
+    pub failure_codes: Vec<ReleaseEvidenceFailureCode>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -28,6 +62,8 @@ pub struct ReleaseEvidenceArtifactReport {
     pub modified_at: Option<OffsetDateTime>,
     pub checks: Vec<String>,
     pub failures: Vec<String>,
+    #[serde(skip_serializing)]
+    pub failure_codes: Vec<ReleaseEvidenceFailureCode>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
