@@ -23,6 +23,7 @@ pub(in crate::operations_evidence) fn validate_release_assets_verification(
     let release_tag = validate_release_tag(value, failures);
     validate_source_commit(value, failures);
     validate_public_release_url(value, release_tag, failures);
+    validate_github_release_immutability_confirmation(value, failures);
     validate_checksums(value, failures);
     validate_release_manifest(value, failures);
     validate_attestations(value, release_tag, failures);
@@ -143,6 +144,15 @@ fn validate_github_url(
         }
         Err(_) => failures.push(format!("{field} must be a valid GitHub HTTPS URL")),
     }
+}
+
+fn validate_github_release_immutability_confirmation(value: &Value, failures: &mut Vec<String>) {
+    require_bool(
+        value,
+        &["github_release_immutability_enabled_before_publish"],
+        true,
+        failures,
+    );
 }
 
 fn validate_checksums(value: &Value, failures: &mut Vec<String>) {
@@ -439,6 +449,36 @@ mod tests {
         assert!(!checks.contains(&"public CLI/MCP release assets verified".to_owned()));
     }
 
+    #[test]
+    fn release_assets_verification_rejects_missing_or_false_immutability_confirmation() {
+        let mut missing = release_assets_verification();
+        missing
+            .as_object_mut()
+            .expect("release assets receipt object")
+            .remove("github_release_immutability_enabled_before_publish");
+        let mut checks = Vec::new();
+        let mut failures = Vec::new();
+
+        validate_release_assets_verification(&missing, &mut checks, &mut failures);
+
+        assert!(failures.iter().any(|failure| {
+            failure.contains("github_release_immutability_enabled_before_publish must be true")
+        }));
+        assert!(!checks.contains(&"public CLI/MCP release assets verified".to_owned()));
+
+        let mut false_value = release_assets_verification();
+        false_value["github_release_immutability_enabled_before_publish"] = json!(false);
+        let mut false_checks = Vec::new();
+        let mut false_failures = Vec::new();
+
+        validate_release_assets_verification(&false_value, &mut false_checks, &mut false_failures);
+
+        assert!(false_failures.iter().any(|failure| {
+            failure.contains("github_release_immutability_enabled_before_publish must be true")
+        }));
+        assert!(!false_checks.contains(&"public CLI/MCP release assets verified".to_owned()));
+    }
+
     fn release_assets_verification() -> Value {
         let tag = "v0.1.0-rc.1";
         json!({
@@ -448,6 +488,7 @@ mod tests {
             "source_commit": "0123456789abcdef0123456789abcdef01234567",
             "release_url": "https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1",
             "run_url": "https://github.com/cairnid/cairnid/actions/runs/123456789",
+            "github_release_immutability_enabled_before_publish": true,
             "checksums": {
                 "file_name": "SHA256SUMS.txt",
                 "algorithm": "SHA-256",
