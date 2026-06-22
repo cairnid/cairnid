@@ -2,7 +2,7 @@ use super::super::cookies::CSRF_HEADER;
 use super::super::{AppState, build_router};
 use super::{
     TEST_CSRF_TOKEN, api_test_database, response_json, session_cookie, test_access_token,
-    test_config, test_oidc_client, test_refresh_token, test_session,
+    test_audit_event, test_config, test_oidc_client, test_refresh_token, test_session,
 };
 use axum::{
     extract::Request,
@@ -570,6 +570,169 @@ async fn browser_session_list_and_revoke_are_current_user_scoped()
     assert_eq!(
         event.metadata["current_session_id"],
         json!(current_session.id)
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn session_security_activity_is_current_user_scoped_and_redacted()
+-> Result<(), Box<dyn std::error::Error>> {
+    use cairn_domain::{AuditActorKind, Organization};
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let now = OffsetDateTime::now_utc();
+    let organization = Organization::new(
+        format!("api-security-activity-{}", Uuid::new_v4()),
+        "API Security Activity",
+    )?;
+    database.create_organization(&organization).await?;
+    let user = User::new(
+        organization.id,
+        format!("security-activity-{}@example.com", Uuid::new_v4()),
+        "Security Activity User",
+    )?;
+    let other_user = User::new(
+        organization.id,
+        format!("security-activity-other-{}@example.com", Uuid::new_v4()),
+        "Other Security Activity User",
+    )?;
+    database.create_user(&user, None).await?;
+    database.create_user(&other_user, None).await?;
+    let current_session = test_session(organization.id, user.id, now);
+    database.create_auth_session(&current_session).await?;
+
+    let mut password_event = test_audit_event(
+        organization.id,
+        AuditActorKind::User,
+        Some(user.id),
+        "account.password_changed",
+        user.id.to_string(),
+        now + Duration::seconds(3),
+        json!({
+            "notification_email_outbox_id": Uuid::new_v4(),
+            "raw_internal_detail": "do-not-expose"
+        }),
+    );
+    password_event.ip_address = Some("203.0.113.24".to_owned());
+    password_event.user_agent = Some("Cairn-Test/1.0".to_owned());
+    let admin_session_event = test_audit_event(
+        organization.id,
+        AuditActorKind::User,
+        Some(Uuid::new_v4()),
+        "admin.user_session_revoked",
+        Uuid::new_v4().to_string(),
+        now + Duration::seconds(2),
+        json!({
+            "subject_user_id": user.id,
+            "revoked_session_acr": "urn:cairn:acr:password",
+            "raw_internal_detail": "do-not-expose"
+        }),
+    );
+    let unrelated_event = test_audit_event(
+        organization.id,
+        AuditActorKind::User,
+        Some(other_user.id),
+        "session.logged_in",
+        Uuid::new_v4().to_string(),
+        now + Duration::seconds(4),
+        json!({}),
+    );
+    for event in [&password_event, &admin_session_event, &unrelated_event] {
+        database.insert_audit_event(event).await?;
+    }
+
+    let state = AppState {
+        database: database.clone(),
+        organization_id: organization.id,
+        config: test_config(cairn_domain::Environment::Development),
+    };
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/session/security-activity?limit=10")
+                .header(header::COOKIE, session_cookie(current_session.id, None))
+                .body(axum::body::Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = response_json(response).await?;
+    let items = payload["items"].as_array().expect("items response");
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["id"], json!(password_event.id));
+    assert_eq!(items[0]["event_type"], json!("password_changed"));
+    assert_eq!(items[0]["summary"], json!("Password changed"));
+    assert_eq!(items[0]["ip_address"], json!("203.0.113.24"));
+    assert_eq!(items[0]["user_agent"], json!("Cairn-Test/1.0"));
+    assert_eq!(items[1]["id"], json!(admin_session_event.id));
+    assert_eq!(items[1]["event_type"], json!("administrator_action"));
+    assert_eq!(
+        items[1]["summary"],
+        json!("An administrator revoked a browser session")
+    );
+    assert_eq!(payload["next_cursor"], Value::Null);
+
+    let serialized = payload.to_string();
+    assert!(!serialized.contains(&unrelated_event.id.to_string()));
+    assert!(!serialized.contains("organization_id"));
+    assert!(!serialized.contains("actor_id"));
+    assert!(!serialized.contains("actor_kind"));
+    assert!(!serialized.contains("target"));
+    assert!(!serialized.contains("metadata"));
+    assert!(!serialized.contains("raw_internal_detail"));
+    assert!(!serialized.contains("revoked_session_acr"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn session_security_activity_rejects_invalid_query_with_session_wording()
+-> Result<(), Box<dyn std::error::Error>> {
+    use cairn_domain::Organization;
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let now = OffsetDateTime::now_utc();
+    let organization = Organization::new(
+        format!("api-security-activity-query-{}", Uuid::new_v4()),
+        "API Security Activity Query",
+    )?;
+    database.create_organization(&organization).await?;
+    let user = User::new(
+        organization.id,
+        format!("security-activity-query-{}@example.com", Uuid::new_v4()),
+        "Security Activity Query User",
+    )?;
+    database.create_user(&user, None).await?;
+    let current_session = test_session(organization.id, user.id, now);
+    database.create_auth_session(&current_session).await?;
+
+    let state = AppState {
+        database: database.clone(),
+        organization_id: organization.id,
+        config: test_config(cairn_domain::Environment::Development),
+    };
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/session/security-activity?offset=10")
+                .header(header::COOKIE, session_cookie(current_session.id, None))
+                .body(axum::body::Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response_json(response).await?,
+        json!({ "error": "unsupported session security activity parameter" })
     );
 
     Ok(())

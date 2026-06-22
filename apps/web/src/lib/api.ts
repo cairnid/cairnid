@@ -159,6 +159,15 @@ export const browserSessionRevocationSchema = z.object({
   session_id: z.string()
 });
 
+export const securityActivityEventSchema = z.object({
+  id: z.string(),
+  event_type: z.string(),
+  summary: z.string(),
+  ip_address: z.string().nullable().optional(),
+  user_agent: z.string().nullable().optional(),
+  occurred_at: z.string()
+});
+
 export type User = z.infer<typeof userSchema>;
 export type UserStatus = z.infer<typeof userStatusSchema>;
 export type Delivery = z.infer<typeof deliverySchema>;
@@ -177,6 +186,7 @@ export type AuditEvent = z.infer<typeof auditEventSchema>;
 export type ConsentGrant = z.infer<typeof consentGrantSchema>;
 export type UserConsentGrant = z.infer<typeof userConsentGrantSchema>;
 export type BrowserSession = z.infer<typeof browserSessionSchema>;
+export type SecurityActivityEvent = z.infer<typeof securityActivityEventSchema>;
 type ListPagePayload<T> = {
   items: T[];
   next_cursor: string | null;

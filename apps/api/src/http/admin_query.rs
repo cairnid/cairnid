@@ -9,5 +9,7 @@ pub(super) use self::consent_grants::{
     admin_consent_grant_list_query, session_consent_grant_list_query,
 };
 pub(super) use self::oidc_clients::admin_oidc_client_list_query;
-pub(super) use self::pagination::{ListPage, admin_list_query, list_page};
+pub(super) use self::pagination::{
+    ListPage, ListQueryLabels, admin_list_query, list_page, list_query,
+};
 pub(super) use self::users::admin_user_list_query;

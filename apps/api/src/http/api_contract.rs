@@ -263,6 +263,14 @@ const BROWSER_ADMIN_API_ROUTES: &[ApiRouteContract] = &[
     ),
     route(
         ApiMethod::Get,
+        "/api/v1/session/security-activity",
+        ApiAudience::Browser,
+        "list_security_activity",
+        ApiSchema::Query("SessionSecurityActivityListQuery"),
+        ApiSchema::Json("ListPage<SessionSecurityActivityEvent>"),
+    ),
+    route(
+        ApiMethod::Get,
         "/api/v1/session/mfa/credentials",
         ApiAudience::Browser,
         "list_session_mfa_credentials",
@@ -570,7 +578,7 @@ mod tests {
         manifest_routes.sort();
         router_routes.sort();
 
-        assert_eq!(BROWSER_ADMIN_API_ROUTES.len(), 51);
+        assert_eq!(BROWSER_ADMIN_API_ROUTES.len(), 52);
         assert_eq!(manifest_routes, router_routes);
     }
 
