@@ -768,6 +768,69 @@ fn stdio_evidence_status_returns_stable_tool_error_envelopes() {
 }
 
 #[test]
+fn stdio_invalid_max_age_days_wins_before_evidence_dir_resolution() {
+    let root = temp_root("stdio-invalid-max-age-first");
+    let outside = temp_root("stdio-invalid-max-age-outside");
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let cases = [
+        json!({"max_age_days": 0}),
+        json!({"evidence_dir": "missing-evidence", "max_age_days": 366}),
+        json!({
+            "evidence_dir": outside.to_string_lossy().to_string(),
+            "max_age_days": 0
+        }),
+    ];
+
+    let mut request_id = 2;
+    for arguments in cases {
+        let status = call_evidence_status(&mut server, request_id, arguments.clone());
+        assert_tool_error_code(&status, "invalid_max_age_days");
+        request_id += 1;
+
+        let check = call_evidence_check(&mut server, request_id, arguments);
+        assert_tool_error_code(&check, "invalid_max_age_days");
+        request_id += 1;
+    }
+
+    drop(server);
+    remove_temp_root(outside);
+    remove_temp_root(root);
+}
+
+#[test]
+fn stdio_valid_max_age_days_preserves_evidence_dir_path_errors() {
+    let root = temp_root("stdio-valid-max-age-path-errors");
+    let outside = temp_root("stdio-valid-max-age-outside");
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let cases = [
+        (
+            json!({"evidence_dir": "missing-evidence", "max_age_days": 1}),
+            "missing_evidence_dir",
+        ),
+        (
+            json!({
+                "evidence_dir": outside.to_string_lossy().to_string(),
+                "max_age_days": 365
+            }),
+            "outside_allowlisted_root",
+        ),
+    ];
+
+    for (request_id, (arguments, expected_code)) in (2..).zip(cases) {
+        let status = call_evidence_status(&mut server, request_id, arguments);
+        assert_tool_error_code(&status, expected_code);
+    }
+
+    drop(server);
+    remove_temp_root(outside);
+    remove_temp_root(root);
+}
+
+#[test]
 fn stdio_no_argument_evidence_tools_reject_stray_arguments() {
     let root = temp_root("stdio-no-arg-errors");
     let mut server = McpProcess::start(&root);
