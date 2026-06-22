@@ -25,7 +25,7 @@ const EXIT_OPERATOR_INPUT: u8 = 4;
 #[command(name = "cairnid", version, about = "CairnID operator CLI", long_about = None)]
 #[command(propagate_version = true)]
 #[command(
-    after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence check release-evidence\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url <url> --provenance-attestations-verified --sbom-attestations-verified"
+    after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence check release-evidence\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --provenance-attestations-verified --sbom-attestations-verified"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -190,7 +190,7 @@ enum ReleaseAssetsCommand {
             value_name = "URL",
             required_unless_present = "release_url",
             conflicts_with = "release_url",
-            help = "GitHub Actions release workflow run URL for the verified asset set"
+            help = "GitHub Actions release workflow run URL for workflow-local validation; run URL receipts are not final release evidence"
         )]
         run_url: Option<String>,
         #[arg(

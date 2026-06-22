@@ -9,6 +9,8 @@ use super::{
     require_bool, require_empty_array, require_rfc3339_timestamp, require_string, value_at_path,
 };
 
+const PUBLIC_RELEASE_URL_REQUIRED_FAILURE: &str = "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only";
+
 pub(in crate::operations_evidence) fn validate_release_assets_verification(
     value: &Value,
     checks: &mut Vec<String>,
@@ -21,7 +23,7 @@ pub(in crate::operations_evidence) fn validate_release_assets_verification(
     let raw_release_tag = value.get("release_tag").and_then(Value::as_str);
     let release_tag = validate_release_tag(value, failures);
     validate_source_commit(value, failures);
-    validate_release_or_run_url(value, release_tag, failures);
+    validate_public_release_url(value, release_tag, failures);
     validate_checksums(value, failures);
     validate_release_manifest(value, failures);
     validate_attestations(value, release_tag, failures);
@@ -81,29 +83,26 @@ fn validate_source_commit(value: &Value, failures: &mut Vec<String>) {
     }
 }
 
-fn validate_release_or_run_url(
+fn validate_public_release_url(
     value: &Value,
     release_tag: Option<&str>,
     failures: &mut Vec<String>,
 ) {
     let release_url = value.get("release_url").and_then(Value::as_str);
     let run_url = value.get("run_url").and_then(Value::as_str);
-    if release_url.is_none_or(str::is_empty) && run_url.is_none_or(str::is_empty) {
-        failures.push("release_url or run_url must be present".to_owned());
-        return;
+    match release_url {
+        Some(release_url) if !release_url.is_empty() => {
+            validate_github_url(
+                release_url,
+                "release_url",
+                release_tag.map(|tag| format!("/cairnid/cairnid/releases/tag/{tag}")),
+                "/cairnid/cairnid/releases/tag/",
+                failures,
+            );
+        }
+        Some(_) | None => failures.push(PUBLIC_RELEASE_URL_REQUIRED_FAILURE.to_owned()),
     }
 
-    if let Some(release_url) = release_url
-        && !release_url.is_empty()
-    {
-        validate_github_url(
-            release_url,
-            "release_url",
-            release_tag.map(|tag| format!("/cairnid/cairnid/releases/tag/{tag}")),
-            "/cairnid/cairnid/releases/tag/",
-            failures,
-        );
-    }
     if let Some(run_url) = run_url
         && !run_url.is_empty()
     {
@@ -418,6 +417,27 @@ mod tests {
         assert!(failures.iter().any(|failure| {
             failure.contains("archives must contain exactly 4 public CLI/MCP archives")
         }));
+    }
+
+    #[test]
+    fn release_assets_verification_rejects_workflow_run_only_receipt() {
+        let mut value = release_assets_verification();
+        value
+            .as_object_mut()
+            .expect("release assets receipt object")
+            .remove("release_url");
+        let mut checks = Vec::new();
+        let mut failures = Vec::new();
+
+        validate_release_assets_verification(&value, &mut checks, &mut failures);
+
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("release_url must be present")),
+            "{failures:?}"
+        );
+        assert!(!checks.contains(&"public CLI/MCP release assets verified".to_owned()));
     }
 
     fn release_assets_verification() -> Value {

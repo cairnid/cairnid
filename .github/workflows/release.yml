@@ -1643,14 +1643,49 @@ jobs:
           test -x "$verifier"
 
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          set +e
           "$verifier" release-assets verify dist \
             --tag "$RELEASE_TAG" \
             --source-commit "$RELEASE_SOURCE_COMMIT" \
             --run-url "$run_url" \
             --provenance-attestations-verified \
             --sbom-attestations-verified \
-            > "$RUNNER_TEMP/release-assets-verification.json"
-          test -s "$RUNNER_TEMP/release-assets-verification.json"
+            > "$RUNNER_TEMP/release-assets-workflow-verification.json"
+          verifier_status=$?
+          set -e
+
+          if [[ "$verifier_status" -ne 3 ]]; then
+            echo "::error::workflow run verifier should fail only because a public release URL is absent; got exit ${verifier_status}"
+            exit 1
+          fi
+
+          RUN_URL="$run_url" python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          receipt_path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "release-assets-workflow-verification.json"
+          receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+          expected_failures = {
+              "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only",
+          }
+          failures = set(receipt.get("failures", []))
+          if receipt.get("status") != "failed" or failures != expected_failures:
+              print(json.dumps(receipt, indent=2, sort_keys=True), file=sys.stderr)
+              raise SystemExit(
+                  "workflow release-assets verification had unexpected failures"
+              )
+          if receipt.get("release_url") is not None:
+              raise SystemExit("workflow verifier receipt must not include release_url")
+          if receipt.get("run_url") != os.environ["RUN_URL"]:
+              raise SystemExit("workflow verifier receipt did not record the run URL")
+          if len(receipt.get("archives", [])) != 4 or len(receipt.get("sboms", [])) != 4:
+              raise SystemExit("workflow verifier did not inspect all archives and SBOMs")
+          attestations = receipt.get("attestations", {})
+          if not attestations.get("provenance_verified") or not attestations.get("sbom_attestations_verified"):
+              raise SystemExit("workflow verifier did not record publish-only attestation confirmations")
+          PY
 
       - name: Write release notes
         shell: bash
@@ -1774,6 +1809,7 @@ jobs:
           receipt_path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "release-assets-rehearsal-verification.json"
           receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
           expected_failures = {
+              "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only",
               "--provenance-attestations-verified must be supplied after external provenance attestation verification",
               "--sbom-attestations-verified must be supplied after external SBOM attestation verification",
           }
