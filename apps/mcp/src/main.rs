@@ -28,6 +28,8 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const DEFAULT_EVIDENCE_CHILD: &str = "release-evidence";
 const MCP_EVIDENCE_RESULT_SCHEMA_VERSION: &str = "cairnid.mcp.evidence.v1";
+const MIN_EVIDENCE_MAX_AGE_DAYS: i64 = 1;
+const MAX_EVIDENCE_MAX_AGE_DAYS: i64 = 365;
 const EXIT_INTERNAL_ERROR: u8 = 1;
 const EXIT_OPERATOR_INPUT: u8 = 4;
 
@@ -754,6 +756,7 @@ fn parse_evidence_directory_request(
     if !arguments.is_empty() {
         return Err(McpEvidenceRequestError::UNKNOWN_ARGUMENT);
     }
+    validate_max_age_days(max_age_days)?;
 
     Ok(EvidenceDirectoryRequest {
         evidence_dir,
@@ -788,6 +791,16 @@ fn optional_i64_argument(
         None | Some(serde_json::Value::Null) => Ok(None),
         Some(serde_json::Value::Number(value)) => value.as_i64().map(Some).ok_or(invalid_error),
         Some(_) => Err(invalid_error),
+    }
+}
+
+fn validate_max_age_days(value: Option<i64>) -> Result<(), McpEvidenceRequestError> {
+    match value {
+        None => Ok(()),
+        Some(value) if (MIN_EVIDENCE_MAX_AGE_DAYS..=MAX_EVIDENCE_MAX_AGE_DAYS).contains(&value) => {
+            Ok(())
+        }
+        Some(_) => Err(McpEvidenceRequestError::INVALID_MAX_AGE_DAYS),
     }
 }
 
