@@ -25,7 +25,6 @@ use std::{
     process::ExitCode,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-use tracing_subscriber::EnvFilter;
 
 const DEFAULT_EVIDENCE_CHILD: &str = "release-evidence";
 const MCP_EVIDENCE_RESULT_SCHEMA_VERSION: &str = "cairnid.mcp.evidence.v1";
@@ -586,7 +585,7 @@ async fn main() -> ExitCode {
 async fn run(cli: Cli) -> Result<(), StartupError> {
     let evidence_root =
         startup_evidence_root(cli.evidence_root).map_err(StartupError::EvidenceRoot)?;
-    init_tracing();
+    init_stdio_tracing();
     tracing::debug!(
         evidence_root = %evidence_root.display(),
         "starting cairnid-mcp stdio server"
@@ -607,12 +606,10 @@ async fn run(cli: Cli) -> Result<(), StartupError> {
     Ok(())
 }
 
-fn init_tracing() {
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
-
+fn init_stdio_tracing() {
     tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_writer(std::io::stderr)
+        .with_max_level(tracing_subscriber::filter::LevelFilter::OFF)
+        .with_writer(io::sink)
         .with_ansi(false)
         .init();
 }

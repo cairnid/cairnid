@@ -256,6 +256,62 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
         !status.to_string().contains(SENTINEL),
         "MCP response exposed raw artifact content: {status}"
     );
+    server.assert_stderr_empty();
+
+    drop(server);
+    remove_temp_root(root);
+}
+
+#[test]
+fn stdio_ignores_inherited_logging_env_for_initialize_and_tools_list() {
+    let root = temp_root("stdio-logging-env");
+    let mut server = McpProcess::start_with_envs(
+        &root,
+        &[
+            ("RUST_LOG", "trace,cairnid_mcp=trace,rmcp=trace"),
+            ("RUST_LOG_STYLE", "always"),
+            ("RUST_BACKTRACE", "full"),
+            ("RUST_LIB_BACKTRACE", "full"),
+        ],
+    );
+
+    let initialize = server.request(
+        1,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "cairnid-mcp-stdio-logging-env-smoke",
+                    "version": "0.0.0"
+                }
+            }
+        }),
+    );
+    assert_eq!(
+        initialize["serverInfo"]["name"].as_str(),
+        Some("cairnid-mcp")
+    );
+
+    server.notify(json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    }));
+
+    let tools = server.request(
+        2,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+        }),
+    );
+    assert!(tools["tools"].is_array(), "tools/list response: {tools}");
+    server.assert_stderr_empty();
 
     drop(server);
     remove_temp_root(root);
@@ -1279,15 +1335,30 @@ impl McpProcess {
         Self::start_with_args(current_dir, std::iter::empty::<OsString>())
     }
 
+    fn start_with_envs(current_dir: &Path, envs: &[(&str, &str)]) -> Self {
+        Self::start_with_args_and_envs(current_dir, std::iter::empty::<OsString>(), envs)
+    }
+
     fn start_with_args<I, S>(current_dir: &Path, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: AsRef<std::ffi::OsStr>,
     {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_cairnid-mcp"))
-            .args(args)
-            .current_dir(current_dir)
-            .env("RUST_LOG", "off")
+        Self::start_with_args_and_envs(current_dir, args, &[])
+    }
+
+    fn start_with_args_and_envs<I, S>(current_dir: &Path, args: I, envs: &[(&str, &str)]) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cairnid-mcp"));
+        command.args(args).current_dir(current_dir);
+        for (name, value) in envs {
+            command.env(name, value);
+        }
+
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1384,6 +1455,11 @@ impl McpProcess {
 
     fn stderr(&self) -> String {
         self.stderr.lock().expect("stderr lock").clone()
+    }
+
+    fn assert_stderr_empty(&self) {
+        let stderr = self.stderr();
+        assert_eq!(stderr, "", "successful stdio should not write stderr");
     }
 }
 
