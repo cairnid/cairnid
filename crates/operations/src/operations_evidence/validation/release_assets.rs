@@ -2,14 +2,13 @@ use serde_json::Value;
 use url::Url;
 
 use crate::operations_evidence::release_assets::{
-    EXPECTED_RELEASE_ASSETS, ExpectedReleaseAsset, archive_file_name, sbom_file_name,
+    EXPECTED_RELEASE_ASSETS, ExpectedReleaseAsset, PUBLIC_RELEASE_URL_REQUIRED_FAILURE,
+    archive_file_name, sbom_file_name,
 };
 
 use super::{
     require_bool, require_empty_array, require_rfc3339_timestamp, require_string, value_at_path,
 };
-
-const PUBLIC_RELEASE_URL_REQUIRED_FAILURE: &str = "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only";
 
 pub(in crate::operations_evidence) fn validate_release_assets_verification(
     value: &Value,

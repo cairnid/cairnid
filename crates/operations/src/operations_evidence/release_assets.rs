@@ -19,6 +19,7 @@ pub(in crate::operations_evidence) const CHECKSUM_FILE_NAME: &str = "SHA256SUMS.
 pub(in crate::operations_evidence) const RELEASE_MANIFEST_FILE_NAME: &str = "release-manifest.json";
 pub(in crate::operations_evidence) const SIGNER_WORKFLOW: &str =
     "cairnid/cairnid/.github/workflows/release.yml";
+pub(in crate::operations_evidence) const PUBLIC_RELEASE_URL_REQUIRED_FAILURE: &str = "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CliAuxiliaryFile {
@@ -318,6 +319,7 @@ pub fn release_assets_verification_report(
 
     let mut failures = Vec::new();
     validate_attestation_confirmations(options, &mut failures);
+    validate_public_release_url_option(options, &mut failures);
 
     let checksum_entries = read_checksums(&options.release_dir, &mut failures)?;
     let manifest = read_json_file(
@@ -491,6 +493,35 @@ fn validate_attestation_confirmations(
             "--sbom-attestations-verified must be supplied after external SBOM attestation verification"
                 .to_owned(),
         );
+    }
+}
+
+fn validate_public_release_url_option(
+    options: &ReleaseAssetsVerificationOptions,
+    failures: &mut Vec<String>,
+) {
+    let Some(release_url) = non_empty_option(&options.release_url) else {
+        failures.push(PUBLIC_RELEASE_URL_REQUIRED_FAILURE.to_owned());
+        return;
+    };
+    let expected_path = format!("/cairnid/cairnid/releases/tag/{}", options.release_tag);
+    match Url::parse(&release_url) {
+        Ok(url) => {
+            if !(url.scheme() == "https"
+                && url.host_str() == Some("github.com")
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.path() == expected_path)
+            {
+                failures.push(
+                    "release_url must be a GitHub HTTPS URL under /cairnid/cairnid/releases/tag/ without credentials, query, or fragment"
+                        .to_owned(),
+                );
+            }
+        }
+        Err(_) => failures.push("release_url must be a valid GitHub HTTPS URL".to_owned()),
     }
 }
 

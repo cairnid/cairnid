@@ -974,6 +974,30 @@ fn release_assets_receipt_generation_rejects_workflow_run_only_receipt() {
 }
 
 #[test]
+fn release_assets_receipt_generation_reports_all_rehearsal_publish_blockers() {
+    let release = fake_release_assets_dir("receipt-rehearsal-publish-blockers");
+    let mut options = release_assets_options(&release);
+    options.release_url = None;
+    options.run_url = Some(release.run_url.to_owned());
+    options.provenance_attestations_verified = false;
+    options.sbom_attestations_verified = false;
+
+    let report = release_assets_verification_report(&options, release_evidence_now())
+        .expect("rehearsal report");
+
+    assert_failed_release_assets_report(&report, "release_url must be present");
+    assert_failed_release_assets_report(
+        &report,
+        "--provenance-attestations-verified must be supplied",
+    );
+    assert_failed_release_assets_report(&report, "--sbom-attestations-verified must be supplied");
+    assert_eq!(report.release_url, None);
+    assert_eq!(report.run_url.as_deref(), Some(RELEASE_ASSET_RUN_URL));
+    assert_eq!(report.archives.len(), 4);
+    assert_eq!(report.sboms.len(), 4);
+}
+
+#[test]
 fn release_assets_receipt_generation_rejects_hash_mismatch_and_missing_asset() {
     let tampered = fake_release_assets_dir("receipt-hash-mismatch");
     let tampered_archive = format!("cairnid-{}-x86_64-unknown-linux-gnu.tar.gz", tampered.tag);
