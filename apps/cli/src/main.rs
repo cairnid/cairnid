@@ -25,7 +25,7 @@ const EXIT_OPERATOR_INPUT: u8 = 4;
 #[command(name = "cairnid", version, about = "CairnID operator CLI", long_about = None)]
 #[command(propagate_version = true)]
 #[command(
-    after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence check release-evidence\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --provenance-attestations-verified --sbom-attestations-verified"
+    after_help = "Examples:\n  cairnid evidence plan\n  cairnid evidence check release-evidence\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -52,7 +52,7 @@ enum Commands {
     },
     #[command(
         about = "Verify downloaded GitHub Release assets and print the evidence receipt as JSON",
-        after_help = "Examples:\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --provenance-attestations-verified --sbom-attestations-verified\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url https://github.com/cairnid/cairnid/actions/runs/123456789 --provenance-attestations-verified --sbom-attestations-verified"
+        after_help = "Examples:\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url https://github.com/cairnid/cairnid/actions/runs/123456789 --provenance-attestations-verified --sbom-attestations-verified"
     )]
     ReleaseAssets {
         #[command(subcommand)]
@@ -209,6 +209,12 @@ enum ReleaseAssetsCommand {
             help = "Confirm CycloneDX SBOM attestations were verified externally"
         )]
         sbom_attestations_verified: bool,
+        #[arg(
+            long = "github-release-immutability-enabled-before-publish",
+            action = clap::ArgAction::SetTrue,
+            help = "Confirm GitHub release immutability was enabled before the release was published"
+        )]
+        github_release_immutability_enabled_before_publish: bool,
     },
 }
 
@@ -333,6 +339,7 @@ fn run_release_assets(command: ReleaseAssetsCommand) -> Result<(), CliError> {
             run_url,
             provenance_attestations_verified,
             sbom_attestations_verified,
+            github_release_immutability_enabled_before_publish,
         } => {
             validate_release_asset_operator_inputs(&tag, &source_commit, run_url.as_deref())?;
             let report = release_assets_verification_report(
@@ -344,6 +351,7 @@ fn run_release_assets(command: ReleaseAssetsCommand) -> Result<(), CliError> {
                     run_url,
                     provenance_attestations_verified,
                     sbom_attestations_verified,
+                    github_release_immutability_enabled_before_publish,
                 },
                 OffsetDateTime::now_utc(),
             )
@@ -703,6 +711,7 @@ mod tests {
             run_url,
             provenance_attestations_verified,
             sbom_attestations_verified,
+            github_release_immutability_enabled_before_publish,
         } = command;
 
         assert_eq!(release_dir, PathBuf::from("dist"));
@@ -715,6 +724,7 @@ mod tests {
         );
         assert!(provenance_attestations_verified);
         assert!(sbom_attestations_verified);
+        assert!(!github_release_immutability_enabled_before_publish);
     }
 
     #[test]
@@ -754,11 +764,13 @@ mod tests {
         let ReleaseAssetsCommand::Verify {
             provenance_attestations_verified,
             sbom_attestations_verified,
+            github_release_immutability_enabled_before_publish,
             ..
         } = command;
 
         assert!(!provenance_attestations_verified);
         assert!(!sbom_attestations_verified);
+        assert!(!github_release_immutability_enabled_before_publish);
     }
 
     #[test]

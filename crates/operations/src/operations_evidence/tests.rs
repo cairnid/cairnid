@@ -953,6 +953,7 @@ fn release_evidence_rejects_invalid_release_assets_verification() {
     let mut receipt = release_assets_verification();
     receipt["release_tag"] = json!("v0.1");
     receipt["source_commit"] = json!("not-a-commit");
+    receipt["github_release_immutability_enabled_before_publish"] = json!(false);
     receipt["attestations"]["provenance_verified"] = json!(false);
     receipt["archives"]
         .as_array_mut()
@@ -989,6 +990,9 @@ fn release_evidence_rejects_invalid_release_assets_verification() {
             .iter()
             .any(|failure| failure.contains("attestations.provenance_verified must be true"))
     );
+    assert!(artifact.failures.iter().any(|failure| {
+        failure.contains("github_release_immutability_enabled_before_publish must be true")
+    }));
     assert!(
         artifact
             .failures
@@ -1063,6 +1067,7 @@ fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
         Some(RELEASE_ASSET_RELEASE_URL)
     );
     assert_eq!(receipt.run_url, None);
+    assert!(receipt.github_release_immutability_enabled_before_publish);
     assert_eq!(receipt.archives.len(), 4);
     assert_eq!(receipt.sboms.len(), 4);
     assert!(
@@ -1124,6 +1129,7 @@ fn release_assets_receipt_generation_rejects_workflow_run_only_receipt() {
     assert_failed_release_assets_report(&report, "release_url must be present");
     assert_eq!(report.release_url, None);
     assert_eq!(report.run_url.as_deref(), Some(RELEASE_ASSET_RUN_URL));
+    assert!(!report.github_release_immutability_enabled_before_publish);
     assert_eq!(report.archives.len(), 4);
     assert_eq!(report.sboms.len(), 4);
 }
@@ -1148,8 +1154,33 @@ fn release_assets_receipt_generation_reports_all_rehearsal_publish_blockers() {
     assert_failed_release_assets_report(&report, "--sbom-attestations-verified must be supplied");
     assert_eq!(report.release_url, None);
     assert_eq!(report.run_url.as_deref(), Some(RELEASE_ASSET_RUN_URL));
+    assert!(!report.github_release_immutability_enabled_before_publish);
     assert_eq!(report.archives.len(), 4);
     assert_eq!(report.sboms.len(), 4);
+}
+
+#[test]
+fn release_assets_receipt_generation_requires_immutability_confirmation_for_release_url() {
+    let release = fake_release_assets_dir("receipt-immutability");
+    let mut options = release_assets_options(&release);
+    options.github_release_immutability_enabled_before_publish = false;
+
+    let error = release_assets_verification_receipt(&options, release_evidence_now())
+        .expect_err("missing release immutability confirmation fails");
+    let failures = release_assets_failures(&error);
+    assert!(
+        failures.iter().any(|failure| failure
+            .contains("--github-release-immutability-enabled-before-publish must be supplied")),
+        "{failures:?}"
+    );
+
+    let report = release_assets_verification_report(&options, release_evidence_now())
+        .expect("release immutability failure report");
+    assert_failed_release_assets_report(
+        &report,
+        "--github-release-immutability-enabled-before-publish must be supplied",
+    );
+    assert!(!report.github_release_immutability_enabled_before_publish);
 }
 
 #[test]
@@ -3124,6 +3155,7 @@ fn release_assets_options(release: &FakeReleaseAssets) -> ReleaseAssetsVerificat
         run_url: None,
         provenance_attestations_verified: true,
         sbom_attestations_verified: true,
+        github_release_immutability_enabled_before_publish: true,
     }
 }
 

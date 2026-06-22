@@ -102,6 +102,7 @@ fn release_assets_verify_help_describes_arguments_and_manual_flags() {
     assert!(stdout.contains("--run-url <URL>"));
     assert!(stdout.contains("--provenance-attestations-verified"));
     assert!(stdout.contains("--sbom-attestations-verified"));
+    assert!(stdout.contains("--github-release-immutability-enabled-before-publish"));
     assert!(stdout.contains("Examples:"));
 }
 
@@ -345,6 +346,7 @@ fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
         RELEASE_ASSET_SOURCE_COMMIT,
         "--release-url",
         RELEASE_ASSET_RELEASE_URL,
+        "--github-release-immutability-enabled-before-publish",
         "--provenance-attestations-verified",
         "--sbom-attestations-verified",
     ]);
@@ -360,6 +362,10 @@ fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
     assert_eq!(receipt["source_commit"], RELEASE_ASSET_SOURCE_COMMIT);
     assert_eq!(receipt["release_url"], RELEASE_ASSET_RELEASE_URL);
     assert!(receipt.get("run_url").is_none());
+    assert_eq!(
+        receipt["github_release_immutability_enabled_before_publish"],
+        true
+    );
     assert_eq!(receipt["failures"], json!([]));
     assert_eq!(
         receipt["archives"]
@@ -404,6 +410,47 @@ fn release_assets_verify_emits_failed_json_for_workflow_run_only_receipt() {
     let receipt: Value = serde_json::from_slice(&output.stdout).expect("valid failed receipt JSON");
     assert_eq!(receipt["release_url"], Value::Null);
     assert_eq!(receipt["run_url"], RELEASE_ASSET_RUN_URL);
+    assert_eq!(
+        receipt["github_release_immutability_enabled_before_publish"],
+        false
+    );
+    assert_eq!(
+        receipt["archives"]
+            .as_array()
+            .expect("archives array")
+            .len(),
+        4
+    );
+    assert_eq!(receipt["sboms"].as_array().expect("sboms array").len(), 4);
+}
+
+#[test]
+fn release_assets_verify_requires_immutability_confirmation_for_published_release() {
+    let release_dir = fake_release_assets_dir("verify-missing-immutability");
+    let release_dir_arg = release_dir.to_string_lossy().into_owned();
+    let output = run_cairnid([
+        "release-assets",
+        "verify",
+        &release_dir_arg,
+        "--tag",
+        RELEASE_ASSET_TAG,
+        "--source-commit",
+        RELEASE_ASSET_SOURCE_COMMIT,
+        "--release-url",
+        RELEASE_ASSET_RELEASE_URL,
+        "--provenance-attestations-verified",
+        "--sbom-attestations-verified",
+    ]);
+
+    assert_failed_release_assets_stdout(
+        &output,
+        "--github-release-immutability-enabled-before-publish must be supplied",
+    );
+    let receipt: Value = serde_json::from_slice(&output.stdout).expect("valid failed receipt JSON");
+    assert_eq!(
+        receipt["github_release_immutability_enabled_before_publish"],
+        false
+    );
     assert_eq!(
         receipt["archives"]
             .as_array()
@@ -567,6 +614,10 @@ fn release_assets_verify_emits_failed_json_for_missing_attestation_confirmations
         4
     );
     assert_eq!(receipt["sboms"].as_array().expect("sboms array").len(), 4);
+    assert_eq!(
+        receipt["github_release_immutability_enabled_before_publish"],
+        false
+    );
     let stderr = stderr(&no_attestations);
     assert!(stderr.contains("cairnid failed: release assets verification failed"));
     assert!(!stderr.contains("error:"));

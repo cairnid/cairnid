@@ -440,6 +440,7 @@ pub(super) fn release_assets_verification() -> Value {
         "source_commit": "0123456789abcdef0123456789abcdef01234567",
         "release_url": "https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1",
         "run_url": "https://github.com/cairnid/cairnid/actions/runs/123456789",
+        "github_release_immutability_enabled_before_publish": true,
         "checksums": {
             "file_name": "SHA256SUMS.txt",
             "algorithm": "SHA-256",

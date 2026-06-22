@@ -20,6 +20,7 @@ pub(in crate::operations_evidence) const RELEASE_MANIFEST_FILE_NAME: &str = "rel
 pub(in crate::operations_evidence) const SIGNER_WORKFLOW: &str =
     "cairnid/cairnid/.github/workflows/release.yml";
 pub(in crate::operations_evidence) const PUBLIC_RELEASE_URL_REQUIRED_FAILURE: &str = "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only";
+pub(in crate::operations_evidence) const GITHUB_RELEASE_IMMUTABILITY_REQUIRED_FAILURE: &str = "--github-release-immutability-enabled-before-publish must be supplied for published release evidence after confirming GitHub release immutability was enabled before publication";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CliAuxiliaryFile {
@@ -173,6 +174,7 @@ pub struct ReleaseAssetsVerificationOptions {
     pub run_url: Option<String>,
     pub provenance_attestations_verified: bool,
     pub sbom_attestations_verified: bool,
+    pub github_release_immutability_enabled_before_publish: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -186,6 +188,7 @@ pub struct ReleaseAssetsVerificationReceipt {
     pub release_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub run_url: Option<String>,
+    pub github_release_immutability_enabled_before_publish: bool,
     pub checksums: ReleaseAssetChecksumsReceipt,
     pub release_manifest: ReleaseAssetManifestReceipt,
     pub attestations: ReleaseAssetAttestationsReceipt,
@@ -319,6 +322,7 @@ pub fn release_assets_verification_report(
 
     let mut failures = Vec::new();
     validate_attestation_confirmations(options, &mut failures);
+    validate_github_release_immutability_confirmation(options, &mut failures);
     validate_public_release_url_option(options, &mut failures);
 
     let checksum_entries = read_checksums(&options.release_dir, &mut failures)?;
@@ -417,6 +421,8 @@ pub fn release_assets_verification_report(
         source_commit: options.source_commit.clone(),
         release_url: safe_public_github_url(&options.release_url, "/cairnid/cairnid/releases/tag/"),
         run_url: safe_public_github_url(&options.run_url, "/cairnid/cairnid/actions/runs/"),
+        github_release_immutability_enabled_before_publish: options.release_url.is_some()
+            && options.github_release_immutability_enabled_before_publish,
         checksums: ReleaseAssetChecksumsReceipt {
             file_name: CHECKSUM_FILE_NAME,
             algorithm: "SHA-256",
@@ -493,6 +499,16 @@ fn validate_attestation_confirmations(
             "--sbom-attestations-verified must be supplied after external SBOM attestation verification"
                 .to_owned(),
         );
+    }
+}
+
+fn validate_github_release_immutability_confirmation(
+    options: &ReleaseAssetsVerificationOptions,
+    failures: &mut Vec<String>,
+) {
+    if options.release_url.is_some() && !options.github_release_immutability_enabled_before_publish
+    {
+        failures.push(GITHUB_RELEASE_IMMUTABILITY_REQUIRED_FAILURE.to_owned());
     }
 }
 
