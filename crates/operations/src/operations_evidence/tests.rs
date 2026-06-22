@@ -2532,12 +2532,9 @@ fn release_evidence_rejects_invalid_security_headers_smoke() {
             .iter()
             .any(|failure| failure.contains("content_security_policy must be true"))
     );
-    assert!(
-        security_headers_artifact
-            .failures
-            .iter()
-            .any(|failure| failure.contains("checks must include a web service response"))
-    );
+    assert!(security_headers_artifact.failures.iter().any(|failure| {
+        failure.contains("checks must include deployed security-header check for web /login")
+    }));
 }
 
 #[test]
