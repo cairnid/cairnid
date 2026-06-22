@@ -708,12 +708,25 @@ fn release_evidence_plan_reports_missing_environment_without_values() {
 
     assert_eq!(report.status, "missing_environment");
     assert_eq!(report.schema_version, RELEASE_EVIDENCE_SCHEMA_VERSION);
+    assert!(!report.local_capture_ready);
+    assert!(report.manual_evidence_pending);
+    assert!(report.external_evidence_pending);
     assert_eq!(report.artifact_count, 24);
     assert_eq!(report.ready_artifact_count, 1);
     assert_eq!(report.manual_artifact_count, 5);
+    assert_eq!(report.manual_pending_count, 5);
     assert_eq!(report.missing_environment_artifact_count, 18);
     assert_eq!(
         report.external_provider_artifact_count,
+        EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
+    assert_eq!(
+        report.external_pending_count,
+        EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
+    assert_eq!(report.pending_manual_evidence.len(), 5);
+    assert_eq!(
+        report.pending_external_evidence.len(),
         EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
     );
     assert!(
@@ -831,13 +844,34 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
 
     assert_eq!(report.status, "ready");
     assert!(report.missing_environment.is_empty());
+    assert!(report.local_capture_ready);
+    assert!(report.manual_evidence_pending);
+    assert!(report.external_evidence_pending);
     assert_eq!(report.artifact_count, 24);
     assert_eq!(report.ready_artifact_count, 19);
     assert_eq!(report.manual_artifact_count, 5);
+    assert_eq!(report.manual_pending_count, 5);
     assert_eq!(report.missing_environment_artifact_count, 0);
     assert_eq!(
         report.external_provider_artifact_count,
         EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
+    assert_eq!(
+        report.external_pending_count,
+        EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT
+    );
+    assert!(
+        report
+            .pending_manual_evidence
+            .iter()
+            .any(|artifact| artifact.name == "release_assets_verification"
+                && artifact.status == "manual_external")
+    );
+    assert!(
+        report
+            .pending_external_evidence
+            .iter()
+            .any(|artifact| artifact.name == "lifecycle_email_smoke" && artifact.status == "ready")
     );
 
     let config_op = report
@@ -846,6 +880,8 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
         .find(|step| step.name == "openid_config_op_conformance")
         .expect("Config OP step");
     assert_eq!(config_op.status, "manual_external");
+    assert!(config_op.pending_manual_evidence);
+    assert!(config_op.pending_external_evidence);
     assert!(config_op.touches_external_provider);
     assert!(
         config_op
@@ -860,6 +896,8 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
         .find(|step| step.name == "scim_okta_connector_smoke")
         .expect("Okta connector smoke step");
     assert_eq!(okta_smoke.status, "manual_external");
+    assert!(okta_smoke.pending_manual_evidence);
+    assert!(okta_smoke.pending_external_evidence);
     assert!(okta_smoke.writes_application_state);
     assert!(okta_smoke.touches_external_provider);
     assert!(
@@ -875,6 +913,8 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
         .find(|step| step.name == "release_assets_verification")
         .expect("release assets step");
     assert_eq!(release_assets.status, "manual_external");
+    assert!(release_assets.pending_manual_evidence);
+    assert!(release_assets.pending_external_evidence);
     assert_eq!(release_assets.release_gate, "CLI/MCP public release assets");
     assert!(
         release_assets
@@ -889,6 +929,8 @@ fn release_evidence_plan_reports_ready_when_required_environment_is_present() {
         .find(|step| step.name == "lifecycle_email_smoke")
         .expect("lifecycle email smoke step");
     assert_eq!(lifecycle_email_smoke.status, "ready");
+    assert!(!lifecycle_email_smoke.pending_manual_evidence);
+    assert!(lifecycle_email_smoke.pending_external_evidence);
     assert!(lifecycle_email_smoke.writes_application_state);
     assert!(lifecycle_email_smoke.touches_external_provider);
     assert!(

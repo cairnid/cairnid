@@ -77,16 +77,31 @@ pub struct ReleaseEvidencePlanReport {
     pub status: &'static str,
     #[serde(with = "time::serde::rfc3339")]
     pub generated_at: OffsetDateTime,
+    pub local_capture_ready: bool,
+    pub manual_evidence_pending: bool,
+    pub external_evidence_pending: bool,
     pub artifact_count: usize,
     pub ready_artifact_count: usize,
     pub manual_artifact_count: usize,
+    pub manual_pending_count: usize,
     pub missing_environment_artifact_count: usize,
     pub secret_artifact_count: usize,
     pub state_changing_artifact_count: usize,
     pub external_provider_artifact_count: usize,
+    pub external_pending_count: usize,
+    pub pending_manual_evidence: Vec<ReleaseEvidencePlanPendingArtifact>,
+    pub pending_external_evidence: Vec<ReleaseEvidencePlanPendingArtifact>,
     pub steps: Vec<ReleaseEvidencePlanStep>,
     pub missing_environment: Vec<String>,
     pub notes: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReleaseEvidencePlanPendingArtifact {
+    pub name: &'static str,
+    pub file_name: &'static str,
+    pub release_gate: &'static str,
+    pub status: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -97,6 +112,8 @@ pub struct ReleaseEvidencePlanStep {
     pub command: &'static str,
     pub validator: &'static str,
     pub status: &'static str,
+    pub pending_manual_evidence: bool,
+    pub pending_external_evidence: bool,
     pub contains_secrets: bool,
     pub requires_production_like_environment: bool,
     pub writes_application_state: bool,
