@@ -16,8 +16,8 @@ use crate::http::{
         start_webauthn_mfa,
     },
     session_routes::{
-        create_consent, list_browser_sessions, list_session_consent_grants, logout, me,
-        revoke_browser_session, revoke_session_consent_grant,
+        create_consent, list_browser_sessions, list_security_activity, list_session_consent_grants,
+        logout, me, revoke_browser_session, revoke_session_consent_grant,
     },
 };
 
@@ -55,6 +55,10 @@ pub(super) fn session_routes() -> Router<AppState> {
         .route(
             "/api/v1/session/consent-grants/{grant_id}",
             delete(revoke_session_consent_grant),
+        )
+        .route(
+            "/api/v1/session/security-activity",
+            get(list_security_activity),
         )
         .route(
             "/api/v1/session/mfa/credentials",

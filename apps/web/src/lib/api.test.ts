@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, apiList, clientDetailsUpdateSchema, resetCsrfTokenForTests, userSchema } from './api';
+import {
+  api,
+  apiList,
+  clientDetailsUpdateSchema,
+  resetCsrfTokenForTests,
+  securityActivityEventSchema,
+  userSchema
+} from './api';
 
 const originalFetch = globalThis.fetch;
 const csrfToken = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg';
@@ -51,6 +58,21 @@ describe('api schemas', () => {
 
     expect(parsed.client.name).toBe('Target Service Updated');
     expect(parsed.refresh_tokens_revoked).toBe(0);
+  });
+
+  it('validates redacted current-user security activity events', () => {
+    const parsed = securityActivityEventSchema.parse({
+      id: '11111111-1111-4111-8111-111111111201',
+      event_type: 'password_changed',
+      summary: 'Password changed',
+      ip_address: null,
+      user_agent: 'Cairn-Test/1.0',
+      occurred_at: '2026-06-22T12:00:00Z'
+    });
+
+    expect(parsed.event_type).toBe('password_changed');
+    expect(parsed).not.toHaveProperty('metadata');
+    expect(parsed).not.toHaveProperty('actor_id');
   });
 
   it('adds CSRF headers for unsafe browser API requests', async () => {

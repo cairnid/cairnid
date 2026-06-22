@@ -8,7 +8,9 @@
     browserSessionListSchema,
     browserSessionRevocationSchema,
     deliverySchema,
+    securityActivityEventSchema,
     type BrowserSession,
+    type SecurityActivityEvent,
     type User,
     type UserConsentGrant,
     userConsentGrantSchema,
@@ -21,6 +23,7 @@
   import MfaDevicesSection from './components/MfaDevicesSection.svelte';
   import PasswordSection from './components/PasswordSection.svelte';
   import RecoveryCodes from './components/RecoveryCodes.svelte';
+  import SecurityActivitySection from './components/SecurityActivitySection.svelte';
   import TotpEnrollment from './components/TotpEnrollment.svelte';
   import type { MfaCredential } from './components/types';
 
@@ -96,6 +99,8 @@
   let revokingConsentGrantId: string | null = null;
   let browserSessions: BrowserSession[] = [];
   let revokingBrowserSessionId: string | null = null;
+  let securityActivityEvents: SecurityActivityEvent[] = [];
+  let securityActivityLoading = false;
   let pendingPrivilegedAction: PendingPrivilegedAction | null = null;
   let reauthenticationPassword = '';
   let reauthenticationCode = '';
@@ -109,7 +114,12 @@
   onMount(async () => {
     try {
       user = await api('/api/v1/session/me', userSchema);
-      await Promise.all([loadMfaCredentials(), loadConsentGrants(), loadBrowserSessions()]);
+      await Promise.all([
+        loadMfaCredentials(),
+        loadConsentGrants(),
+        loadBrowserSessions(),
+        loadSecurityActivity()
+      ]);
       message = 'Signed in';
     } catch (error) {
       message = error instanceof Error ? error.message : 'Unable to load profile';
@@ -193,6 +203,19 @@
   async function loadBrowserSessions() {
     const response = await api('/api/v1/session/browser-sessions', browserSessionListSchema);
     browserSessions = response.sessions;
+  }
+
+  async function loadSecurityActivity() {
+    securityActivityLoading = true;
+    try {
+      securityActivityEvents = await apiList(
+        '/api/v1/session/security-activity',
+        securityActivityEventSchema,
+        25
+      );
+    } finally {
+      securityActivityLoading = false;
+    }
   }
 
   async function revokeBrowserSession(session: BrowserSession) {
@@ -469,6 +492,11 @@
         revokingSessionId={revokingBrowserSessionId}
         onRefresh={loadBrowserSessions}
         onRevoke={revokeBrowserSession}
+      />
+      <SecurityActivitySection
+        events={securityActivityEvents}
+        loading={securityActivityLoading}
+        onRefresh={loadSecurityActivity}
       />
       <AuthorizedApplicationsSection
         grants={consentGrants}
