@@ -1,5 +1,5 @@
 use super::super::registry::EVIDENCE_SPECS;
-use super::super::{ReleaseEvidenceError, release_evidence_manifest};
+use super::super::{ReleaseEvidenceError, ReleaseEvidenceFailureCode, release_evidence_manifest};
 use super::init::init_release_evidence_directory;
 use super::readme::release_evidence_readme;
 use super::validation::{
@@ -99,13 +99,23 @@ fn scaffold_inventory_rejects_unexpected_entries() {
     fs::write(root.join("unexpected.json"), "{}").expect("write unexpected file");
 
     let mut failures = Vec::new();
-    validate_release_evidence_file_inventory(&root, EVIDENCE_SPECS, &mut failures)
-        .expect("inventory validation");
+    let mut failure_codes = Vec::new();
+    validate_release_evidence_file_inventory(
+        &root,
+        EVIDENCE_SPECS,
+        &mut failures,
+        &mut failure_codes,
+    )
+    .expect("inventory validation");
 
     assert!(
         failures
             .iter()
             .any(|failure| failure.contains("unexpected release evidence entry: unexpected.json"))
+    );
+    assert_eq!(
+        failure_codes,
+        vec![ReleaseEvidenceFailureCode::ArtifactPathFailure]
     );
 }
 
@@ -123,8 +133,15 @@ fn scaffold_validation_rejects_symlinked_manifest_before_reading_target() {
     }
 
     let mut failures = Vec::new();
-    validate_release_evidence_scaffold(&root, generated_at(), 30, &mut failures)
-        .expect("validate scaffold");
+    let mut failure_codes = Vec::new();
+    validate_release_evidence_scaffold(
+        &root,
+        generated_at(),
+        30,
+        &mut failures,
+        &mut failure_codes,
+    )
+    .expect("validate scaffold");
 
     assert!(failures.iter().any(|failure| {
         failure
@@ -134,6 +151,10 @@ fn scaffold_validation_rejects_symlinked_manifest_before_reading_target() {
         !failures.iter().any(
             |failure| failure.contains("scaffold manifest must be valid release-evidence JSON")
         )
+    );
+    assert_eq!(
+        failure_codes,
+        vec![ReleaseEvidenceFailureCode::ArtifactPathFailure]
     );
 
     fs::remove_dir_all(root).expect("cleanup temp dir");

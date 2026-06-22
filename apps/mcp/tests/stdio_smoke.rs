@@ -242,6 +242,15 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
             .expect("failure_count")
             > 0
     );
+    assert!(
+        structured
+            .get("failure_codes")
+            .and_then(Value::as_object)
+            .and_then(|codes| codes.get("forbidden_field"))
+            .and_then(Value::as_u64)
+            .is_some_and(|count| count > 0),
+        "status should expose stable forbidden_field evidence code: {structured:?}"
+    );
     let artifacts = structured
         .get("artifacts")
         .and_then(Value::as_array)
@@ -300,6 +309,15 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
             .get("status")
             .and_then(Value::as_str),
         Some("failed")
+    );
+    assert!(
+        dependency_policy_action
+            .get("failure_codes")
+            .and_then(Value::as_object)
+            .and_then(|codes| codes.get("forbidden_field"))
+            .and_then(Value::as_u64)
+            .is_some_and(|count| count > 0),
+        "dependency policy next action should expose forbidden_field code: {dependency_policy_action}"
     );
     assert!(
         !status.to_string().contains(SENTINEL),

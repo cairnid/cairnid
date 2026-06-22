@@ -2,10 +2,10 @@
 
 use cairn_operations::{
     DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, ReleaseEvidenceArtifactReport,
-    ReleaseEvidenceEnvironmentRequirement, ReleaseEvidenceError, ReleaseEvidenceManifest,
-    ReleaseEvidenceManifestArtifact, ReleaseEvidencePlanReport, ReleaseEvidencePlanStep,
-    ReleaseEvidenceReport, check_release_evidence, release_evidence_capture_plan,
-    release_evidence_manifest,
+    ReleaseEvidenceEnvironmentRequirement, ReleaseEvidenceError, ReleaseEvidenceFailureCode,
+    ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact, ReleaseEvidencePlanReport,
+    ReleaseEvidencePlanStep, ReleaseEvidenceReport, check_release_evidence,
+    release_evidence_capture_plan, release_evidence_manifest,
 };
 use clap::Parser;
 use rmcp::{
@@ -1066,7 +1066,7 @@ fn mcp_evidence_summary(report: &ReleaseEvidenceReport) -> McpEvidenceSummary {
         missing_artifact_count,
         failed_artifact_count,
         failure_count: report.failures.len(),
-        failure_codes: failure_code_counts(report.failures.iter().map(String::as_str)),
+        failure_codes: failure_code_counts(report.failure_codes.iter().copied()),
         artifacts,
         next_actions,
     }
@@ -1081,7 +1081,7 @@ fn mcp_artifact_summary(artifact: &ReleaseEvidenceArtifactReport) -> McpEvidence
         status: stable_artifact_status(artifact.status).to_owned(),
         check_count: artifact.checks.len(),
         failure_count: artifact.failures.len(),
-        failure_codes: failure_code_counts(artifact.failures.iter().map(String::as_str)),
+        failure_codes: failure_code_counts(artifact.failure_codes.iter().copied()),
     }
 }
 
@@ -1092,7 +1092,7 @@ fn mcp_next_action(artifact: &ReleaseEvidenceArtifactReport) -> McpEvidenceNextA
         release_gate: artifact.release_gate.to_owned(),
         status: stable_artifact_status(artifact.status).to_owned(),
         command: artifact.command.to_owned(),
-        failure_codes: failure_code_counts(artifact.failures.iter().map(String::as_str)),
+        failure_codes: failure_code_counts(artifact.failure_codes.iter().copied()),
     }
 }
 
@@ -1119,57 +1119,17 @@ fn stable_artifact_status(status: &str) -> &'static str {
     }
 }
 
-fn failure_code_counts<'a>(failures: impl IntoIterator<Item = &'a str>) -> BTreeMap<String, usize> {
+fn failure_code_counts(
+    failure_codes: impl IntoIterator<Item = ReleaseEvidenceFailureCode>,
+) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
 
-    for failure in failures {
-        let code = failure_code(failure).to_owned();
+    for failure_code in failure_codes {
+        let code = failure_code.as_str().to_owned();
         *counts.entry(code).or_insert(0) += 1;
     }
 
     counts
-}
-
-fn failure_code(failure: &str) -> &'static str {
-    if failure.contains("required evidence artifact is missing")
-        || failure.contains("scaffold manifest is missing")
-        || failure.contains("scaffold README is missing")
-        || failure.contains("scaffold gitignore is missing")
-    {
-        "missing_evidence"
-    } else if failure.contains("scaffold") {
-        "stale_or_invalid_scaffold"
-    } else if failure.contains("not valid JSON") {
-        "invalid_json"
-    } else if failure.contains("JSON root must be an object") {
-        "invalid_json_root"
-    } else if failure.contains("older than") || failure.contains("freshness window") {
-        "stale_or_invalid_timestamp"
-    } else if failure.contains("timestamp")
-        || failure.contains("completed_at")
-        || failure.contains("generated_at")
-        || failure.contains("exportedAt")
-    {
-        "timestamp_contract"
-    } else if failure.contains("must not be present") {
-        "forbidden_field"
-    } else if failure.contains("unexpected release evidence entry")
-        || failure.contains("symlink")
-        || failure.contains("got directory")
-        || failure.contains("must be a regular file")
-        || failure.contains("could not be read")
-    {
-        "artifact_path_failure"
-    } else if failure.contains("must be")
-        || failure.contains("must contain")
-        || failure.contains("must match")
-        || failure.contains("must start")
-        || failure.contains("must include")
-    {
-        "contract_mismatch"
-    } else {
-        "validation_failed"
-    }
 }
 
 fn dominant_failure_code(failure_codes: &BTreeMap<String, usize>) -> &'static str {
@@ -1466,36 +1426,53 @@ mod tests {
     }
 
     #[test]
-    fn failure_code_mapping_exposes_stable_client_categories() {
+    fn mcp_summary_uses_operation_failure_codes_not_failure_text() {
+        let report = ReleaseEvidenceReport {
+            schema_version: "test",
+            status: "incomplete",
+            evidence_dir: "release-evidence".to_owned(),
+            generated_at: OffsetDateTime::now_utc(),
+            max_age_days: DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS,
+            artifacts: vec![ReleaseEvidenceArtifactReport {
+                name: "dependency_policy_check",
+                file_name: "dependency-policy-check.json",
+                release_gate: "Dependency policy",
+                status: "failed",
+                command: "capture dependency policy",
+                modified_at: None,
+                checks: Vec::new(),
+                failures: vec![
+                    "wording changed; this text no longer includes any classifier phrase"
+                        .to_owned(),
+                ],
+                failure_codes: vec![ReleaseEvidenceFailureCode::ContractMismatch],
+            }],
+            failures: vec![
+                "top-level wording changed; stable code must still come from the operation report"
+                    .to_owned(),
+            ],
+            failure_codes: vec![ReleaseEvidenceFailureCode::MissingEvidence],
+        };
+
+        let summary = mcp_evidence_summary(&report);
+
         assert_eq!(
-            failure_code("required evidence artifact is missing"),
-            "missing_evidence"
+            summary.failure_codes.get("missing_evidence").copied(),
+            Some(1)
         );
         assert_eq!(
-            failure_code(
-                ".release-evidence-manifest.json: scaffold manifest is older than 30 days and must be regenerated"
-            ),
-            "stale_or_invalid_scaffold"
+            summary.artifacts[0]
+                .failure_codes
+                .get("contract_mismatch")
+                .copied(),
+            Some(1)
         );
         assert_eq!(
-            failure_code("artifact must be a regular file, got symlink"),
-            "artifact_path_failure"
-        );
-        assert_eq!(
-            failure_code("release evidence entry must be a regular file, got directory: x"),
-            "artifact_path_failure"
-        );
-        assert_eq!(
-            failure_code("unexpected release evidence entry: extra.json"),
-            "artifact_path_failure"
-        );
-        assert_eq!(
-            failure_code("artifact is not valid JSON: expected value"),
-            "invalid_json"
-        );
-        assert_eq!(
-            failure_code("some validator-specific contract failed"),
-            "validation_failed"
+            summary.next_actions[0]
+                .failure_codes
+                .get("contract_mismatch")
+                .copied(),
+            Some(1)
         );
     }
 
