@@ -188,8 +188,8 @@ pub(super) fn fake_release_assets_dir(name: &str) -> FakeReleaseAssets {
             "spec_version": "1.5"
         },
         "tools": {
-            "rustc": "rustc 1.94.0",
-            "cargo": "cargo 1.94.0",
+            "rustc": "rustc 1.96.0",
+            "cargo": "cargo 1.96.0",
             "cargo_cyclonedx": "cargo-cyclonedx 0.5.8"
         },
         "assets": manifest_assets
@@ -424,7 +424,7 @@ pub(super) fn dependency_policy_check() -> Value {
                 "exit_code": 0,
                 "stdout_bytes": 19,
                 "stderr_bytes": 0,
-                "tool_version": "1.3.4"
+                "tool_version": "1.3.14"
             }
         ],
         "failures": []

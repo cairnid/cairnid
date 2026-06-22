@@ -1015,8 +1015,8 @@ fn fake_release_assets_dir(name: &str) -> PathBuf {
             "spec_version": "1.5"
         },
         "tools": {
-            "rustc": "rustc 1.94.0",
-            "cargo": "cargo 1.94.0",
+            "rustc": "rustc 1.96.0",
+            "cargo": "cargo 1.96.0",
             "cargo_cyclonedx": "cargo-cyclonedx 0.5.8"
         },
         "assets": manifest_assets

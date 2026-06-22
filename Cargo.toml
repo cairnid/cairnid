@@ -15,7 +15,7 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "Apache-2.0"
-rust-version = "1.94"
+rust-version = "1.96"
 repository = "https://github.com/cairnid/cairnid"
 homepage = "https://cairnid.com"
 readme = "README.md"
