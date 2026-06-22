@@ -74,8 +74,149 @@ pub(super) fn reject_forbidden_token_free_release_evidence_fields(
                 );
             }
         }
+        Value::String(text) => {
+            if is_credential_shaped_token_free_value(text) {
+                failures.push(format!(
+                    "{path} value is credential-shaped in token-free release evidence artifact {artifact_name}"
+                ));
+            }
+        }
         _ => {}
     }
+}
+
+fn is_credential_shaped_token_free_value(value: &str) -> bool {
+    contains_raw_bearer_value(value) || contains_sensitive_assignment_value(value)
+}
+
+fn contains_raw_bearer_value(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    for (index, _) in lower.match_indices("bearer") {
+        let after_bearer = index + "bearer".len();
+        let Some(after) = lower[after_bearer..].chars().next() else {
+            continue;
+        };
+        if !after.is_ascii_whitespace() {
+            continue;
+        }
+        let before = &lower[..index];
+        if !before.trim().is_empty() && !before.contains("authorization") {
+            continue;
+        }
+        let candidate = credential_value_fragment(&value[after_bearer..]);
+        if !credential_value_is_placeholder(candidate) {
+            return true;
+        }
+    }
+    false
+}
+
+fn contains_sensitive_assignment_value(value: &str) -> bool {
+    let mut search_start = 0;
+    while let Some(relative_index) = value[search_start..].find('=') {
+        let equals_index = search_start + relative_index;
+        let key = assignment_key_before(value, equals_index);
+        if is_sensitive_assignment_key(key) {
+            let candidate = credential_value_fragment(&value[equals_index + 1..]);
+            if !credential_value_is_placeholder(candidate) {
+                return true;
+            }
+        }
+        search_start = equals_index + 1;
+    }
+    false
+}
+
+fn assignment_key_before(value: &str, equals_index: usize) -> &str {
+    let before = &value[..equals_index];
+    let mut start = before.len();
+    for (index, character) in before.char_indices().rev() {
+        if is_assignment_key_character(character) {
+            start = index;
+        } else {
+            break;
+        }
+    }
+    before[start..].trim()
+}
+
+fn is_assignment_key_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | ':' | '$')
+}
+
+fn is_sensitive_assignment_key(key: &str) -> bool {
+    let normalized_key = key
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    matches!(
+        normalized_key.as_str(),
+        "clientsecret" | "password" | "secret" | "token"
+    ) || normalized_key.ends_with("clientsecret")
+        || normalized_key.ends_with("password")
+        || normalized_key.ends_with("secret")
+        || normalized_key.ends_with("token")
+}
+
+fn credential_value_fragment(value: &str) -> &str {
+    let trimmed = value.trim_start_matches(|character: char| {
+        character.is_ascii_whitespace() || matches!(character, '"' | '\'')
+    });
+    let end = trimmed
+        .char_indices()
+        .find_map(|(index, character)| {
+            if character.is_ascii_whitespace()
+                || matches!(character, '"' | '\'' | ',' | ';' | '}' | ']')
+            {
+                Some(index)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(trimmed.len());
+    &trimmed[..end]
+}
+
+fn credential_value_is_placeholder(value: &str) -> bool {
+    let value = value
+        .trim()
+        .trim_matches(|character| matches!(character, '"' | '\''));
+    if value.is_empty() {
+        return true;
+    }
+    let lower = value.to_ascii_lowercase();
+    if lower.starts_with('<') && lower.ends_with('>') {
+        return true;
+    }
+    if lower.starts_with("${") && lower.ends_with('}') {
+        return true;
+    }
+    if lower.starts_with('%') && lower.ends_with('%') {
+        return true;
+    }
+    if lower.contains("placeholder") || lower.contains("redacted") {
+        return true;
+    }
+    if value.chars().all(|character| character == '*') {
+        return true;
+    }
+    matches!(
+        lower.as_str(),
+        "token"
+            | "bearer-token"
+            | "raw-token"
+            | "secret"
+            | "client-secret"
+            | "password"
+            | "value"
+            | "example"
+            | "example-token"
+            | "old-token"
+            | "new-token"
+            | "old-or-new-token-during-rotation"
+            | "old-or-invalid-token"
+    )
 }
 
 pub(super) fn sanitize_release_evidence_failure(failure: String) -> String {
