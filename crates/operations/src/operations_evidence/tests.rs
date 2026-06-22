@@ -336,6 +336,127 @@ fn release_evidence_redacts_secret_like_failure_values() {
 }
 
 #[test]
+fn release_evidence_redaction_rejects_credential_shaped_values_in_token_free_artifacts() {
+    let root = temp_evidence_dir("token-free-credential-shaped-values");
+    init_release_evidence_directory(&root, release_evidence_now(), false)
+        .expect("initialize release evidence scaffold");
+    let sentinel = "cairnid-raw-token-sentinel-123";
+    let mut preflight = production_preflight();
+    preflight["provider_summary"] = json!({
+        "status_text": format!("Bearer {sentinel}"),
+        "provider_snippet": format!(r#"{{"Authorization":"Bearer {sentinel}"}}"#),
+        "assignments": [
+            format!("client_secret={sentinel}"),
+            format!("password={sentinel}"),
+            format!("secret={sentinel}"),
+            format!("token={sentinel}")
+        ]
+    });
+    write_json(&root, "operations-preflight.json", preflight);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "operations_preflight")
+        .expect("operations preflight artifact");
+    assert_eq!(artifact.status, "failed");
+    let joined_failures = artifact.failures.join("\n");
+    assert!(joined_failures.contains(
+        "$.provider_summary.status_text value is credential-shaped in token-free release evidence artifact operations_preflight"
+    ));
+    assert!(joined_failures.contains(
+        "$.provider_summary.provider_snippet value is credential-shaped in token-free release evidence artifact operations_preflight"
+    ));
+    assert!(joined_failures.contains(
+        "$.provider_summary.assignments[0] value is credential-shaped in token-free release evidence artifact operations_preflight"
+    ));
+    assert!(joined_failures.contains(
+        "$.provider_summary.assignments[1] value is credential-shaped in token-free release evidence artifact operations_preflight"
+    ));
+    assert!(joined_failures.contains(
+        "$.provider_summary.assignments[2] value is credential-shaped in token-free release evidence artifact operations_preflight"
+    ));
+    assert!(joined_failures.contains(
+        "$.provider_summary.assignments[3] value is credential-shaped in token-free release evidence artifact operations_preflight"
+    ));
+    assert!(!joined_failures.contains(sentinel));
+    assert!(!report.failures.join("\n").contains(sentinel));
+}
+
+#[test]
+fn release_evidence_preserves_placeholder_guidance_values_in_token_free_artifacts() {
+    let root = temp_evidence_dir("token-free-placeholder-guidance-values");
+    init_release_evidence_directory(&root, release_evidence_now(), false)
+        .expect("initialize release evidence scaffold");
+    let mut preflight = production_preflight();
+    preflight["operator_guidance"] = json!([
+        "bearer-header format",
+        "retired bearer tokens",
+        "token hash",
+        "token rotation",
+        "client_secret_basic",
+        "Authorization: Bearer <raw-token>",
+        r#"{"Authorization":"Bearer <raw-token>"}"#,
+        "$env:CAIRN_SCIM_BEARER_TOKEN=\"<raw-token>\"",
+        "client_secret=<client-secret>",
+        "password=",
+        "secret=<secret>",
+        "token=<raw-token>"
+    ]);
+    write_json(&root, "operations-preflight.json", preflight);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "operations_preflight")
+        .expect("operations preflight artifact");
+    assert_eq!(artifact.status, "passed");
+    assert!(
+        artifact
+            .failures
+            .iter()
+            .all(|failure| !failure.contains("credential-shaped"))
+    );
+}
+
+#[test]
+fn release_evidence_scim_connector_smoke_token_rotation_wording_stays_token_free() {
+    let root = temp_evidence_dir("scim-connector-token-free-wording");
+    init_release_evidence_directory(&root, release_evidence_now(), false)
+        .expect("initialize release evidence scaffold");
+    let mut smoke = scim_connector_smoke("okta");
+    let checks = smoke["checks"].as_array_mut().expect("checks array");
+    checks[0]["detail"] =
+        json!("token rotation accepted and retired bearer tokens rejected without raw values");
+    checks[1]["detail"] = json!("bearer-header format uses token hash guidance only");
+    smoke["operator_note"] =
+        json!("client_secret_basic is an OpenID auth-method name, not a credential value");
+    write_json(&root, "scim-okta-connector-smoke.json", smoke);
+
+    let report =
+        check_release_evidence(&root, release_evidence_now(), 30).expect("release evidence report");
+
+    let artifact = report
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "scim_okta_connector_smoke")
+        .expect("SCIM Okta connector smoke artifact");
+    assert_eq!(artifact.status, "passed");
+    assert!(
+        artifact
+            .failures
+            .iter()
+            .all(|failure| !failure.contains("credential-shaped"))
+    );
+}
+
+#[test]
 fn release_evidence_status_reports_next_actions_for_incomplete_directory() {
     let root = temp_evidence_dir("status-incomplete");
     write_json(&root, "operations-preflight.json", production_preflight());
