@@ -376,6 +376,17 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
             .iter()
             .any(|note| note.contains("access-controlled"))
     );
+    let notes = manifest.notes.join("\n");
+    assert!(notes.contains("operator checklist only"));
+    assert!(notes.contains("contains_secrets"));
+    assert!(notes.contains("requires_production_like_environment"));
+    assert!(notes.contains("writes_application_state"));
+    assert!(notes.contains("touches_external_provider"));
+    assert!(notes.contains("cairn-oidcc-static.json"));
+    assert!(notes.contains("lifecycle-email-smoke.json"));
+    assert!(notes.contains("signing-key-rotation-drill.json"));
+    assert!(notes.contains("release-assets-verification.json"));
+    assert!(notes.contains("normalized token-free receipts"));
     assert!(
         manifest
             .artifacts
@@ -777,6 +788,19 @@ fn release_evidence_init_writes_guarded_scaffold() {
         json!(RELEASE_EVIDENCE_SCHEMA_VERSION)
     );
     assert_eq!(manifest["artifact_count"], json!(24));
+    let notes = manifest["notes"].as_array().expect("manifest notes array");
+    assert!(notes.iter().any(|note| {
+        note.as_str()
+            .is_some_and(|note| note.contains("operator checklist only"))
+    }));
+    assert!(notes.iter().any(|note| {
+        note.as_str()
+            .is_some_and(|note| note.contains("release-assets-verification.json"))
+    }));
+    assert!(notes.iter().any(|note| {
+        note.as_str()
+            .is_some_and(|note| note.contains("lifecycle-email-smoke.json"))
+    }));
     let artifacts = manifest["artifacts"]
         .as_array()
         .expect("manifest artifacts array");
@@ -801,6 +825,22 @@ fn release_evidence_init_writes_guarded_scaffold() {
     assert!(readme.contains("scim-okta-connector-profile.json"));
     assert!(readme.contains("Production-like Env"));
     assert!(readme.contains("External Provider"));
+    assert!(readme.contains("## High-Risk Review"));
+    assert!(readme.contains("Secret-Containing Artifacts"));
+    assert!(readme.contains("State-Changing Artifacts"));
+    assert!(readme.contains("External-Provider Artifacts"));
+    assert!(readme.contains("`cairn-oidcc-static.json`: secret-containing static OpenID config"));
+    assert!(readme.contains(
+        "`lifecycle-email-smoke.json`: state-changing plus external-provider email evidence"
+    ));
+    assert!(readme.contains(
+        "`signing-key-rotation-drill.json`: state-changing key-operations drill evidence"
+    ));
+    assert!(
+        readme.contains(
+            "`release-assets-verification.json`: external-provider release-asset evidence"
+        )
+    );
 
     let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read .gitignore");
     assert!(gitignore.contains("release-evidence-manifest.json"));
