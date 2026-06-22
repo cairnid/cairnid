@@ -531,6 +531,12 @@ fn release_assets_verify_emits_failed_json_for_missing_attestation_confirmations
         .as_array()
         .expect("failed receipt failures array");
     assert!(
+        failures.iter().any(|failure| failure
+            .as_str()
+            .is_some_and(|failure| failure.contains("release_url must be present"))),
+        "{failures:?}"
+    );
+    assert!(
         failures.iter().any(|failure| failure.as_str().is_some_and(
             |failure| failure.contains("--sbom-attestations-verified must be supplied")
         )),
