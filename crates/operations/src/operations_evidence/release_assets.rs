@@ -17,6 +17,8 @@ use zip::ZipArchive;
 
 pub(in crate::operations_evidence) const CHECKSUM_FILE_NAME: &str = "SHA256SUMS.txt";
 pub(in crate::operations_evidence) const RELEASE_MANIFEST_FILE_NAME: &str = "release-manifest.json";
+const RELEASE_WORKFLOW_NAME: &str = "Release";
+const RELEASE_WORKFLOW_PATH: &str = ".github/workflows/release.yml";
 pub(in crate::operations_evidence) const SIGNER_WORKFLOW: &str =
     "cairnid/cairnid/.github/workflows/release.yml";
 pub(in crate::operations_evidence) const PUBLIC_RELEASE_URL_REQUIRED_FAILURE: &str = "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only";
@@ -324,6 +326,11 @@ pub fn release_assets_verification_report(
     validate_attestation_confirmations(options, &mut failures);
     validate_github_release_immutability_confirmation(options, &mut failures);
     validate_public_release_url_option(options, &mut failures);
+    validate_release_asset_directory_inventory(
+        &options.release_dir,
+        &options.release_tag,
+        &mut failures,
+    )?;
 
     let checksum_entries = read_checksums(&options.release_dir, &mut failures)?;
     let manifest = read_json_file(
@@ -541,6 +548,42 @@ fn validate_public_release_url_option(
     }
 }
 
+fn validate_release_asset_directory_inventory(
+    release_dir: &Path,
+    release_tag: &str,
+    failures: &mut Vec<String>,
+) -> Result<(), ReleaseAssetsVerificationError> {
+    let expected_file_names = expected_release_asset_file_names(release_tag);
+    for entry in fs::read_dir(release_dir).map_err(ReleaseAssetsVerificationError::Io)? {
+        let entry = entry.map_err(ReleaseAssetsVerificationError::Io)?;
+        let file_type = entry
+            .file_type()
+            .map_err(ReleaseAssetsVerificationError::Io)?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name().to_string_lossy().into_owned();
+        if !expected_file_names.contains(&file_name) {
+            failures.push(format!(
+                "unexpected release asset file in release directory: {file_name}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn expected_release_asset_file_names(release_tag: &str) -> BTreeSet<String> {
+    let mut file_names = BTreeSet::from([
+        CHECKSUM_FILE_NAME.to_owned(),
+        RELEASE_MANIFEST_FILE_NAME.to_owned(),
+    ]);
+    for expected in EXPECTED_RELEASE_ASSETS {
+        file_names.insert(archive_file_name(expected, release_tag));
+        file_names.insert(sbom_file_name(expected, release_tag));
+    }
+    file_names
+}
+
 fn read_checksums(
     release_dir: &Path,
     failures: &mut Vec<String>,
@@ -738,25 +781,25 @@ fn validate_manifest_metadata(
         "cairnid/cairnid",
         failures,
     );
-    require_manifest_string(
-        manifest,
-        &["source", "commit"],
-        &options.source_commit,
-        failures,
-    );
+    validate_manifest_source_commit(manifest, options, failures);
     require_manifest_string(
         manifest,
         &["source", "ref"],
         &format!("refs/tags/{}", options.release_tag),
         failures,
     );
-    if let Some(run_url) = non_empty_option(&options.run_url) {
-        require_manifest_string(manifest, &["source", "run_url"], &run_url, failures);
-    }
+    require_manifest_string(
+        manifest,
+        &["source", "workflow"],
+        RELEASE_WORKFLOW_NAME,
+        failures,
+    );
+    validate_manifest_workflow_ref(manifest, options, failures);
+    validate_manifest_run_metadata(manifest, options, failures);
     require_manifest_string(
         manifest,
         &["distribution", "release_workflow"],
-        ".github/workflows/release.yml",
+        RELEASE_WORKFLOW_PATH,
         failures,
     );
     for flag in ["crates_io", "homebrew", "msi", "macos", "containers"] {
@@ -779,7 +822,8 @@ fn validate_manifest_metadata(
             .iter()
             .filter(|asset| asset.get("kind").and_then(Value::as_str) == Some("sbom"))
             .count();
-        if archive_count != EXPECTED_RELEASE_ASSETS.len()
+        if assets.len() != EXPECTED_RELEASE_ASSETS.len() * 2
+            || archive_count != EXPECTED_RELEASE_ASSETS.len()
             || sbom_count != EXPECTED_RELEASE_ASSETS.len()
         {
             failures.push(format!(
@@ -789,6 +833,154 @@ fn validate_manifest_metadata(
     } else {
         failures.push(format!(
             "{RELEASE_MANIFEST_FILE_NAME}.assets must be an array"
+        ));
+    }
+}
+
+fn validate_manifest_source_commit(
+    manifest: &Value,
+    options: &ReleaseAssetsVerificationOptions,
+    failures: &mut Vec<String>,
+) {
+    match string_at_path(manifest, &["source", "commit"]) {
+        Some(commit) if !is_git_commit_sha(commit) => failures.push(format!(
+            "{RELEASE_MANIFEST_FILE_NAME}.source.commit must be a 40-character git commit SHA"
+        )),
+        Some(commit) if commit == options.source_commit => {}
+        Some(_) => failures.push(format!(
+            "{RELEASE_MANIFEST_FILE_NAME}.source.commit must match --source-commit"
+        )),
+        None => failures.push(format!(
+            "{RELEASE_MANIFEST_FILE_NAME}.source.commit must be a 40-character git commit SHA"
+        )),
+    }
+}
+
+fn validate_manifest_workflow_ref(
+    manifest: &Value,
+    options: &ReleaseAssetsVerificationOptions,
+    failures: &mut Vec<String>,
+) {
+    let Some(workflow_ref) = string_at_path(manifest, &["source", "workflow_ref"]) else {
+        failures.push(format!(
+            "{RELEASE_MANIFEST_FILE_NAME}.source.workflow_ref must identify {SIGNER_WORKFLOW} at a Git ref"
+        ));
+        return;
+    };
+
+    let expected_tag_ref = format!("{SIGNER_WORKFLOW}@refs/tags/{}", options.release_tag);
+    if options.release_url.is_some() {
+        if workflow_ref != expected_tag_ref {
+            failures.push(format!(
+                "{RELEASE_MANIFEST_FILE_NAME}.source.workflow_ref must be {expected_tag_ref}"
+            ));
+        }
+        return;
+    }
+
+    let expected_prefix = format!("{SIGNER_WORKFLOW}@refs/");
+    let Some(ref_name) = workflow_ref.strip_prefix(&expected_prefix) else {
+        failures.push(format!(
+            "{RELEASE_MANIFEST_FILE_NAME}.source.workflow_ref must identify {SIGNER_WORKFLOW} at a Git ref"
+        ));
+        return;
+    };
+    if ref_name.is_empty() || ref_name.chars().any(char::is_whitespace) {
+        failures.push(format!(
+            "{RELEASE_MANIFEST_FILE_NAME}.source.workflow_ref must identify {SIGNER_WORKFLOW} at a Git ref"
+        ));
+    }
+}
+
+fn validate_manifest_run_metadata(
+    manifest: &Value,
+    options: &ReleaseAssetsVerificationOptions,
+    failures: &mut Vec<String>,
+) {
+    let run_id = require_manifest_decimal_string(
+        manifest,
+        &["source", "run_id"],
+        "GitHub Actions run id",
+        failures,
+    );
+    require_manifest_decimal_string(
+        manifest,
+        &["source", "run_attempt"],
+        "GitHub Actions run attempt",
+        failures,
+    );
+
+    if let Some(run_url) = non_empty_option(&options.run_url) {
+        require_manifest_string(manifest, &["source", "run_url"], &run_url, failures);
+    }
+
+    match string_at_path(manifest, &["source", "run_url"]) {
+        Some(run_url) => {
+            validate_manifest_github_actions_url(
+                run_url,
+                "release-manifest.json.source.run_url",
+                run_id,
+                failures,
+            );
+        }
+        None => failures.push(
+            "release-manifest.json.source.run_url must be a GitHub Actions HTTPS URL under /cairnid/cairnid/actions/runs/"
+                .to_owned(),
+        ),
+    }
+
+    if let Some(validated_ci_run_url) =
+        string_at_path(manifest, &["source", "validated_ci_run_url"])
+    {
+        validate_manifest_github_actions_url(
+            validated_ci_run_url,
+            "release-manifest.json.source.validated_ci_run_url",
+            None,
+            failures,
+        );
+    }
+}
+
+fn require_manifest_decimal_string<'a>(
+    value: &'a Value,
+    path: &[&str],
+    description: &str,
+    failures: &mut Vec<String>,
+) -> Option<&'a str> {
+    match string_at_path(value, path) {
+        Some(actual) if is_positive_decimal_string(actual) => Some(actual),
+        Some(_) | None => {
+            failures.push(format!(
+                "{RELEASE_MANIFEST_FILE_NAME}.{} must be a positive decimal {description}",
+                path.join(".")
+            ));
+            None
+        }
+    }
+}
+
+fn validate_manifest_github_actions_url(
+    value: &str,
+    field: &'static str,
+    expected_run_id: Option<&str>,
+    failures: &mut Vec<String>,
+) {
+    let valid = Url::parse(value).ok().is_some_and(|url| {
+        let Some(run_id) = url.path().strip_prefix("/cairnid/cairnid/actions/runs/") else {
+            return false;
+        };
+        url.scheme() == "https"
+            && url.host_str() == Some("github.com")
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none()
+            && is_positive_decimal_string(run_id)
+            && expected_run_id.is_none_or(|expected_run_id| run_id == expected_run_id)
+    });
+    if !valid {
+        failures.push(format!(
+            "{field} must be a GitHub Actions HTTPS URL under /cairnid/cairnid/actions/runs/ without credentials, query, or fragment"
         ));
     }
 }
@@ -1134,6 +1326,16 @@ fn sha256_file(path: &Path) -> Result<String, std::io::Error> {
 
 fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn is_git_commit_sha(value: &str) -> bool {
+    value.len() == 40 && value.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn is_positive_decimal_string(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().all(|character| character.is_ascii_digit())
+        && value.chars().any(|character| character != '0')
 }
 
 fn safe_public_github_url(value: &Option<String>, path_prefix: &str) -> Option<String> {

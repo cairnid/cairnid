@@ -1077,6 +1077,8 @@ fn release_evidence_rejects_failed_release_assets_verification_report() {
 #[test]
 fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
     let release = fake_release_assets_dir("receipt-happy");
+    assert_eq!(release_asset_regular_file_count(&release.root), 10);
+
     let receipt = release_assets_verification_receipt(
         &release_assets_options(&release),
         release_evidence_now(),
@@ -1130,6 +1132,72 @@ fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
         .expect("release assets artifact");
     assert_eq!(release_assets.status, "passed");
     assert!(release_assets.failures.is_empty());
+}
+
+#[test]
+fn release_assets_receipt_generation_rejects_unexpected_regular_file() {
+    let release = fake_release_assets_dir("receipt-unexpected-extra-asset");
+    fs::write(release.root.join("unexpected-notes.txt"), "operator notes")
+        .expect("write unexpected release asset file");
+    fs::create_dir(release.root.join("operator-notes")).expect("write sibling directory");
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("unexpected asset report");
+
+    assert_failed_release_assets_report(
+        &report,
+        "unexpected release asset file in release directory: unexpected-notes.txt",
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .all(|failure| !failure.contains("operator-notes")),
+        "{:?}",
+        report.failures
+    );
+}
+
+#[test]
+fn release_assets_receipt_generation_rejects_invalid_manifest_provenance_metadata() {
+    let release = fake_release_assets_dir("receipt-invalid-manifest-provenance");
+    update_release_manifest(&release.root, |manifest| {
+        manifest["source"]["workflow"] = json!("CI");
+        manifest["source"]["workflow_ref"] =
+            json!("cairnid/cairnid/.github/workflows/release.yml@refs/heads/main");
+        manifest["source"]["run_url"] =
+            json!("https://github.com/cairnid/cairnid/actions/runs/not-a-run-id");
+        manifest["source"]
+            .as_object_mut()
+            .expect("manifest source object")
+            .remove("run_attempt");
+    });
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("invalid manifest provenance report");
+
+    assert_failed_release_assets_report(
+        &report,
+        "release-manifest.json.source.workflow must be Release",
+    );
+    assert_failed_release_assets_report(
+        &report,
+        "release-manifest.json.source.workflow_ref must be cairnid/cairnid/.github/workflows/release.yml@refs/tags/v0.1.0-rc.1",
+    );
+    assert_failed_release_assets_report(
+        &report,
+        "release-manifest.json.source.run_attempt must be a positive decimal GitHub Actions run attempt",
+    );
+    assert_failed_release_assets_report(
+        &report,
+        "release-manifest.json.source.run_url must be a GitHub Actions HTTPS URL under /cairnid/cairnid/actions/runs/",
+    );
 }
 
 #[test]
@@ -3210,6 +3278,33 @@ fn assert_failed_release_assets_report(
 
 fn release_assets_failures(error: &ReleaseAssetsVerificationError) -> &[String] {
     error.failures().expect("verification failures")
+}
+
+fn release_asset_regular_file_count(root: &Path) -> usize {
+    fs::read_dir(root)
+        .expect("read release asset directory")
+        .map(|entry| entry.expect("release asset directory entry"))
+        .filter(|entry| {
+            entry
+                .file_type()
+                .expect("release asset entry file type")
+                .is_file()
+        })
+        .count()
+}
+
+fn update_release_manifest(root: &Path, update: impl FnOnce(&mut Value)) {
+    let manifest_path = root.join("release-manifest.json");
+    let mut manifest: Value =
+        serde_json::from_str(&fs::read_to_string(&manifest_path).expect("read release manifest"))
+            .expect("parse release manifest");
+    update(&mut manifest);
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize release manifest") + "\n",
+    )
+    .expect("write release manifest");
+    rewrite_checksum_for_file(root, "release-manifest.json");
 }
 
 fn rewrite_checksum_for_file(root: &Path, file_name: &str) {
