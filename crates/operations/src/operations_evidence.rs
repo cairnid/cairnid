@@ -32,8 +32,8 @@ pub use self::types::{
     RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidenceArtifactReport,
     ReleaseEvidenceEnvironmentRequirement, ReleaseEvidenceError, ReleaseEvidenceInitReport,
     ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact, ReleaseEvidenceNextAction,
-    ReleaseEvidencePlanReport, ReleaseEvidencePlanStep, ReleaseEvidenceReport,
-    ReleaseEvidenceStatusReport,
+    ReleaseEvidencePlanPendingArtifact, ReleaseEvidencePlanReport, ReleaseEvidencePlanStep,
+    ReleaseEvidenceReport, ReleaseEvidenceStatusReport,
 };
 use std::path::Path;
 use time::OffsetDateTime;

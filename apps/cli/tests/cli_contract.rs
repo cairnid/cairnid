@@ -250,10 +250,33 @@ fn evidence_plan_emits_expected_json_contract() {
     let json: Value = serde_json::from_slice(&output.stdout).expect("valid plan JSON");
     assert_schema_version(&json);
     assert_eq!(json["status"], "ready");
+    assert_eq!(json["local_capture_ready"], json!(true));
+    assert_eq!(json["manual_evidence_pending"], json!(true));
+    assert_eq!(json["external_evidence_pending"], json!(true));
     assert_eq!(json["artifact_count"], 24);
     assert_eq!(json["ready_artifact_count"], 19);
     assert_eq!(json["manual_artifact_count"], 5);
+    assert_eq!(json["manual_pending_count"], 5);
     assert_eq!(json["missing_environment_artifact_count"], 0);
+    assert_eq!(
+        json["external_pending_count"],
+        json["external_provider_artifact_count"]
+    );
+    assert_eq!(
+        json["pending_manual_evidence"]
+            .as_array()
+            .expect("pending manual evidence array")
+            .len(),
+        5
+    );
+    assert!(
+        json["pending_external_evidence"]
+            .as_array()
+            .expect("pending external evidence array")
+            .iter()
+            .any(|artifact| artifact["name"] == "lifecycle_email_smoke"
+                && artifact["status"] == "ready")
+    );
     assert_eq!(json["steps"].as_array().expect("steps array").len(), 24);
     assert!(
         json["steps"]
@@ -264,6 +287,8 @@ fn evidence_plan_emits_expected_json_contract() {
                 |step| step["file_name"] == "release-assets-verification.json"
                     && step["release_gate"] == "CLI/MCP public release assets"
                     && step["status"] == "manual_external"
+                    && step["pending_manual_evidence"] == json!(true)
+                    && step["pending_external_evidence"] == json!(true)
             )
     );
 }
@@ -278,6 +303,10 @@ fn evidence_plan_missing_environment_exits_gate_failed_and_emits_json() {
     let json: Value = serde_json::from_str(&stdout).expect("valid plan JSON");
     assert_schema_version(&json);
     assert_eq!(json["status"], "missing_environment");
+    assert_eq!(json["local_capture_ready"], json!(false));
+    assert_eq!(json["manual_evidence_pending"], json!(true));
+    assert_eq!(json["external_evidence_pending"], json!(true));
+    assert_eq!(json["manual_pending_count"], 5);
     assert!(
         json["missing_environment_artifact_count"]
             .as_u64()

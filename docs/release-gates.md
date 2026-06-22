@@ -60,7 +60,7 @@ cargo run -p cairnid --locked -- evidence status --evidence-dir <evidence-dir>
 cargo run -p cairnid --locked -- evidence check --evidence-dir <evidence-dir>
 ```
 
-`cairnid evidence plan` confirms that required environment variable names are present without printing values. `cairnid evidence init` creates the guarded evidence directory. `cairnid evidence status` shows missing or failed artifacts while evidence is being collected. `cairnid evidence check` is the final local release gate.
+`cairnid evidence plan` confirms that required environment variable names are present without printing values. Its root `local_capture_ready` field distinguishes local/generated capture readiness from manual or provider-backed evidence still listed in `pending_manual_evidence` and `pending_external_evidence`. `cairnid evidence init` creates the guarded evidence directory. `cairnid evidence status` shows missing or failed artifacts while evidence is being collected. `cairnid evidence check` is the final local release gate.
 
 The CLI evidence JSON reports carry root `schema_version="cairnid.evidence.v1"` for machine-readable contract stability. Additive fields can appear under the same version, but removing or renaming fields, changing field meanings, changing stable status values, weakening redaction expectations, or changing count/failure semantics requires a new schema version. Artifact entries in plan, manifest, status/check, next-action, and generated README output include `release_gate` ownership labels so operators can map each artifact back to this gate table.
 
