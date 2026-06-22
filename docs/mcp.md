@@ -84,8 +84,8 @@ Available tools:
 
 - `cairnid.evidence_plan`: returns the release evidence capture plan and missing environment variable names.
 - `cairnid.evidence_manifest`: returns the current artifact manifest without writing files.
-- `cairnid.evidence_status`: validates release evidence and returns sanitized status counts.
-- `cairnid.evidence_check`: validates release evidence and returns sanitized artifact counts.
+- `cairnid.evidence_status`: validates release evidence and returns sanitized status counts plus next actions for incomplete evidence.
+- `cairnid.evidence_check`: validates release evidence and returns sanitized artifact counts plus next actions for incomplete evidence.
 
 `evidence_status` and `evidence_check` accept:
 
@@ -104,7 +104,7 @@ Unknown request arguments are rejected with `unknown_argument`; the input schema
 - Startup root checks: the allowlisted root must be inspectable, must be a directory, and must not be a symlink. Startup root failures exit non-zero before stdio JSON-RPC starts.
 - Request path checks: relative `evidence_dir` values are resolved under the configured root. Absolute `evidence_dir` values are accepted only when their canonical path remains under that root.
 - Rejected request paths: empty paths, parent traversal with `..`, Windows drive-relative paths such as `C:release-evidence`, rooted relative paths such as `\release-evidence`, paths outside the allowlisted root, non-directories, symlinked evidence directories, and symlink entries inside an evidence directory.
-- Validator detail boundary: `evidence_status` and `evidence_check` return stable status and failure-code summaries, not raw validator failure text.
+- Validator detail boundary: `evidence_status` and `evidence_check` return stable status, failure-code summaries, and sanitized next actions, not raw validator failure text.
 - Data leakage boundary: tool responses do not return artifact JSON, resource links, logs, standard streams, provider exports, secret values, or secret-bearing static OpenID artifacts. `evidence_plan` can return missing environment variable names and artifact metadata needed to run the documented evidence commands.
 
 If `--evidence-root <DIR>` is supplied and the root cannot be inspected, is not a directory, or is a symlink, the process exits non-zero before starting JSON-RPC and writes a startup error to stderr. Request-level errors after startup still use the MCP tool-error envelopes below.
@@ -121,7 +121,24 @@ The `v1` success contracts keep the existing top-level `status` and count fields
 
 For every structured tool result, `content[0].text` is the serialized JSON that exactly mirrors `structuredContent`, so clients that display text-only tool output see the same sanitized payload.
 
-Artifact and step entries advertised by `outputSchema` include sanitized `release_gate` labels: `cairnid.evidence_plan` `steps[]`, `cairnid.evidence_manifest` `artifacts[]`, `cairnid.evidence_status` `artifacts[]`, and `cairnid.evidence_check` success or incomplete-error-summary `artifacts[]`.
+Artifact, step, and next-action entries advertised by `outputSchema` include sanitized `release_gate` labels: `cairnid.evidence_plan` `steps[]`, `cairnid.evidence_manifest` `artifacts[]`, `cairnid.evidence_status` `artifacts[]` and `next_actions[]`, and `cairnid.evidence_check` success or incomplete-error-summary `artifacts[]` and `next_actions[]`.
+
+When evidence is incomplete, `next_actions[]` contains one entry for each non-ready artifact. Entries are sanitized and machine-readable:
+
+```json
+{
+  "name": "operations_preflight",
+  "file_name": "operations-preflight.json",
+  "release_gate": "Operations preflight",
+  "status": "missing",
+  "command": "cairn-api operations preflight > operations-preflight.json",
+  "failure_codes": {
+    "missing_evidence": 1
+  }
+}
+```
+
+`next_actions[]` is intended to tell an agent or operator which evidence file and gate still needs work. It does not include raw validator text, raw `failures` arrays, artifact JSON, provider exports, logs, standard streams, secrets, or secret-bearing OpenID static artifacts.
 
 ## Evidence tool errors
 
@@ -143,7 +160,7 @@ Request-level failures from `cairnid.evidence_status` and `cairnid.evidence_chec
 
 The text content mirrors the same JSON envelope for clients that only display content text.
 
-`cairnid.evidence_check` also uses this envelope with `code: "release_evidence_incomplete"` when validation completes but the release evidence is not ready. That response includes `failure_codes` and a sanitized `summary`. `cairnid.evidence_status` returns the same incomplete summary with `isError: false`.
+`cairnid.evidence_check` also uses this envelope with `code: "release_evidence_incomplete"` when validation completes but the release evidence is not ready. That response includes `failure_codes` and a sanitized `summary` with `next_actions[]`. `cairnid.evidence_status` returns the same incomplete summary with `isError: false`.
 
 Stable request error codes:
 
@@ -163,7 +180,7 @@ Stable request error codes:
 - `evidence_contract_failed`: the operations validator returned a hard contract error.
 - `allowlist_root_unavailable`: the process working directory could not be inspected as the allowlisted root.
 
-For `cairnid.evidence_status`, evidence validation failures that can be represented safely are not tool errors. Validation summaries return `isError: false`, `status: "incomplete"`, and stable `failure_codes`: `missing_evidence`, `stale_or_invalid_scaffold`, `invalid_json`, `invalid_json_root`, `stale_or_invalid_timestamp`, `timestamp_contract`, `forbidden_field`, `artifact_path_failure`, `contract_mismatch`, or `validation_failed`. `cairnid.evidence_check` applies the same validation failure-code set inside the `release_evidence_incomplete` tool-error envelope. `symlink_entry` is a request-level path-safety error for pre-check symlink entries; validation text about symlink, read, directory, or unexpected-entry issues is summarized as `artifact_path_failure`.
+For `cairnid.evidence_status`, evidence validation failures that can be represented safely are not tool errors. Validation summaries return `isError: false`, `status: "incomplete"`, stable `failure_codes`, and sanitized `next_actions[]`: `missing_evidence`, `stale_or_invalid_scaffold`, `invalid_json`, `invalid_json_root`, `stale_or_invalid_timestamp`, `timestamp_contract`, `forbidden_field`, `artifact_path_failure`, `contract_mismatch`, or `validation_failed`. `cairnid.evidence_check` applies the same validation failure-code set inside the `release_evidence_incomplete` tool-error envelope and its `summary.next_actions[]`. `symlink_entry` is a request-level path-safety error for pre-check symlink entries; validation text about symlink, read, directory, or unexpected-entry issues is summarized as `artifact_path_failure`.
 
 ## Release candidate checklist
 
@@ -172,5 +189,5 @@ For `cairnid.evidence_status`, evidence validation failures that can be represen
 - Evidence root behavior: startup rejects missing, non-directory, and symlink allowlisted roots before JSON-RPC starts; request handling accepts relative evidence directories under the root and absolute evidence directories only when they canonicalize under the root.
 - Path-safety behavior: request smoke covers `parent_traversal`, `outside_allowlisted_root`, `missing_evidence_dir`, `non_directory_evidence_dir`, `invalid_max_age_days`, `symlinked_evidence_dir`, and `symlink_entry` where symlink creation is available.
 - Windows behavior: request smoke covers drive-relative paths such as `C:release-evidence` and rooted relative paths such as `\release-evidence`; symlink cases may require developer-mode or elevated symlink privileges to exercise locally.
-- Sanitized incomplete evidence: `cairnid.evidence_status` returns `status: "incomplete"` without raw artifact content, logs, streams, or validator details; `cairnid.evidence_check` returns `release_evidence_incomplete` with `failure_codes` and sanitized `summary` only.
+- Sanitized incomplete evidence: `cairnid.evidence_status` returns `status: "incomplete"` with `next_actions[]` and without raw artifact content, logs, streams, or validator details; `cairnid.evidence_check` returns `release_evidence_incomplete` with `failure_codes` and a sanitized `summary.next_actions[]` only.
 - Release validation commands: run `cargo +stable-x86_64-pc-windows-gnu test -p cairnid-mcp --locked`, `cargo +stable-x86_64-pc-windows-gnu clippy -p cairnid-mcp --all-targets --locked -- -D warnings`, `bun run check:public-surface`, `bun run docs:site -- --out <temp-dir>`, and `git diff --check`.

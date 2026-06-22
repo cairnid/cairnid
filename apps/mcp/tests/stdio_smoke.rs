@@ -38,6 +38,7 @@ const EVIDENCE_SUMMARY_KEYS: &[&str] = &[
     "failure_count",
     "failure_codes",
     "artifacts",
+    "next_actions",
 ];
 const ARTIFACT_SUMMARY_KEYS: &[&str] = &[
     "name",
@@ -47,6 +48,14 @@ const ARTIFACT_SUMMARY_KEYS: &[&str] = &[
     "status",
     "check_count",
     "failure_count",
+    "failure_codes",
+];
+const NEXT_ACTION_KEYS: &[&str] = &[
+    "name",
+    "file_name",
+    "release_gate",
+    "status",
+    "command",
     "failure_codes",
 ];
 
@@ -256,6 +265,41 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
         named_item(artifacts, "dependency_policy_check", "status artifact"),
         "Dependency policy",
         "status artifact",
+    );
+    let next_actions = structured
+        .get("next_actions")
+        .and_then(Value::as_array)
+        .expect("next action summaries");
+    assert!(!next_actions.is_empty(), "expected next action summaries");
+    for action in next_actions {
+        assert_allowed_keys(
+            "next action summary",
+            action.as_object().expect("next action object"),
+            NEXT_ACTION_KEYS,
+        );
+        assert!(
+            action
+                .get("failure_codes")
+                .and_then(Value::as_object)
+                .is_some_and(|codes| !codes.is_empty()),
+            "next action should expose sanitized failure codes: {action}"
+        );
+    }
+    let dependency_policy_action = named_item(
+        next_actions,
+        "dependency_policy_check",
+        "status next action",
+    );
+    assert_release_gate(
+        dependency_policy_action,
+        "Dependency policy",
+        "status next action",
+    );
+    assert_eq!(
+        dependency_policy_action
+            .get("status")
+            .and_then(Value::as_str),
+        Some("failed")
     );
     assert!(
         !status.to_string().contains(SENTINEL),
@@ -487,6 +531,19 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
         "Dependency policy",
         "status artifact",
     );
+    let status_next_actions = status_structured
+        .get("next_actions")
+        .and_then(Value::as_array)
+        .expect("evidence_status next actions");
+    assert_release_gate(
+        named_item(
+            status_next_actions,
+            "dependency_policy_check",
+            "status next action",
+        ),
+        "Dependency policy",
+        "status next action",
+    );
     assert_no_sentinel(&status, "evidence_status");
 
     let check = client
@@ -526,6 +583,21 @@ async fn rmcp_real_client_stdio_smoke_lists_tools_and_calls_evidence_tools() {
         named_item(check_artifacts, "dependency_policy_check", "check artifact"),
         "Dependency policy",
         "check artifact",
+    );
+    let check_next_actions = check_structured
+        .get("error")
+        .and_then(|error| error.get("summary"))
+        .and_then(|summary| summary.get("next_actions"))
+        .and_then(Value::as_array)
+        .expect("evidence_check summary next actions");
+    assert_release_gate(
+        named_item(
+            check_next_actions,
+            "dependency_policy_check",
+            "check next action",
+        ),
+        "Dependency policy",
+        "check next action",
     );
     assert_no_sentinel(&check, "evidence_check");
 
@@ -763,6 +835,23 @@ fn stdio_invalid_evidence_json_remains_sanitized_validation_summary() {
             .and_then(Value::as_u64),
         Some(1)
     );
+    let dependency_policy_action = structured
+        .get("next_actions")
+        .and_then(Value::as_array)
+        .and_then(|actions| {
+            actions.iter().find(|action| {
+                action.get("name").and_then(Value::as_str) == Some("dependency_policy_check")
+            })
+        })
+        .expect("invalid JSON next action");
+    assert_eq!(
+        dependency_policy_action
+            .get("failure_codes")
+            .and_then(Value::as_object)
+            .and_then(|codes| codes.get("invalid_json"))
+            .and_then(Value::as_u64),
+        Some(1)
+    );
     assert!(
         !status.to_string().contains("{not json"),
         "MCP response exposed raw invalid artifact content: {status}"
@@ -801,6 +890,22 @@ fn stdio_invalid_evidence_json_remains_sanitized_validation_summary() {
             .and_then(|summary| summary.get("status"))
             .and_then(Value::as_str),
         Some("incomplete")
+    );
+    assert_eq!(
+        error
+            .get("summary")
+            .and_then(|summary| summary.get("next_actions"))
+            .and_then(Value::as_array)
+            .and_then(|actions| {
+                actions.iter().find(|action| {
+                    action.get("name").and_then(Value::as_str) == Some("dependency_policy_check")
+                })
+            })
+            .and_then(|action| action.get("failure_codes"))
+            .and_then(Value::as_object)
+            .and_then(|codes| codes.get("invalid_json"))
+            .and_then(Value::as_u64),
+        Some(1)
     );
     assert!(
         !check.to_string().contains("{not json"),
@@ -1058,9 +1163,16 @@ fn assert_tools_list_output_schemas(tools: &[Value]) {
             success_collection,
             &format!("tool {name} success {success_collection}"),
         );
+        if matches!(name, "cairnid.evidence_status" | "cairnid.evidence_check") {
+            assert_summary_next_actions_contract(
+                schema_value,
+                success_schema,
+                &format!("tool {name} success summary"),
+            );
+        }
 
         if name == "cairnid.evidence_check" {
-            assert_error_summary_artifacts_require_release_gate(name, schema_value, error_schema);
+            assert_error_summary_contract(name, schema_value, error_schema);
         }
     }
 }
@@ -1079,11 +1191,7 @@ fn error_output_schema<'a>(tool_name: &str, variants: &'a [Value]) -> &'a Value 
         .unwrap_or_else(|| panic!("tool {tool_name} outputSchema error variant"))
 }
 
-fn assert_error_summary_artifacts_require_release_gate(
-    tool_name: &str,
-    root: &Value,
-    error_schema: &Value,
-) {
+fn assert_error_summary_contract(tool_name: &str, root: &Value, error_schema: &Value) {
     let error_body = schema_property(
         root,
         error_schema,
@@ -1107,6 +1215,63 @@ fn assert_error_summary_artifacts_require_release_gate(
         "artifacts",
         &format!("tool {tool_name} incomplete-check error summary"),
     );
+    assert_summary_next_actions_contract(
+        root,
+        summary,
+        &format!("tool {tool_name} incomplete-check error summary"),
+    );
+}
+
+fn assert_summary_next_actions_contract(root: &Value, schema: &Value, context: &str) {
+    assert_schema_array_items_require_release_gate(
+        root,
+        schema,
+        "next_actions",
+        &format!("{context} next_actions"),
+    );
+    assert_schema_array_items_require_properties(
+        root,
+        schema,
+        "next_actions",
+        &[
+            "name",
+            "file_name",
+            "release_gate",
+            "status",
+            "command",
+            "failure_codes",
+        ],
+        &format!("{context} next_actions"),
+    );
+}
+
+fn assert_schema_array_items_require_properties(
+    root: &Value,
+    schema: &Value,
+    array_property: &str,
+    required_properties: &[&str],
+    context: &str,
+) {
+    let array_schema = schema_property(root, schema, array_property, context);
+    let item_schema = array_schema
+        .get("items")
+        .unwrap_or_else(|| panic!("{context} should advertise array items"));
+    let item_schema = resolve_schema(root, item_schema);
+    let properties = item_schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .unwrap_or_else(|| panic!("{context} item schema properties"));
+
+    for property in required_properties {
+        assert!(
+            properties.contains_key(*property),
+            "{context} item schema should advertise {property}"
+        );
+        assert!(
+            schema_requires_property(item_schema, property),
+            "{context} item schema should require {property}"
+        );
+    }
 }
 
 fn assert_schema_array_items_require_release_gate(
