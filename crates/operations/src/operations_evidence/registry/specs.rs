@@ -27,7 +27,7 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
         name: "release_assets_verification",
         file_name: "release-assets-verification.json",
         release_gate: "CLI/MCP public release assets",
-        command: "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json",
+        command: "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json",
         validator: EvidenceValidator::ReleaseAssetsVerification,
         contains_secrets: false,
         requires_production_like_environment: false,
@@ -266,3 +266,22 @@ pub(in crate::operations_evidence) const EVIDENCE_SPECS: &[EvidenceSpec] = &[
         touches_external_provider: false,
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::EVIDENCE_SPECS;
+
+    #[test]
+    fn release_assets_verification_registry_command_uses_final_evidence_flags() {
+        let spec = EVIDENCE_SPECS
+            .iter()
+            .find(|spec| spec.name == "release_assets_verification")
+            .expect("release assets verification spec");
+
+        assert_eq!(
+            spec.command,
+            "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json"
+        );
+        assert!(!spec.command.contains("--run-url"));
+    }
+}
