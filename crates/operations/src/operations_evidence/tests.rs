@@ -495,6 +495,65 @@ fn release_evidence_manifest_tracks_required_artifacts_and_risk_flags() {
     assert!(!lifecycle_email_smoke.contains_secrets);
     assert!(lifecycle_email_smoke.writes_application_state);
     assert!(lifecycle_email_smoke.touches_external_provider);
+
+    let restore_drill = manifest
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "restore_drill")
+        .expect("restore drill artifact");
+    assert!(
+        restore_drill
+            .command
+            .contains("restored production-like Postgres database")
+    );
+    assert!(restore_drill.requires_production_like_environment);
+    assert!(!restore_drill.writes_application_state);
+
+    let signing_key_drill = manifest
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "signing_key_rotation_drill")
+        .expect("signing key rotation artifact");
+    assert!(signing_key_drill.command.contains("state-changing command"));
+    assert!(signing_key_drill.requires_production_like_environment);
+    assert!(signing_key_drill.writes_application_state);
+
+    for name in [
+        "kek_rotation_drill",
+        "break_glass_admin_recovery_drill",
+        "audit_retention_purge_drill",
+    ] {
+        let state_changing_drill = manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.name == name)
+            .expect("state-changing drill artifact");
+        assert!(
+            state_changing_drill
+                .command
+                .contains("production-like or restored Postgres drill database")
+        );
+        assert!(
+            state_changing_drill
+                .command
+                .contains("state-changing command")
+        );
+        assert!(state_changing_drill.requires_production_like_environment);
+        assert!(state_changing_drill.writes_application_state);
+    }
+
+    let audit_export_drill = manifest
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.name == "audit_export_archive_drill")
+        .expect("audit export drill artifact");
+    assert!(
+        audit_export_drill
+            .command
+            .contains("production-like or restored Postgres drill database")
+    );
+    assert!(audit_export_drill.requires_production_like_environment);
+    assert!(!audit_export_drill.writes_application_state);
 }
 
 #[test]
@@ -558,8 +617,61 @@ fn release_evidence_plan_reports_missing_environment_without_values() {
                     .any(|name| *name == "CAIRN_CONFORMANCE_CLIENT_SECRET"))
     );
 
+    let restore_drill = report
+        .steps
+        .iter()
+        .find(|step| step.name == "restore_drill")
+        .expect("restore drill plan step");
+    assert!(
+        restore_drill
+            .command
+            .contains("restored production-like Postgres database")
+    );
+    assert!(
+        restore_drill
+            .required_environment
+            .iter()
+            .any(|requirement| requirement.purpose.contains("release-ready evidence"))
+    );
+
+    let signing_key_drill = report
+        .steps
+        .iter()
+        .find(|step| step.name == "signing_key_rotation_drill")
+        .expect("signing key rotation plan step");
+    assert!(signing_key_drill.writes_application_state);
+    assert!(
+        signing_key_drill
+            .required_environment
+            .iter()
+            .any(|requirement| requirement
+                .purpose
+                .contains("state-changing release evidence"))
+    );
+
+    for name in [
+        "restore_drill",
+        "signing_key_rotation_drill",
+        "kek_rotation_drill",
+        "break_glass_admin_recovery_drill",
+        "audit_export_archive_drill",
+        "audit_retention_purge_drill",
+    ] {
+        let step = report
+            .steps
+            .iter()
+            .find(|step| step.name == name)
+            .expect("Postgres drill plan step");
+        assert!(
+            step.required_environment
+                .iter()
+                .any(|requirement| requirement.purpose.contains("release-ready evidence"))
+        );
+    }
+
     let serialized = serde_json::to_string(&report).expect("serialize plan");
     assert!(serialized.contains("CAIRN_CONFORMANCE_CLIENT_SECRET"));
+    assert!(serialized.contains("local rehearsal receipts are not release-ready evidence"));
     assert!(!serialized.contains("secret-value"));
 }
 
@@ -680,11 +792,14 @@ fn release_evidence_init_writes_guarded_scaffold() {
 
     let readme = fs::read_to_string(root.join("README.md")).expect("read README");
     assert!(readme.contains("Do not commit the evidence artifacts"));
+    assert!(readme.contains("production-like or restored Postgres databases"));
+    assert!(readme.contains("local rehearsal receipts are not release-ready evidence"));
     assert!(readme.contains("dependency-policy-check.json"));
     assert!(readme.contains("CLI/MCP public release assets"));
     assert!(readme.contains("release-assets-verification.json"));
     assert!(readme.contains("cairn-oidcc-static.json"));
     assert!(readme.contains("scim-okta-connector-profile.json"));
+    assert!(readme.contains("Production-like Env"));
     assert!(readme.contains("External Provider"));
 
     let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read .gitignore");

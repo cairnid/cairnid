@@ -3,6 +3,10 @@ use crate::operations_evidence::{
     ReleaseEvidenceEnvironmentRequirement, registry::EvidenceValidator,
 };
 
+const DRILL_DATABASE_PURPOSE: &str = "production-like or restored Postgres drill database for release evidence; local rehearsal receipts are not release-ready evidence";
+const RESTORED_DRILL_DATABASE_PURPOSE: &str = "restored production-like Postgres database for release evidence; local rehearsal receipts are not release-ready evidence";
+const STATE_CHANGING_DRILL_DATABASE_PURPOSE: &str = "production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence";
+
 pub(super) fn evidence_environment_requirements(
     validator: EvidenceValidator,
 ) -> Vec<ReleaseEvidenceEnvironmentRequirement> {
@@ -191,7 +195,11 @@ pub(super) fn evidence_environment_requirements(
             ),
         ],
         EvidenceValidator::RestoreDrill => vec![
-            env_req(vec![vec!["DATABASE_URL"]], "restored database URL", true),
+            env_req(
+                vec![vec!["DATABASE_URL"]],
+                RESTORED_DRILL_DATABASE_PURPOSE,
+                true,
+            ),
             env_req(
                 vec![
                     vec!["CAIRN_KEY_ENCRYPTION_KEY"],
@@ -206,7 +214,11 @@ pub(super) fn evidence_environment_requirements(
             ),
         ],
         EvidenceValidator::BreakGlassAdminRecovery => vec![
-            env_req(vec![vec!["DATABASE_URL"]], "database connectivity", true),
+            env_req(
+                vec![vec!["DATABASE_URL"]],
+                STATE_CHANGING_DRILL_DATABASE_PURPOSE,
+                true,
+            ),
             env_req(
                 vec![vec!["CAIRN_BREAK_GLASS_CONFIRM"]],
                 "explicit break-glass acknowledgement",
@@ -214,7 +226,11 @@ pub(super) fn evidence_environment_requirements(
             ),
         ],
         EvidenceValidator::SigningKeyRotation => vec![
-            env_req(vec![vec!["DATABASE_URL"]], "database connectivity", true),
+            env_req(
+                vec![vec!["DATABASE_URL"]],
+                STATE_CHANGING_DRILL_DATABASE_PURPOSE,
+                true,
+            ),
             env_req(
                 vec![vec!["CAIRN_KEY_ENCRYPTION_KEY"]],
                 "database-backed signing-key encryption",
@@ -222,7 +238,11 @@ pub(super) fn evidence_environment_requirements(
             ),
         ],
         EvidenceValidator::KeyEncryptionRotation => vec![
-            env_req(vec![vec!["DATABASE_URL"]], "database connectivity", true),
+            env_req(
+                vec![vec!["DATABASE_URL"]],
+                STATE_CHANGING_DRILL_DATABASE_PURPOSE,
+                true,
+            ),
             env_req(
                 vec![vec!["CAIRN_OLD_KEY_ENCRYPTION_KEY"]],
                 "old database key-encryption key",
@@ -235,11 +255,12 @@ pub(super) fn evidence_environment_requirements(
             ),
         ],
         EvidenceValidator::AuditExportArchive | EvidenceValidator::AuditRetentionPurge => {
-            vec![env_req(
-                vec![vec!["DATABASE_URL"]],
-                "database connectivity",
-                true,
-            )]
+            let purpose = if matches!(validator, EvidenceValidator::AuditRetentionPurge) {
+                STATE_CHANGING_DRILL_DATABASE_PURPOSE
+            } else {
+                DRILL_DATABASE_PURPOSE
+            };
+            vec![env_req(vec![vec!["DATABASE_URL"]], purpose, true)]
         }
     }
 }
