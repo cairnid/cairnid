@@ -74,12 +74,10 @@ pub(super) fn reject_forbidden_token_free_release_evidence_fields(
                 );
             }
         }
-        Value::String(text) => {
-            if is_credential_shaped_token_free_value(text) {
-                failures.push(format!(
-                    "{path} value is credential-shaped in token-free release evidence artifact {artifact_name}"
-                ));
-            }
+        Value::String(text) if is_credential_shaped_token_free_value(text) => {
+            failures.push(format!(
+                "{path} value is credential-shaped in token-free release evidence artifact {artifact_name}"
+            ));
         }
         _ => {}
     }
