@@ -46,11 +46,50 @@ fn scaffold_readme_contains_required_operator_guidance_and_artifact_table() {
     assert!(readme.contains("restore, signing-key rotation, KEK rotation"));
     assert!(readme.contains("local rehearsal receipts are not release-ready evidence"));
     assert!(readme.contains("Do not add screenshots, raw provider exports"));
+    assert!(readme.contains("## High-Risk Review"));
+    assert!(readme.contains("### Secret-Containing Artifacts"));
+    assert!(readme.contains("### Production-Like Environment Artifacts"));
+    assert!(readme.contains("### State-Changing Artifacts"));
+    assert!(readme.contains("### External-Provider Artifacts"));
+    assert!(readme.contains("This scaffold is an operator checklist only"));
+    assert!(readme.contains("does not produce artifacts, prove release approval"));
     assert!(readme.contains("| Release Gate | File | Command | Secrets | Production-like Env |"));
     assert!(readme.contains("`operations-preflight.json`"));
     assert!(readme.contains("CLI/MCP public release assets"));
     assert!(readme.contains("`release-assets-verification.json`"));
     assert!(readme.contains("`cairn-oidcc-static.json`"));
+    assert!(readme.contains("`cairn-oidcc-static.json`: secret-containing static OpenID config"));
+    assert!(readme.contains(
+        "`lifecycle-email-smoke.json`: state-changing plus external-provider email evidence"
+    ));
+    assert!(readme.contains(
+        "`signing-key-rotation-drill.json`: state-changing key-operations drill evidence"
+    ));
+    assert!(
+        readme.contains(
+            "`release-assets-verification.json`: external-provider release-asset evidence"
+        )
+    );
+    assert!(readme.contains("Workflow-run and rehearsal receipts are not final release evidence"));
+}
+
+#[test]
+fn scaffold_manifest_notes_call_out_high_risk_artifact_classes() {
+    let manifest = release_evidence_manifest(generated_at());
+    let notes = manifest.notes.join("\n");
+
+    assert!(notes.contains("operator checklist only"));
+    assert!(notes.contains("does not produce artifacts"));
+    assert!(notes.contains("contains_secrets"));
+    assert!(notes.contains("requires_production_like_environment"));
+    assert!(notes.contains("writes_application_state"));
+    assert!(notes.contains("touches_external_provider"));
+    assert!(notes.contains("cairn-oidcc-static.json"));
+    assert!(notes.contains("lifecycle-email-smoke.json"));
+    assert!(notes.contains("signing-key-rotation-drill.json"));
+    assert!(notes.contains("release-assets-verification.json"));
+    assert!(notes.contains("normalized token-free receipts"));
+    assert!(notes.contains("workflow-run and rehearsal receipts are not final release evidence"));
 }
 
 #[test]

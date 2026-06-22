@@ -1,4 +1,4 @@
-use super::super::ReleaseEvidenceManifest;
+use super::super::{ReleaseEvidenceManifest, ReleaseEvidenceManifestArtifact};
 
 pub(super) fn release_evidence_readme(manifest: &ReleaseEvidenceManifest) -> String {
     let mut readme = String::new();
@@ -25,6 +25,7 @@ pub(super) fn release_evidence_readme(manifest: &ReleaseEvidenceManifest) -> Str
     readme.push_str("5. Run `cairnid evidence check <evidence-dir>` before the first public RC and each public release.\n");
     readme.push_str("6. Do not commit the evidence artifacts.\n");
     readme.push_str("7. Do not add screenshots, raw provider exports, logs, or extra files to this directory.\n\n");
+    push_high_risk_review(&mut readme, manifest);
     readme.push_str("## Required Artifacts\n\n");
     readme.push_str("| Release Gate | File | Command | Secrets | Production-like Env | Mutates | External Provider |\n");
     readme.push_str("| --- | --- | --- | --- | --- | --- | --- |\n");
@@ -47,6 +48,91 @@ pub(super) fn release_evidence_readme(manifest: &ReleaseEvidenceManifest) -> Str
         readme.push('\n');
     }
     readme
+}
+
+fn push_high_risk_review(readme: &mut String, manifest: &ReleaseEvidenceManifest) {
+    readme.push_str("## High-Risk Review\n\n");
+    readme.push_str(
+        "This scaffold is an operator checklist only. It does not produce artifacts, prove release approval, or claim production readiness. ",
+    );
+    readme.push_str(
+        "Before running any command, review every `yes` flag in the table and confirm the exact target environment, provider, and approval path outside this directory.\n\n",
+    );
+    readme.push_str("### Secret-Containing Artifacts\n\n");
+    readme.push_str(
+        "Files listed here can contain or derive from secrets. Keep them access-controlled, do not commit them, and do not paste them into issue, PR, ticket, chat, or provider support systems.\n\n",
+    );
+    push_artifact_group(
+        readme,
+        manifest
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.contains_secrets),
+    );
+    readme.push_str("### Production-Like Environment Artifacts\n\n");
+    readme.push_str(
+        "Files listed here must come from the required production-like HTTPS deployment, external suite, connector, provider, or approved restored/drill Postgres target. Local rehearsal receipts are not release-ready evidence.\n\n",
+    );
+    push_artifact_group(
+        readme,
+        manifest
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.requires_production_like_environment),
+    );
+    readme.push_str("### State-Changing Artifacts\n\n");
+    readme.push_str(
+        "Files listed here can write application, tenant, provider, or drill-database state. Confirm the target, backup/restore posture, and operator approval before running them.\n\n",
+    );
+    push_artifact_group(
+        readme,
+        manifest
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.writes_application_state),
+    );
+    readme.push_str("### External-Provider Artifacts\n\n");
+    readme.push_str(
+        "Files listed here require action against systems outside CairnID. Save only the normalized JSON receipt expected by `cairnid evidence check`; do not archive raw provider exports, debug logs, request headers, cookies, bearer tokens, client secrets, screenshots, or copied stdout/stderr.\n\n",
+    );
+    push_artifact_group(
+        readme,
+        manifest
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.touches_external_provider),
+    );
+    readme.push_str("### Example Gate Checks\n\n");
+    readme.push_str(
+        "- `cairn-oidcc-static.json`: secret-containing static OpenID config for the target issuer; keep it access-controlled and never commit or paste it.\n",
+    );
+    readme.push_str(
+        "- `lifecycle-email-smoke.json`: state-changing plus external-provider email evidence; use controlled recipients and keep lifecycle URLs, tokens, provider credentials, provider logs, and screenshots out of the saved JSON.\n",
+    );
+    readme.push_str(
+        "- `signing-key-rotation-drill.json`: state-changing key-operations drill evidence; confirm `DATABASE_URL` points at the approved production-like or restored Postgres drill database before running the rotation command.\n",
+    );
+    readme.push_str(
+        "- `release-assets-verification.json`: external-provider release-asset evidence; capture it only after a published GitHub Release exists, assets are downloaded, and provenance plus SBOM attestation checks have passed. Workflow-run and rehearsal receipts are not final release evidence.\n\n",
+    );
+}
+
+fn push_artifact_group<'a, I>(readme: &mut String, artifacts: I)
+where
+    I: IntoIterator<Item = &'a ReleaseEvidenceManifestArtifact>,
+{
+    let mut found = false;
+    for artifact in artifacts {
+        found = true;
+        readme.push_str(&format!(
+            "- `{}` ({}) - `{}`\n",
+            artifact.file_name, artifact.release_gate, artifact.command
+        ));
+    }
+    if !found {
+        readme.push_str("- None.\n");
+    }
+    readme.push('\n');
 }
 
 fn yes_no(value: bool) -> &'static str {

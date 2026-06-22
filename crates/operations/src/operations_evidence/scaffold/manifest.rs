@@ -34,6 +34,11 @@ pub(in crate::operations_evidence) fn release_evidence_manifest_from_specs(
         notes: vec![
             "Store release evidence in an access-controlled directory.",
             "Do not commit cairn-oidcc-static.json because it contains OIDC client secrets.",
+            "This manifest is an operator checklist only; it does not produce artifacts, prove release approval, or claim production readiness.",
+            "Review contains_secrets, requires_production_like_environment, writes_application_state, and touches_external_provider before running any command.",
+            "State-changing artifacts such as lifecycle-email-smoke.json and signing-key-rotation-drill.json require explicit approval and an approved production-like or restored drill target.",
+            "External-provider artifacts such as release-assets-verification.json and lifecycle-email-smoke.json must be normalized token-free receipts without raw provider exports, logs, screenshots, request headers, cookies, or tokens.",
+            "release-assets-verification.json is final release evidence only after a published GitHub Release exists and provenance plus SBOM attestation checks have passed; workflow-run and rehearsal receipts are not final release evidence.",
             "Run cairnid evidence check against the completed directory before the first public RC and each public release.",
         ],
     }
