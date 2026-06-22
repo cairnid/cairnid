@@ -15,6 +15,8 @@ Start it from the repository root. When `--evidence-root` is omitted, the proces
 cargo run -p cairnid-mcp --locked
 ```
 
+During stdio protocol use, stdout is reserved for newline-delimited MCP JSON-RPC messages. The server ignores inherited Rust logging and backtrace environment settings for normal stdio logging, so successful protocol requests do not emit ambient diagnostics to stdout or stderr. Startup failures that happen before JSON-RPC begins, such as an invalid `--evidence-root <DIR>`, still exit non-zero and write the documented startup error to stderr.
+
 MCP clients can launch the server from any working directory by passing an explicit evidence root:
 
 ```powershell
