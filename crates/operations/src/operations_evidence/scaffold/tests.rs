@@ -43,8 +43,10 @@ fn scaffold_readme_contains_required_operator_guidance_and_artifact_table() {
 
     assert!(readme.contains("Do not commit the evidence artifacts"));
     assert!(readme.contains("cairnid evidence check <evidence-dir>"));
+    assert!(readme.contains("restore, signing-key rotation, KEK rotation"));
+    assert!(readme.contains("local rehearsal receipts are not release-ready evidence"));
     assert!(readme.contains("Do not add screenshots, raw provider exports"));
-    assert!(readme.contains("| Release Gate | File | Command |"));
+    assert!(readme.contains("| Release Gate | File | Command | Secrets | Production-like Env |"));
     assert!(readme.contains("`operations-preflight.json`"));
     assert!(readme.contains("CLI/MCP public release assets"));
     assert!(readme.contains("`release-assets-verification.json`"));

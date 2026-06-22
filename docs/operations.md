@@ -128,6 +128,8 @@ cairnid evidence plan
 
 The plan reports every required artifact, command, validator, safety flag, required environment variable names, and missing capture inputs. It exits non-zero until required variable names are present. It does not validate secret values or deployed behavior; `cairn-api operations preflight`, the smoke commands, external conformance results, and `cairnid evidence check` still own those checks.
 
+For the Postgres-backed operations drills, release evidence must come from a production-like or restored database. `restore-drill.json` must point at a restored production-like database. `signing-key-rotation-drill.json`, `kek-rotation-drill.json`, `break-glass-admin-recovery-drill.json`, and `audit-retention-purge-drill.json` are state-changing receipts and require an approved drill database. `audit-export-archive-drill.json` is read-only but still must be captured from the production-like or restored Postgres database being proven. Local rehearsal is only for disposable or restored databases, and local rehearsal receipts are not release-ready evidence.
+
 Then initialize an access-controlled evidence directory:
 
 ```powershell
@@ -204,12 +206,12 @@ The command validates these required artifact names:
 - `security-headers-smoke.json`: output from `cairn-api operations security-headers-smoke`; must be `status="ok"`, use HTTPS API and web origins, include a valid completion timestamp, and prove CSP, HSTS, hardening headers, and web health no-store behavior on deployed API and web responses.
 - `email-provider-smoke.json`: output from `cairn-api email-outbox smoke-provider <recipient-email>`; must be `status="sent"`, provider `command`, include a valid `completed_at`, include a recipient address containing `@`, and use a non-empty `provider_message_id` when the provider returns one.
 - `lifecycle-email-smoke.json`: output from `cairn-api email-outbox lifecycle-smoke-evidence`; must be `status="completed"`, provider `command`, include a valid `completed_at`, and include `sent` message evidence for `invitation`, `email_verification`, `password_recovery`, `password_recovered_notification`, `password_changed_notification`, and `new_login_notification`.
-- `restore-drill.json`: output from `cairn-api operations restore-check`; must be `status="ok"`, no failures, include a valid `completed_at`, applied migrations present, configured default organization UUID present, and either decryptable restored database signing/JWKS material or configured legacy signing material.
-- `signing-key-rotation-drill.json`: output from `cairn-api signing-key rotate`; must be `status="rotated"`, include a non-empty `active_kid`, set `active=true`, and include a valid `completed_at`.
-- `kek-rotation-drill.json`: output from `cairn-api key-encryption rotate`; must be `status="rotated"`, include a valid `completed_at`, report at least one re-encrypted signing key, and include a non-negative lifecycle delivery token count.
-- `break-glass-admin-recovery-drill.json`: output from `cairn-api admin break-glass-owner <user-email>`; must be `status="granted"`, include a valid `completed_at`, organization/user/admin group UUIDs, non-empty user email, valid before/final user statuses, final `user_status_after="active"`, final `membership_role_after="owner"`, and an audit event UUID.
-- `audit-export-archive-drill.json`: output from `cairn-api audit export-ndjson <output-path>`; must be `status="ok"`, include a valid `completed_at`, organization UUID, create-only output path, row/byte counts, limit/ceiling values, cursor consistency with UUID `next_after_id` when `has_more=true`, and well-typed filters with UUID actor IDs when present.
-- `audit-retention-purge-drill.json`: output from `cairn-api audit purge-expired`; must be `status="ok"`, include organization UUID, valid `completed_at`, valid cutoff timestamp, retention days within 30..3650, batch size within 1..50000, and `deleted <= batch_size`.
+- `restore-drill.json`: output from `cairn-api operations restore-check` with `DATABASE_URL` pointing at a restored production-like Postgres database; must be `status="ok"`, no failures, include a valid `completed_at`, applied migrations present, configured default organization UUID present, and either decryptable restored database signing/JWKS material or configured legacy signing material.
+- `signing-key-rotation-drill.json`: output from state-changing `cairn-api signing-key rotate` with `DATABASE_URL` pointing at a production-like or restored Postgres drill database; must be `status="rotated"`, include a non-empty `active_kid`, set `active=true`, and include a valid `completed_at`.
+- `kek-rotation-drill.json`: output from state-changing `cairn-api key-encryption rotate` with `DATABASE_URL` pointing at a production-like or restored Postgres drill database; must be `status="rotated"`, include a valid `completed_at`, report at least one re-encrypted signing key, and include a non-negative lifecycle delivery token count.
+- `break-glass-admin-recovery-drill.json`: output from state-changing `cairn-api admin break-glass-owner <user-email>` with `DATABASE_URL` pointing at a production-like or restored Postgres drill database; must be `status="granted"`, include a valid `completed_at`, organization/user/admin group UUIDs, non-empty user email, valid before/final user statuses, final `user_status_after="active"`, final `membership_role_after="owner"`, and an audit event UUID.
+- `audit-export-archive-drill.json`: output from `cairn-api audit export-ndjson <output-path>` with `DATABASE_URL` pointing at a production-like or restored Postgres drill database; must be `status="ok"`, include a valid `completed_at`, organization UUID, create-only output path, row/byte counts, limit/ceiling values, cursor consistency with UUID `next_after_id` when `has_more=true`, and well-typed filters with UUID actor IDs when present.
+- `audit-retention-purge-drill.json`: output from state-changing `cairn-api audit purge-expired` with `DATABASE_URL` pointing at a production-like or restored Postgres drill database; must be `status="ok"`, include organization UUID, valid `completed_at`, valid cutoff timestamp, retention days within 30..3650, batch size within 1..50000, and `deleted <= batch_size`.
 
 Lifecycle email smoke evidence must stay token-free. Generate it from sent outbox rows after the provider-specific lifecycle smoke:
 
@@ -328,7 +330,7 @@ Full connector setup and supported filter details are documented in [scim.md](sc
 
 ## Break-Glass Admin Recovery
 
-Use break-glass only when every normal administrator is locked out or demoted. It is an operator command backed by database credentials, so it intentionally bypasses browser admin authorization.
+Use break-glass only when every normal administrator is locked out or demoted. It is an operator command backed by database credentials, so it intentionally bypasses browser admin authorization. For release drill evidence, run it only against a production-like or restored Postgres drill database; local rehearsal belongs on disposable or restored databases and does not produce release-ready evidence.
 
 The target must already be an organization user. The command does not create a user and does not set or reset a password. It reactivates the user, ensures the built-in `administrators` group exists, grants `owner` membership, and writes a system audit event in the same database transaction.
 
@@ -366,7 +368,7 @@ Minimum backup schedule before the first public RC:
 
 ## Audit Retention And Export
 
-Audit events are organization-scoped investigation evidence. Keep enough history for incident response and compliance, then purge explicitly from an operator-controlled job.
+Audit events are organization-scoped investigation evidence. Keep enough history for incident response and compliance, then purge explicitly from an operator-controlled job. For release drill evidence, run export and purge against a production-like or restored Postgres drill database; local rehearsal belongs on disposable or restored databases and does not produce release-ready evidence.
 
 Export filtered audit data from an operator shell for archive evidence:
 
@@ -414,7 +416,7 @@ Recommended schedule:
 
 ## Restore
 
-Restore into a fresh database, not over a live database:
+Restore into a fresh database, not over a live database. Release `restore-drill.json` evidence must come from this restored production-like Postgres database; local rehearsal restore checks are useful practice but are not release-ready evidence.
 
 ```powershell
 createdb cairn_identity_restore
@@ -442,7 +444,7 @@ The command does not run migrations and does not write application rows. It veri
 
 ## Signing-Key Rotation
 
-Signing keys are RS256 keys stored in Postgres with encrypted private PEM material.
+Signing keys are RS256 keys stored in Postgres with encrypted private PEM material. Rotation is state-changing; for release drill evidence, run it only against an approved production-like or restored Postgres drill database, not a developer database.
 
 Generate or confirm the active key:
 
@@ -477,7 +479,7 @@ Current ID tokens expire after 10 minutes. Keep a conservative overlap of at lea
 
 ## KEK Rotation
 
-The KEK encrypts database-backed signing private keys and lifecycle email delivery tokens. Rotate it in a maintenance window because the API and email worker must use the same KEK as the encrypted database rows.
+The KEK encrypts database-backed signing private keys and lifecycle email delivery tokens. Rotate it in a maintenance window because the API and email worker must use the same KEK as the encrypted database rows. Re-encryption is state-changing; for release drill evidence, run it only against an approved production-like or restored Postgres drill database, not a developer database.
 
 Safe rotation procedure:
 
