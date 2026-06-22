@@ -170,7 +170,7 @@ Runtime variables:
 
 ## Windows Build Notes
 
-The workspace requires Rust stable 1.94 or newer. `sqlx 0.9` sets the current dependency floor. `webauthn-rs` depends on OpenSSL, and the AWS-LC JWT backend depends on CMake and NASM. On Windows without Visual Studio Build Tools, use:
+The workspace requires Rust stable 1.96 or newer. `webauthn-rs` depends on OpenSSL, and the AWS-LC JWT backend depends on CMake and NASM. On Windows without Visual Studio Build Tools, use:
 
 ```powershell
 rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal --component rustfmt --component clippy

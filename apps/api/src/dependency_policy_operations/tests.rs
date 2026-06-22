@@ -23,7 +23,7 @@ fn dependency_policy_evidence_reports_expected_checks_without_command_output() {
                 ("cargo", ["audit", "--version"]) => {
                     command_result_with_stdout(Some(0), b"cargo-audit 0.22.2\n".to_vec())
                 }
-                ("bun", ["--version"]) => command_result_with_stdout(Some(0), b"1.3.4\n".to_vec()),
+                ("bun", ["--version"]) => command_result_with_stdout(Some(0), b"1.3.14\n".to_vec()),
                 _ => DependencyPolicyCommandResult {
                     exit_code: Some(0),
                     stdout_bytes: 128,

@@ -11,7 +11,7 @@
   },
   "homepage": "https://github.com/cairnid/cairnid#readme",
   "type": "module",
-  "packageManager": "bun@1.3.4",
+  "packageManager": "bun@1.3.14",
   "scripts": {
     "dev": "bun run --cwd apps/web dev",
     "build": "bun run --cwd apps/web build",

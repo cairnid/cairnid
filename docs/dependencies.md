@@ -30,7 +30,7 @@ CI installs pinned versions of the policy tools:
 
 - `cargo-deny 0.19.8`
 - `cargo-audit 0.22.2`
-- `bun 1.3.4`
+- `bun 1.3.14`
 
 ## Cargo Policy
 
@@ -66,7 +66,7 @@ Before adding or materially changing a direct dependency:
 
 ## Notes
 
-- The workspace Rust floor is 1.94 because `sqlx 0.9` declares that MSRV.
+- The workspace Rust floor is 1.96 for this RC toolchain.
 - JWT signing uses `jsonwebtoken` with the `aws_lc_rs` backend.
 - Signing-key generation/export uses `openssl`, which is already required by WebAuthn support.
 - Startup origin validation uses the `url` crate instead of ad hoc string parsing.

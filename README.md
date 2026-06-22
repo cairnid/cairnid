@@ -9,8 +9,8 @@
 <p align="center">
   <a href="https://github.com/cairnid/cairnid/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/cairnid/cairnid/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
-  <img alt="Rust" src="https://img.shields.io/badge/rust-1.94%2B-f46623">
-  <img alt="Bun" src="https://img.shields.io/badge/bun-1.3.4-black">
+  <img alt="Rust" src="https://img.shields.io/badge/rust-1.96%2B-f46623">
+  <img alt="Bun" src="https://img.shields.io/badge/bun-1.3.14-black">
 </p>
 
 <p align="center">
