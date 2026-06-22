@@ -1,4 +1,4 @@
-use super::{errors::config_error, errors::config_error_owned, report};
+use super::{errors::config_error, errors::config_error_owned, lifecycle_smoke, report};
 use crate::{
     config::ApiConfig,
     email::{deliver_once, smoke_provider},
@@ -28,6 +28,9 @@ pub(crate) async fn run_email_outbox_command(
             let report = smoke_provider(&config, recipient_email).await?;
             println!("{}", serde_json::to_string_pretty(&report)?);
             Ok(())
+        }
+        Some("lifecycle-smoke-local") => {
+            lifecycle_smoke::run_local_lifecycle_smoke_command(&args[1..]).await
         }
         Some("lifecycle-smoke-evidence") => {
             let config = ApiConfig::from_env()?;
@@ -60,7 +63,7 @@ pub(crate) async fn run_email_outbox_command(
             }
         }
         _ => Err(config_error(
-            "usage: cairn-api email-outbox <deliver-once|smoke-provider <recipient-email>|lifecycle-smoke-evidence>",
+            "usage: cairn-api email-outbox <deliver-once|smoke-provider <recipient-email>|lifecycle-smoke-local|lifecycle-smoke-evidence>",
         )),
     }
 }

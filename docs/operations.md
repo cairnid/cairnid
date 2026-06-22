@@ -548,4 +548,12 @@ cairn-api email-outbox smoke-provider ops@example.com
 
 The smoke command uses the configured provider with a synthetic `provider_smoke` payload. It does not connect to Postgres, does not create account tokens, and does not include lifecycle URLs or user secrets. It prints a JSON report with `status`, `provider`, `recipient_email`, RFC3339 `completed_at`, and optional `provider_message_id`, and exits non-zero if the provider command cannot accept the message.
 
+For deterministic local rehearsal without contacting a real mailbox, run:
+
+```powershell
+cairn-api email-outbox lifecycle-smoke-local > lifecycle-email-smoke.json
+```
+
+The local smoke is development-only. It uses the reserved recipient `lifecycle-smoke@example.invalid`, refuses to run when any unfinished outbox rows already exist, creates one invitation, one verification email, one recovery email, one password-recovered notification, one password-change notification, and one first-seen login notification, delivers exactly those six messages through a generated fake command provider, and prints the same token-free lifecycle email evidence receipt accepted by the release-evidence checker.
+
 Before the first public RC, first run `smoke-provider` against the chosen production provider command and a controlled recipient mailbox. Then run a provider-specific lifecycle and security-notification smoke that creates one invitation, one verification email, one recovery email, one password-recovered notification, one password-change notification, and one first-seen login notification, runs `deliver-once`, confirms the provider accepted all six real account messages, and records the token-free receipt with `cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json`.

@@ -1,9 +1,11 @@
 use super::{
-    provider::email_provider_name, report::lifecycle_email_smoke_evidence_report_from_messages,
+    lifecycle_smoke, provider::email_provider_name,
+    report::lifecycle_email_smoke_evidence_report_from_messages,
 };
 use crate::config::EmailProviderConfig;
 use crate::operations_evidence::REQUIRED_LIFECYCLE_EMAIL_KINDS;
 use cairn_database::LifecycleEmailEvidenceMessage;
+use std::collections::BTreeSet;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
@@ -114,6 +116,76 @@ fn email_provider_name_matches_configured_provider() {
         }),
         "command"
     );
+}
+
+#[test]
+fn lifecycle_smoke_local_command_rejects_arguments() {
+    lifecycle_smoke::validate_lifecycle_smoke_local_args(&[])
+        .expect("no-argument local smoke command should be accepted");
+
+    let error = lifecycle_smoke::validate_lifecycle_smoke_local_args(&["extra".to_owned()])
+        .expect_err("local smoke command must reject unexpected input");
+
+    assert_eq!(
+        error.to_string(),
+        "usage: cairn-api email-outbox lifecycle-smoke-local"
+    );
+}
+
+#[test]
+fn lifecycle_smoke_local_recipient_is_reserved() {
+    assert!(lifecycle_smoke::recipient_is_reserved_local_address(
+        lifecycle_smoke::LOCAL_LIFECYCLE_SMOKE_RECIPIENT
+    ));
+
+    for recipient in [
+        "ops@example.com",
+        "lifecycle-smoke@example.test",
+        "lifecycle smoke@example.invalid",
+        "lifecycle-smokeexample.invalid",
+    ] {
+        assert!(
+            !lifecycle_smoke::recipient_is_reserved_local_address(recipient),
+            "{recipient} should not be accepted for local lifecycle smoke"
+        );
+    }
+}
+
+#[test]
+fn lifecycle_smoke_local_specs_cover_required_evidence_kinds() {
+    let specs = lifecycle_smoke::lifecycle_smoke_message_specs();
+    let kinds = specs.iter().map(|spec| spec.kind).collect::<BTreeSet<_>>();
+    let required = REQUIRED_LIFECYCLE_EMAIL_KINDS
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(kinds, required);
+    assert_eq!(specs.len(), REQUIRED_LIFECYCLE_EMAIL_KINDS.len());
+    for spec in specs {
+        if matches!(
+            spec.kind,
+            "invitation" | "email_verification" | "password_recovery"
+        ) {
+            assert!(
+                spec.action_path.is_some(),
+                "{} needs an action URL",
+                spec.kind
+            );
+            assert!(spec.token_kind.is_some(), "{} needs a token", spec.kind);
+        } else {
+            assert!(
+                spec.action_path.is_none(),
+                "{} must remain token-free",
+                spec.kind
+            );
+            assert!(
+                spec.token_kind.is_none(),
+                "{} must remain token-free",
+                spec.kind
+            );
+        }
+    }
 }
 
 fn required_kinds() -> Vec<String> {
