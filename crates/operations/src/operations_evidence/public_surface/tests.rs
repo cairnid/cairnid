@@ -93,17 +93,8 @@ fn browser_origin_smoke_rejects_read_routes_and_mismatched_route_count() {
 }
 
 #[test]
-fn security_headers_smoke_requires_api_and_web_coverage() {
-    let value = json!({
-        "status": "ok",
-        "api_base_url": "https://id.example.com",
-        "web_base_url": "https://app.example.com",
-        "completed_at": "2026-06-07T12:00:00Z",
-        "checks": [
-            security_header_check("api", "/.well-known/openid-configuration"),
-            security_header_check("web", "/login")
-        ]
-    });
+fn security_headers_smoke_accepts_exact_deployed_smoke_coverage() {
+    let value = security_headers_smoke(complete_security_header_checks());
     let mut checks = Vec::new();
     let mut failures = Vec::new();
 
@@ -114,17 +105,28 @@ fn security_headers_smoke_requires_api_and_web_coverage() {
 }
 
 #[test]
-fn security_headers_smoke_rejects_missing_web_and_bad_cache_control() {
-    let mut check = security_header_check("api", "/.well-known/jwks.json");
-    check["cache_control_no_store"] = json!(false);
-    check["strict_transport_security"] = json!(false);
-    let value = json!({
-        "status": "ok",
-        "api_base_url": "https://id.example.com",
-        "web_base_url": "https://app.example.com",
-        "completed_at": "2026-06-07T12:00:00Z",
-        "checks": [check]
-    });
+fn security_headers_smoke_rejects_missing_expected_path() {
+    let value = security_headers_smoke(vec![
+        security_header_check("api", "/healthz"),
+        security_header_check("api", "/.well-known/openid-configuration"),
+        security_header_check("web", "/healthz"),
+    ]);
+    let mut checks = Vec::new();
+    let mut failures = Vec::new();
+
+    validate_security_headers_smoke(&value, &mut checks, &mut failures);
+
+    assert!(
+        failures.iter().any(|failure| failure
+            == "checks must include deployed security-header check for web /login")
+    );
+}
+
+#[test]
+fn security_headers_smoke_rejects_duplicate_path() {
+    let mut smoke_checks = complete_security_header_checks();
+    smoke_checks.push(security_header_check("api", "/healthz"));
+    let value = security_headers_smoke(smoke_checks);
     let mut checks = Vec::new();
     let mut failures = Vec::new();
 
@@ -133,16 +135,76 @@ fn security_headers_smoke_rejects_missing_web_and_bad_cache_control() {
     assert!(
         failures
             .iter()
-            .any(|failure| failure == "checks must include a web service response")
+            .any(|failure| failure == "checks[4] duplicates checks[0] for api /healthz")
     );
+}
+
+#[test]
+fn security_headers_smoke_rejects_unexpected_path_service_and_bad_path() {
+    let mut smoke_checks = complete_security_header_checks();
+    smoke_checks.push(security_header_check("api", "/.well-known/jwks.json"));
+    smoke_checks.push(security_header_check("admin", "/healthz"));
+    smoke_checks.push(security_header_check("web", "login"));
+    let value = security_headers_smoke(smoke_checks);
+    let mut checks = Vec::new();
+    let mut failures = Vec::new();
+
+    validate_security_headers_smoke(&value, &mut checks, &mut failures);
+
     assert!(failures.iter().any(|failure| {
-        failure == "checks[0].cache_control_no_store must be true or null when present"
+        failure
+            == "checks[4] must target one of the deployed security-header smoke paths, got api /.well-known/jwks.json"
+    }));
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure == "checks[5].service must be api or web, got admin")
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure == "checks[6].path must start with /, got login")
+    );
+}
+
+#[test]
+fn security_headers_smoke_preserves_per_check_header_validation() {
+    let mut smoke_checks = complete_security_header_checks();
+    smoke_checks[2]["cache_control_no_store"] = json!(false);
+    smoke_checks[2]["strict_transport_security"] = json!(false);
+    let value = security_headers_smoke(smoke_checks);
+    let mut checks = Vec::new();
+    let mut failures = Vec::new();
+
+    validate_security_headers_smoke(&value, &mut checks, &mut failures);
+
+    assert!(failures.iter().any(|failure| {
+        failure == "checks[2].cache_control_no_store must be true or null when present"
     }));
     assert!(
         failures
             .iter()
             .any(|failure| failure == "strict_transport_security must be true, got false")
     );
+}
+
+fn security_headers_smoke(checks: Vec<serde_json::Value>) -> serde_json::Value {
+    json!({
+        "status": "ok",
+        "api_base_url": "https://id.example.com",
+        "web_base_url": "https://app.example.com",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "checks": checks
+    })
+}
+
+fn complete_security_header_checks() -> Vec<serde_json::Value> {
+    vec![
+        security_header_check("api", "/healthz"),
+        security_header_check("api", "/.well-known/openid-configuration"),
+        security_header_check("web", "/healthz"),
+        security_header_check("web", "/login"),
+    ]
 }
 
 fn security_header_check(service: &str, path: &str) -> serde_json::Value {
