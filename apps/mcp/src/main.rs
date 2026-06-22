@@ -406,8 +406,8 @@ fn evidence_result_output_schema<T: JsonSchema + 'static>() -> std::sync::Arc<Js
     let mut error = rmcp::handler::server::common::schema_for_type::<McpEvidenceErrorEnvelope>()
         .as_ref()
         .clone();
-    pin_schema_version_const(&mut success);
-    pin_schema_version_const(&mut error);
+    pin_schema_version_consts(&mut success);
+    pin_schema_version_consts(&mut error);
     let mut definitions = JsonObject::new();
     hoist_schema_definitions(&mut success, &mut definitions);
     hoist_schema_definitions(&mut error, &mut definitions);
@@ -431,15 +431,43 @@ fn evidence_result_output_schema<T: JsonSchema + 'static>() -> std::sync::Arc<Js
     std::sync::Arc::new(schema)
 }
 
+fn pin_schema_version_consts(schema: &mut JsonObject) {
+    pin_schema_version_const(schema);
+    for value in schema.values_mut() {
+        pin_schema_version_consts_in_value(value);
+    }
+}
+
+fn pin_schema_version_consts_in_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(object) => {
+            pin_schema_version_const(object);
+            for child in object.values_mut() {
+                pin_schema_version_consts_in_value(child);
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for child in values {
+                pin_schema_version_consts_in_value(child);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn pin_schema_version_const(schema: &mut JsonObject) {
-    let properties = schema
+    let Some(properties) = schema
         .get_mut("properties")
         .and_then(serde_json::Value::as_object_mut)
-        .expect("MCP output schema should advertise properties");
-    let schema_version = properties
+    else {
+        return;
+    };
+    let Some(schema_version) = properties
         .get_mut("schema_version")
         .and_then(serde_json::Value::as_object_mut)
-        .expect("MCP output schema should advertise schema_version");
+    else {
+        return;
+    };
 
     schema_version.insert(
         "const".to_owned(),
@@ -1572,6 +1600,11 @@ mod tests {
             error_body,
             "summary",
             &format!("{tool_name} incomplete-check error body"),
+        );
+        let summary = resolve_schema(root, summary);
+        assert_schema_pins_schema_version_const(
+            summary,
+            &format!("{tool_name} incomplete-check error summary"),
         );
         assert_schema_array_items_require_release_gate(
             root,

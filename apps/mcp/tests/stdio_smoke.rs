@@ -23,6 +23,7 @@ use time::OffsetDateTime;
 
 const DEFAULT_EVIDENCE_CHILD: &str = "release-evidence";
 const MCP_EVIDENCE_RESULT_SCHEMA_VERSION: &str = "cairnid.mcp.evidence.v1";
+const MCP_PROTOCOL_VERSION: &str = "2025-11-25";
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const SENTINEL: &str = "CAIRNID_MCP_STDIO_SMOKE_DO_NOT_EXPOSE";
 const EVIDENCE_SUMMARY_KEYS: &[&str] = &[
@@ -135,7 +136,7 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-11-25",
+                "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
                 "clientInfo": {
                     "name": "cairnid-mcp-stdio-smoke",
@@ -147,6 +148,10 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
     assert_eq!(
         initialize["serverInfo"]["name"].as_str(),
         Some("cairnid-mcp")
+    );
+    assert_eq!(
+        initialize["protocolVersion"].as_str(),
+        Some(MCP_PROTOCOL_VERSION)
     );
     assert!(initialize["capabilities"]["tools"].is_object());
 
@@ -282,7 +287,7 @@ fn stdio_ignores_inherited_logging_env_for_initialize_and_tools_list() {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-11-25",
+                "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
                 "clientInfo": {
                     "name": "cairnid-mcp-stdio-logging-env-smoke",
@@ -294,6 +299,10 @@ fn stdio_ignores_inherited_logging_env_for_initialize_and_tools_list() {
     assert_eq!(
         initialize["serverInfo"]["name"].as_str(),
         Some("cairnid-mcp")
+    );
+    assert_eq!(
+        initialize["protocolVersion"].as_str(),
+        Some(MCP_PROTOCOL_VERSION)
     );
 
     server.notify(json!({
@@ -1087,6 +1096,11 @@ fn assert_error_summary_artifacts_require_release_gate(
         "summary",
         &format!("tool {tool_name} incomplete-check error body"),
     );
+    let summary = resolve_schema(root, summary);
+    assert_schema_pins_schema_version_const(
+        summary,
+        &format!("tool {tool_name} incomplete-check error summary"),
+    );
     assert_schema_array_items_require_release_gate(
         root,
         summary,
@@ -1211,7 +1225,7 @@ fn initialize_mcp(server: &mut McpProcess) {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-11-25",
+                "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
                 "clientInfo": {
                     "name": "cairnid-mcp-stdio-smoke",
@@ -1223,6 +1237,10 @@ fn initialize_mcp(server: &mut McpProcess) {
     assert_eq!(
         initialize["serverInfo"]["name"].as_str(),
         Some("cairnid-mcp")
+    );
+    assert_eq!(
+        initialize["protocolVersion"].as_str(),
+        Some(MCP_PROTOCOL_VERSION)
     );
 
     server.notify(json!({

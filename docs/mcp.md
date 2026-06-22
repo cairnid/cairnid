@@ -17,6 +17,8 @@ cargo run -p cairnid-mcp --locked
 
 During stdio protocol use, stdout is reserved for newline-delimited MCP JSON-RPC messages. The server ignores inherited Rust logging and backtrace environment settings for normal stdio logging, so successful protocol requests do not emit ambient diagnostics to stdout or stderr. Startup failures that happen before JSON-RPC begins, such as an invalid `--evidence-root <DIR>`, still exit non-zero and write the documented startup error to stderr.
 
+The first-RC stdio contract is validated against MCP protocol version `2025-11-25`. Tool results use the `content`, `structuredContent`, and `isError` fields from that contract.
+
 MCP clients can launch the server from any working directory by passing an explicit evidence root:
 
 ```powershell
@@ -117,6 +119,8 @@ The version identifies the MCP evidence result contract, not the evidence artifa
 
 The `v1` success contracts keep the existing top-level `status` and count fields. Tool errors keep the existing top-level `error` envelope and add `schema_version` alongside it.
 
+For every structured tool result, `content[0].text` is the serialized JSON that exactly mirrors `structuredContent`, so clients that display text-only tool output see the same sanitized payload.
+
 Artifact and step entries advertised by `outputSchema` include sanitized `release_gate` labels: `cairnid.evidence_plan` `steps[]`, `cairnid.evidence_manifest` `artifacts[]`, `cairnid.evidence_status` `artifacts[]`, and `cairnid.evidence_check` success or incomplete-error-summary `artifacts[]`.
 
 ## Evidence tool errors
@@ -164,7 +168,7 @@ For `cairnid.evidence_status`, evidence validation failures that can be represen
 ## Release candidate checklist
 
 - Binary identity: `cairnid-mcp --help` exits before stdio JSON-RPC starts, documents `--evidence-root <DIR>`, and `cairnid-mcp --version` prints the package version.
-- Stdio protocol smoke: a local client can send `initialize`, `notifications/initialized`, `tools/list`, and `tools/call`; `tools/list` returns exactly the four read-only evidence tools with `outputSchema`; `tools/call` can invoke `cairnid.evidence_status` against `release-evidence`.
+- Stdio protocol smoke: a local client can send `initialize` with MCP protocol version `2025-11-25`, `notifications/initialized`, `tools/list`, and `tools/call`; `tools/list` returns exactly the four read-only evidence tools with `outputSchema`; `tools/call` can invoke `cairnid.evidence_status` against `release-evidence`.
 - Evidence root behavior: startup rejects missing, non-directory, and symlink allowlisted roots before JSON-RPC starts; request handling accepts relative evidence directories under the root and absolute evidence directories only when they canonicalize under the root.
 - Path-safety behavior: request smoke covers `parent_traversal`, `outside_allowlisted_root`, `missing_evidence_dir`, `non_directory_evidence_dir`, `invalid_max_age_days`, `symlinked_evidence_dir`, and `symlink_entry` where symlink creation is available.
 - Windows behavior: request smoke covers drive-relative paths such as `C:release-evidence` and rooted relative paths such as `\release-evidence`; symlink cases may require developer-mode or elevated symlink privileges to exercise locally.
