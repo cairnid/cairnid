@@ -216,6 +216,7 @@ struct McpEvidenceSummary {
     failure_count: usize,
     failure_codes: BTreeMap<String, usize>,
     artifacts: Vec<McpEvidenceArtifactSummary>,
+    next_actions: Vec<McpEvidenceNextAction>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -227,6 +228,16 @@ struct McpEvidenceArtifactSummary {
     status: String,
     check_count: usize,
     failure_count: usize,
+    failure_codes: BTreeMap<String, usize>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct McpEvidenceNextAction {
+    name: String,
+    file_name: String,
+    release_gate: String,
+    status: String,
+    command: String,
     failure_codes: BTreeMap<String, usize>,
 }
 
@@ -1025,6 +1036,12 @@ fn mcp_evidence_summary(report: &ReleaseEvidenceReport) -> McpEvidenceSummary {
         .iter()
         .map(mcp_artifact_summary)
         .collect::<Vec<_>>();
+    let next_actions = report
+        .artifacts
+        .iter()
+        .filter(|artifact| stable_artifact_status(artifact.status) != "passed")
+        .map(mcp_next_action)
+        .collect::<Vec<_>>();
 
     McpEvidenceSummary {
         schema_version: MCP_EVIDENCE_RESULT_SCHEMA_VERSION,
@@ -1038,6 +1055,7 @@ fn mcp_evidence_summary(report: &ReleaseEvidenceReport) -> McpEvidenceSummary {
         failure_count: report.failures.len(),
         failure_codes: failure_code_counts(report.failures.iter().map(String::as_str)),
         artifacts,
+        next_actions,
     }
 }
 
@@ -1050,6 +1068,17 @@ fn mcp_artifact_summary(artifact: &ReleaseEvidenceArtifactReport) -> McpEvidence
         status: stable_artifact_status(artifact.status).to_owned(),
         check_count: artifact.checks.len(),
         failure_count: artifact.failures.len(),
+        failure_codes: failure_code_counts(artifact.failures.iter().map(String::as_str)),
+    }
+}
+
+fn mcp_next_action(artifact: &ReleaseEvidenceArtifactReport) -> McpEvidenceNextAction {
+    McpEvidenceNextAction {
+        name: artifact.name.to_owned(),
+        file_name: artifact.file_name.to_owned(),
+        release_gate: artifact.release_gate.to_owned(),
+        status: stable_artifact_status(artifact.status).to_owned(),
+        command: artifact.command.to_owned(),
         failure_codes: failure_code_counts(artifact.failures.iter().map(String::as_str)),
     }
 }
@@ -1415,6 +1444,10 @@ mod tests {
         assert!(!check_json.contains(SENTINEL));
         assert!(status_json.contains("contract_mismatch"));
         assert!(check_json.contains("contract_mismatch"));
+        assert!(status_json.contains("next_actions"));
+        assert!(check_json.contains("next_actions"));
+        assert!(!status_json.contains("failures"));
+        assert!(!check_json.contains("failures"));
 
         remove_temp_root(root);
     }
@@ -1525,6 +1558,24 @@ mod tests {
                 .and_then(Value::as_str),
             Some("incomplete")
         );
+        let next_actions = error
+            .get("summary")
+            .and_then(|summary| summary.get("next_actions"))
+            .and_then(Value::as_array)
+            .expect("incomplete summary next actions");
+        assert!(!next_actions.is_empty());
+        assert!(
+            next_actions.iter().any(|action| {
+                action.get("file_name").and_then(Value::as_str) == Some("operations-preflight.json")
+                    && action
+                        .get("failure_codes")
+                        .and_then(Value::as_object)
+                        .and_then(|codes| codes.get("missing_evidence"))
+                        .and_then(Value::as_u64)
+                        .is_some_and(|count| count > 0)
+            }),
+            "incomplete check should include sanitized next action failure codes"
+        );
 
         remove_temp_root(root);
     }
@@ -1564,9 +1615,19 @@ mod tests {
             success_collection,
             &format!("{tool_name} success {success_collection}"),
         );
+        if matches!(
+            tool_name,
+            "cairnid.evidence_status" | "cairnid.evidence_check"
+        ) {
+            assert_summary_next_actions_contract(
+                &schema,
+                success_schema,
+                &format!("{tool_name} success summary"),
+            );
+        }
 
         if expect_error_summary {
-            assert_error_summary_artifacts_require_release_gate(tool_name, &schema, error_schema);
+            assert_error_summary_contract(tool_name, &schema, error_schema);
         }
     }
 
@@ -1584,11 +1645,7 @@ mod tests {
             .unwrap_or_else(|| panic!("{tool_name} outputSchema error variant"))
     }
 
-    fn assert_error_summary_artifacts_require_release_gate(
-        tool_name: &str,
-        root: &Value,
-        error_schema: &Value,
-    ) {
+    fn assert_error_summary_contract(tool_name: &str, root: &Value, error_schema: &Value) {
         let error_body = schema_property(
             root,
             error_schema,
@@ -1612,6 +1669,63 @@ mod tests {
             "artifacts",
             &format!("{tool_name} incomplete-check error summary"),
         );
+        assert_summary_next_actions_contract(
+            root,
+            summary,
+            &format!("{tool_name} incomplete-check error summary"),
+        );
+    }
+
+    fn assert_summary_next_actions_contract(root: &Value, schema: &Value, context: &str) {
+        assert_schema_array_items_require_release_gate(
+            root,
+            schema,
+            "next_actions",
+            &format!("{context} next_actions"),
+        );
+        assert_schema_array_items_require_properties(
+            root,
+            schema,
+            "next_actions",
+            &[
+                "name",
+                "file_name",
+                "release_gate",
+                "status",
+                "command",
+                "failure_codes",
+            ],
+            &format!("{context} next_actions"),
+        );
+    }
+
+    fn assert_schema_array_items_require_properties(
+        root: &Value,
+        schema: &Value,
+        array_property: &str,
+        required_properties: &[&str],
+        context: &str,
+    ) {
+        let array_schema = schema_property(root, schema, array_property, context);
+        let item_schema = array_schema
+            .get("items")
+            .unwrap_or_else(|| panic!("{context} should advertise array items"));
+        let item_schema = resolve_schema(root, item_schema);
+        let properties = item_schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .unwrap_or_else(|| panic!("{context} item schema properties"));
+
+        for property in required_properties {
+            assert!(
+                properties.contains_key(*property),
+                "{context} item schema should advertise {property}"
+            );
+            assert!(
+                schema_requires_property(item_schema, property),
+                "{context} item schema should require {property}"
+            );
+        }
     }
 
     fn assert_schema_array_items_require_release_gate(
