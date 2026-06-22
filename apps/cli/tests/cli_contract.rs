@@ -103,6 +103,14 @@ fn release_assets_verify_help_describes_arguments_and_manual_flags() {
     assert!(stdout.contains("--provenance-attestations-verified"));
     assert!(stdout.contains("--sbom-attestations-verified"));
     assert!(stdout.contains("--github-release-immutability-enabled-before-publish"));
+    assert!(stdout.contains("cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified"));
+    assert!(stdout.contains("cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url https://github.com/cairnid/cairnid/actions/runs/123456789 --provenance-attestations-verified --sbom-attestations-verified"));
+    assert!(
+        stdout
+            .lines()
+            .filter(|line| line.contains("--run-url"))
+            .all(|line| !line.contains("--github-release-immutability-enabled-before-publish"))
+    );
     assert!(stdout.contains("Examples:"));
 }
 

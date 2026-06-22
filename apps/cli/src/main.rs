@@ -161,7 +161,7 @@ enum EvidenceCommand {
 enum ReleaseAssetsCommand {
     #[command(
         about = "Verify local release asset files and print release-assets-verification JSON",
-        after_help = "Examples:\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --provenance-attestations-verified --sbom-attestations-verified\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url https://github.com/cairnid/cairnid/actions/runs/123456789 --provenance-attestations-verified --sbom-attestations-verified"
+        after_help = "Examples:\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --release-url https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1 --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified\n  cairnid release-assets verify ./dist --tag v0.1.0-rc.1 --source-commit <sha> --run-url https://github.com/cairnid/cairnid/actions/runs/123456789 --provenance-attestations-verified --sbom-attestations-verified"
     )]
     Verify {
         #[arg(
