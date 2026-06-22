@@ -1,4 +1,6 @@
+use super::common::{OIDF_EXPORT_NORMALIZER, OIDF_EXPORT_PROVENANCE_SCHEMA};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File},
@@ -35,6 +37,7 @@ pub fn normalize_openid_conformance_export(
     validate_suite_origin("published_result_url", published_result_url)?;
 
     let package = OidfExportPackage::read(export_path.as_ref())?;
+    let source_format = package.source_format;
     let plan = parse_plan_index(&package.index_json)?;
     if plan.plan_name != profile.plan_name {
         return Err(error(format!(
@@ -71,10 +74,19 @@ pub fn normalize_openid_conformance_export(
     let mut matched_instances = BTreeSet::new();
     let mut saw_warning = false;
     let mut completed_at = None;
+    let mut exported_from = None;
+    let mut suite_version = None;
+    let mut provenance_logs = Vec::new();
 
     for log in package.test_logs {
         reject_forbidden_log_fields(&log.value, "$")?;
         let export = parse_test_log(log.name, &log.value)?;
+        require_consistent_export_field(&mut exported_from, &export.exported_from, "exportedFrom")?;
+        require_consistent_export_field(
+            &mut suite_version,
+            &export.suite_version,
+            "exportedVersion",
+        )?;
         let Some(expected_module) = expected_instances.get(&export.test_id) else {
             return Err(error(format!(
                 "OIDF export test log {} does not match any plan module instance",
@@ -96,6 +108,20 @@ pub fn normalize_openid_conformance_export(
         if export.result.eq_ignore_ascii_case("WARNING") {
             saw_warning = true;
         }
+        provenance_logs.push((
+            export.test_module_name.clone(),
+            export.test_id.clone(),
+            export.status.clone(),
+            export.result.clone(),
+            export
+                .exported_at
+                .format(&Rfc3339)
+                .map_err(|format_error| {
+                    error(format!("failed to format exportedAt: {format_error}"))
+                })?,
+            export.exported_from.clone(),
+            export.suite_version.clone(),
+        ));
         completed_at = Some(match completed_at {
             Some(current) if current >= export.exported_at => current,
             _ => export.exported_at,
@@ -115,6 +141,13 @@ pub fn normalize_openid_conformance_export(
             "OIDF export must include at least one matching test log",
         ));
     };
+    let exported_from =
+        exported_from.ok_or_else(|| error("OIDF export must include exportedFrom"))?;
+    let suite_version =
+        suite_version.ok_or_else(|| error("OIDF export must include exportedVersion"))?;
+    let completed_at = completed_at
+        .format(&Rfc3339)
+        .map_err(|format_error| error(format!("failed to format completed_at: {format_error}")))?;
 
     Ok(json!({
         "source": "openid-conformance-suite",
@@ -122,10 +155,15 @@ pub fn normalize_openid_conformance_export(
         "plan_name": profile.plan_name,
         "status": "FINISHED",
         "result": if saw_warning { "WARNING" } else { "PASSED" },
-        "completed_at": completed_at
-            .format(&Rfc3339)
-            .map_err(|format_error| error(format!("failed to format completed_at: {format_error}")))?,
-        "published_result_url": published_result_url
+        "completed_at": completed_at,
+        "published_result_url": published_result_url,
+        "oidf_export_provenance": oidf_export_provenance(
+            source_format,
+            &plan,
+            &exported_from,
+            &suite_version,
+            &provenance_logs,
+        )?
     }))
 }
 
@@ -154,8 +192,24 @@ fn export_profile(profile: &str) -> Result<ExportProfile, Box<dyn std::error::Er
 }
 
 struct OidfExportPackage {
+    source_format: OidfExportSourceFormat,
     index_json: Value,
     test_logs: Vec<NamedJson>,
+}
+
+#[derive(Clone, Copy)]
+enum OidfExportSourceFormat {
+    Directory,
+    Zip,
+}
+
+impl OidfExportSourceFormat {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Directory => "directory",
+            Self::Zip => "zip",
+        }
+    }
 }
 
 struct NamedJson {
@@ -207,6 +261,7 @@ impl OidfExportPackage {
             return Err(error("OIDF export must contain test-logs/test-log-*.json"));
         }
         Ok(Self {
+            source_format: OidfExportSourceFormat::Directory,
             index_json,
             test_logs,
         })
@@ -245,6 +300,7 @@ impl OidfExportPackage {
             ));
         }
         Ok(Self {
+            source_format: OidfExportSourceFormat::Zip,
             index_json,
             test_logs,
         })
@@ -264,9 +320,14 @@ struct OidfPlanModule {
 struct OidfTestLog {
     test_id: String,
     test_module_name: String,
+    status: String,
     result: String,
     exported_at: OffsetDateTime,
+    exported_from: String,
+    suite_version: String,
 }
+
+type ProvenanceLogRecord = (String, String, String, String, String, String, String);
 
 fn parse_plan_index(value: &Value) -> Result<OidfPlanIndex, Box<dyn std::error::Error>> {
     let plan_value = value.get("planInfo").unwrap_or(value);
@@ -305,6 +366,7 @@ fn parse_test_log(name: String, value: &Value) -> Result<OidfTestLog, Box<dyn st
     let exported_from = string_field(value, &["exportedFrom"], "exportedFrom")?;
     validate_suite_origin("exportedFrom", &exported_from)?;
     let exported_at = suite_timestamp(&string_field(value, &["exportedAt"], "exportedAt")?)?;
+    let suite_version = string_field(value, &["exportedVersion"], "exportedVersion")?;
     let test_info = value
         .get("testInfo")
         .map(|test_info| test_info.get("testInfo").unwrap_or(test_info))
@@ -332,9 +394,101 @@ fn parse_test_log(name: String, value: &Value) -> Result<OidfTestLog, Box<dyn st
     Ok(OidfTestLog {
         test_id,
         test_module_name,
-        result,
+        status: status.to_ascii_uppercase(),
+        result: result.to_ascii_uppercase(),
         exported_at,
+        exported_from,
+        suite_version,
     })
+}
+
+fn oidf_export_provenance(
+    source_format: OidfExportSourceFormat,
+    plan: &OidfPlanIndex,
+    exported_from: &str,
+    suite_version: &str,
+    provenance_logs: &[ProvenanceLogRecord],
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut module_names = plan
+        .modules
+        .iter()
+        .map(|module| module.test_module.clone())
+        .collect::<Vec<_>>();
+    module_names.sort();
+
+    let mut selected_instances = plan
+        .modules
+        .iter()
+        .map(|module| {
+            (
+                module.test_module.clone(),
+                module
+                    .instances
+                    .last()
+                    .expect("module instances already checked")
+                    .clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    selected_instances.sort();
+    let selected_instance_values = selected_instances
+        .iter()
+        .map(|(module_name, test_id)| {
+            json!({
+                "module_name": module_name,
+                "test_id": test_id
+            })
+        })
+        .collect::<Vec<_>>();
+    let plan_modules_digest_input = json!({
+        "plan_name": plan.plan_name.as_str(),
+        "selected_instances": selected_instance_values
+    });
+
+    let mut sorted_logs = provenance_logs.to_vec();
+    sorted_logs.sort();
+
+    Ok(json!({
+        "schema": OIDF_EXPORT_PROVENANCE_SCHEMA,
+        "normalizer": OIDF_EXPORT_NORMALIZER,
+        "source_format": source_format.as_str(),
+        "exported_from": exported_from,
+        "suite_version": suite_version,
+        "plan_module_count": plan.modules.len(),
+        "test_log_count": sorted_logs.len(),
+        "module_names": module_names,
+        "selected_instances": plan_modules_digest_input["selected_instances"].clone(),
+        "plan_modules_sha256": sha256_json(&plan_modules_digest_input)?,
+        "test_logs_sha256": sha256_json(&json!({
+            "logs": sorted_logs
+        }))?
+    }))
+}
+
+fn sha256_json(value: &Value) -> Result<String, Box<dyn std::error::Error>> {
+    let bytes = serde_json::to_vec(value).map_err(|json_error| {
+        error(format!(
+            "failed to serialize provenance digest: {json_error}"
+        ))
+    })?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn require_consistent_export_field(
+    seen: &mut Option<String>,
+    value: &str,
+    label: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match seen {
+        Some(existing) if existing != value => Err(error(format!(
+            "OIDF export {label} must be consistent across test logs"
+        ))),
+        Some(_) => Ok(()),
+        None => {
+            *seen = Some(value.to_owned());
+            Ok(())
+        }
+    }
 }
 
 fn validate_suite_origin(label: &str, value: &str) -> Result<(), Box<dyn std::error::Error>> {
