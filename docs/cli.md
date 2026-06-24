@@ -48,9 +48,9 @@ Current evidence report status values are:
 - `init`: `initialized`.
 - `status` and `check`: `ready` or `incomplete`.
 
-The CLI exposes sanitized report fields needed for release work: artifact names, file names, release-gate labels, commands, checks, counts, next actions, and sanitized failure text. It does not print raw evidence artifact JSON, provider exports, logs, standard streams, cookies, bearer tokens, client secrets, lifecycle tokens, request headers, or secret-bearing OpenID static artifacts. Missing environment reporting is by variable name only.
+The CLI exposes sanitized report fields needed for release work: artifact names, file names, release-gate labels, commands, checks, counts, next actions, stable `failure_codes`, and sanitized failure text. `status` and `check` include root `failure_codes`; `status.next_actions[]` and `check.artifacts[]` include per-artifact `failure_codes` where validation reached an evidence artifact. Current code values are `missing_evidence`, `stale_or_invalid_scaffold`, `invalid_json`, `invalid_json_root`, `stale_or_invalid_timestamp`, `timestamp_contract`, `forbidden_field`, `artifact_path_failure`, `contract_mismatch`, and `validation_failed`. The CLI does not print raw evidence artifact JSON, provider exports, logs, standard streams, cookies, bearer tokens, client secrets, lifecycle tokens, request headers, or secret-bearing OpenID static artifacts. Missing environment reporting is by variable name only.
 
-`cairnid release-assets verify` prints a separate release-assets verification receipt. That receipt currently does not use the `cairnid.evidence.v1` root schema field. It is the expected content for `release-assets-verification.json` only when it exits successfully with `status="ok"` and an empty `failures` array.
+`cairnid release-assets verify` prints a separate release-assets verification receipt with root `schema_version="cairnid.release_assets_verification.v1"`. It is the expected content for `release-assets-verification.json` only when it exits successfully with `status="ok"` and an empty `failures` array.
 
 ## Exit Behavior
 
