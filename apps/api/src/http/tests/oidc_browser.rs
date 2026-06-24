@@ -11,9 +11,10 @@ use axum::{
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use cairn_database::Database;
 use cairn_domain::{
-    ConsentGrant, ConsentGrantMode, ConsentPolicyTemplate, Group, Membership, MembershipRole, User,
+    AuthSession, ConsentGrant, ConsentGrantMode, ConsentPolicyTemplate, Group, Membership,
+    MembershipRole, OidcClient, OidcClientStatus, Organization, RedirectUri, User,
 };
-use cairn_oidc::SigningMaterial;
+use cairn_oidc::{IdTokenIssueRequest, SigningMaterial, issue_id_token};
 use openssl::{pkey::PKey, rsa::Rsa};
 use serde_json::{Value, json};
 use time::OffsetDateTime;
@@ -400,6 +401,318 @@ async fn logout_post_rejects_missing_form_content_type_before_database() {
         response_json(response).await.expect("json body"),
         json!({ "error": "content type must be application/x-www-form-urlencoded" })
     );
+}
+
+#[tokio::test]
+async fn logout_without_redirect_logs_out_locally_for_no_params_state_and_post()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let now = OffsetDateTime::now_utc();
+    let organization = Organization::new(
+        format!("api-logout-local-{}", Uuid::new_v4()),
+        "API Logout Local",
+    )?;
+    database.create_organization(&organization).await?;
+    let user = User::new(
+        organization.id,
+        format!("logout-local-{}@example.com", Uuid::new_v4()),
+        "Logout Local User",
+    )?;
+    database.create_user(&user, None).await?;
+    let state = AppState {
+        database: database.clone(),
+        organization_id: organization.id,
+        config: test_config(cairn_domain::Environment::Development),
+    };
+    let router = build_router(state);
+
+    for (method, uri, body) in [
+        (Method::GET, "/oauth2/logout", ""),
+        (Method::GET, "/oauth2/logout?state=do-not-echo", ""),
+        (Method::POST, "/oauth2/logout", "state=do-not-echo"),
+    ] {
+        let session = test_session(organization.id, user.id, now);
+        database.create_auth_session(&session).await?;
+        let mut request = Request::builder().method(method.clone()).uri(uri).header(
+            header::COOKIE,
+            session_cookie(session.id, Some(TEST_CSRF_TOKEN)),
+        );
+        if method == Method::POST {
+            request = request.header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+        }
+
+        let response = router
+            .clone()
+            .oneshot(request.body(axum::body::Body::from(body.to_owned()))?)
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get(header::LOCATION).is_none());
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+        assert_eq!(response.headers().get(header::PRAGMA).unwrap(), "no-cache");
+        assert_clears_session_cookies(&response);
+        assert_eq!(response_json(response).await?, json!({ "status": "ok" }));
+        assert_session_revoked(&database, session.id, true).await?;
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn logout_with_valid_hint_and_registered_redirect_returns_exact_location()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let fixture = create_logout_fixture(&database, "api-logout-redirect").await?;
+    let state = AppState {
+        database,
+        organization_id: fixture.organization.id,
+        config: test_config_with_signing(fixture.signing.clone()),
+    };
+    let router = build_router(state);
+    let redirect_uri = "http%3A%2F%2Flocalhost%3A3000%2Fsigned-out";
+
+    for (state_query, expected_location) in [
+        ("", "http://localhost:3000/signed-out"),
+        (
+            "&state=state%20value",
+            "http://localhost:3000/signed-out?state=state%20value",
+        ),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(format!(
+                        "/oauth2/logout?id_token_hint={}&post_logout_redirect_uri={redirect_uri}{state_query}",
+                        fixture.id_token
+                    ))
+                    .body(axum::body::Body::empty())?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::FOUND);
+        assert_eq!(
+            response.headers().get(header::LOCATION).unwrap(),
+            expected_location
+        );
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+        assert_eq!(response.headers().get(header::PRAGMA).unwrap(), "no-cache");
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn logout_with_valid_hint_without_redirect_logs_out_locally()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let fixture = create_logout_fixture(&database, "api-logout-hint-local").await?;
+    let state = AppState {
+        database: database.clone(),
+        organization_id: fixture.organization.id,
+        config: test_config_with_signing(fixture.signing.clone()),
+    };
+
+    let response = build_router(state)
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/oauth2/logout?id_token_hint={}", fixture.id_token))
+                .header(
+                    header::COOKIE,
+                    session_cookie(fixture.session.id, Some(TEST_CSRF_TOKEN)),
+                )
+                .body(axum::body::Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.headers().get(header::LOCATION).is_none());
+    assert_clears_session_cookies(&response);
+    assert_eq!(response_json(response).await?, json!({ "status": "ok" }));
+    assert_session_revoked(&database, fixture.session.id, true).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn logout_redirect_requires_valid_hint_without_revoking_session()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let fixture = create_logout_fixture(&database, "api-logout-hint-required").await?;
+    let state = AppState {
+        database: database.clone(),
+        organization_id: fixture.organization.id,
+        config: test_config_with_signing(fixture.signing.clone()),
+    };
+    let router = build_router(state);
+    let redirect_uri = "http%3A%2F%2Flocalhost%3A3000%2Fsigned-out";
+
+    for uri in [
+        format!("/oauth2/logout?post_logout_redirect_uri={redirect_uri}"),
+        format!(
+            "/oauth2/logout?id_token_hint={}x&post_logout_redirect_uri={redirect_uri}",
+            fixture.id_token
+        ),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(uri)
+                    .header(
+                        header::COOKIE,
+                        session_cookie(fixture.session.id, Some(TEST_CSRF_TOKEN)),
+                    )
+                    .body(axum::body::Body::empty())?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(response.headers().get(header::LOCATION).is_none());
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+        assert_eq!(response.headers().get(header::PRAGMA).unwrap(), "no-cache");
+        assert_session_revoked(&database, fixture.session.id, false).await?;
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn logout_redirect_requires_exact_registered_post_logout_redirect_uri()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let fixture = create_logout_fixture(&database, "api-logout-redirect-exact").await?;
+    let state = AppState {
+        database: database.clone(),
+        organization_id: fixture.organization.id,
+        config: test_config_with_signing(fixture.signing.clone()),
+    };
+    let router = build_router(state);
+
+    for redirect_uri in [
+        "http%3A%2F%2Flocalhost%3A3000%2Fother-signed-out",
+        "http%3A%2F%2Flocalhost%3A3000%2Fsigned-out%3Fadded%3D1",
+    ] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(format!(
+                        "/oauth2/logout?id_token_hint={}&post_logout_redirect_uri={redirect_uri}",
+                        fixture.id_token
+                    ))
+                    .header(
+                        header::COOKIE,
+                        session_cookie(fixture.session.id, Some(TEST_CSRF_TOKEN)),
+                    )
+                    .body(axum::body::Body::empty())?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(response.headers().get(header::LOCATION).is_none());
+        assert_session_revoked(&database, fixture.session.id, false).await?;
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn logout_redirect_rejects_client_id_mismatch_and_disabled_client_without_revocation()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tower::ServiceExt as _;
+
+    let Some(database) = api_test_database().await? else {
+        return Ok(());
+    };
+    let fixture = create_logout_fixture(&database, "api-logout-client-binding").await?;
+    let mut other_client = test_oidc_client(fixture.organization.id);
+    other_client.client_id = format!("logout-other-client-{}", Uuid::new_v4());
+    other_client.post_logout_redirect_uris =
+        vec![RedirectUri::parse("http://localhost:3000/signed-out")?];
+    database.create_oidc_client(&other_client).await?;
+    let mut disabled_client = test_oidc_client(fixture.organization.id);
+    disabled_client.client_id = format!("logout-disabled-client-{}", Uuid::new_v4());
+    disabled_client.status = OidcClientStatus::Disabled;
+    disabled_client.post_logout_redirect_uris =
+        vec![RedirectUri::parse("http://localhost:3000/signed-out")?];
+    database.create_oidc_client(&disabled_client).await?;
+    let disabled_token = logout_id_token(
+        &disabled_client,
+        &fixture.user,
+        &fixture.session,
+        &fixture.signing,
+    )?;
+    let state = AppState {
+        database: database.clone(),
+        organization_id: fixture.organization.id,
+        config: test_config_with_signing(fixture.signing.clone()),
+    };
+    let router = build_router(state);
+    let redirect_uri = "http%3A%2F%2Flocalhost%3A3000%2Fsigned-out";
+
+    for uri in [
+        format!(
+            "/oauth2/logout?id_token_hint={}&client_id={}&post_logout_redirect_uri={redirect_uri}",
+            fixture.id_token, other_client.client_id
+        ),
+        format!(
+            "/oauth2/logout?id_token_hint={disabled_token}&post_logout_redirect_uri={redirect_uri}"
+        ),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(uri)
+                    .header(
+                        header::COOKIE,
+                        session_cookie(fixture.session.id, Some(TEST_CSRF_TOKEN)),
+                    )
+                    .body(axum::body::Body::empty())?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(response.headers().get(header::LOCATION).is_none());
+        assert_session_revoked(&database, fixture.session.id, false).await?;
+    }
+
+    Ok(())
 }
 
 #[tokio::test]
@@ -1249,6 +1562,108 @@ async fn authorization_always_required_consent_policy_overrides_existing_grant()
         "http://localhost:3000/callback?error=consent_required&iss=http%3A%2F%2Flocalhost%3A8080&error_description=consent%20required&state=state-value"
     );
 
+    Ok(())
+}
+
+struct LogoutFixture {
+    organization: Organization,
+    user: User,
+    session: AuthSession,
+    signing: SigningMaterial,
+    id_token: String,
+}
+
+async fn create_logout_fixture(
+    database: &Database,
+    prefix: &str,
+) -> Result<LogoutFixture, Box<dyn std::error::Error>> {
+    let now = OffsetDateTime::now_utc();
+    let organization = Organization::new(format!("{prefix}-{}", Uuid::new_v4()), "API Logout")?;
+    database.create_organization(&organization).await?;
+    let mut user = User::new(
+        organization.id,
+        format!("{prefix}-{}@example.com", Uuid::new_v4()),
+        "Logout User",
+    )?;
+    user.email_verified = true;
+    database.create_user(&user, None).await?;
+    let mut client = test_oidc_client(organization.id);
+    client.client_id = format!("{prefix}-client-{}", Uuid::new_v4());
+    client.post_logout_redirect_uris =
+        vec![RedirectUri::parse("http://localhost:3000/signed-out")?];
+    database.create_oidc_client(&client).await?;
+    let session = test_session(organization.id, user.id, now);
+    database.create_auth_session(&session).await?;
+    let signing = test_signing_material()?;
+    let id_token = logout_id_token(&client, &user, &session, &signing)?;
+
+    Ok(LogoutFixture {
+        organization,
+        user,
+        session,
+        signing,
+        id_token,
+    })
+}
+
+fn logout_id_token(
+    client: &OidcClient,
+    user: &User,
+    session: &AuthSession,
+    signing: &SigningMaterial,
+) -> Result<String, Box<dyn std::error::Error>> {
+    Ok(issue_id_token(IdTokenIssueRequest {
+        issuer: "http://localhost:8080",
+        client,
+        user,
+        scopes: &["openid".to_owned()],
+        nonce: None,
+        auth_time: Some(session.created_at),
+        amr: session.amr.clone(),
+        acr: session.acr.clone(),
+        groups: None,
+        signing,
+    })?)
+}
+
+fn test_config_with_signing(signing: SigningMaterial) -> crate::config::ApiConfig {
+    let mut config = test_config(cairn_domain::Environment::Development);
+    config.signing = Some(signing);
+    config
+}
+
+fn assert_clears_session_cookies(response: &axum::response::Response) {
+    let set_cookies = response
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|value| value.to_str().expect("set-cookie header"))
+        .collect::<Vec<_>>();
+
+    assert!(
+        set_cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("cairn_session=;") && cookie.contains("Max-Age=0")),
+        "expected cairn_session clear cookie, got {set_cookies:?}"
+    );
+    assert!(
+        set_cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("cairn_csrf=;") && cookie.contains("Max-Age=0")),
+        "expected cairn_csrf clear cookie, got {set_cookies:?}"
+    );
+}
+
+async fn assert_session_revoked(
+    database: &Database,
+    session_id: Uuid,
+    expected_revoked: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let session = database
+        .get_auth_session(session_id)
+        .await?
+        .expect("auth session");
+    assert_eq!(session.revoked_at.is_some(), expected_revoked);
     Ok(())
 }
 
