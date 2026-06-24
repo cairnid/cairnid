@@ -14,7 +14,7 @@ use std::{
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
-use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
+use zip::{CompressionMethod, DateTime as ZipDateTime, ZipWriter, write::SimpleFileOptions};
 
 pub(super) const RELEASE_ASSET_TAG: &str = "v0.1.0-rc.1";
 pub(super) const RELEASE_ASSET_SOURCE_COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
@@ -323,8 +323,11 @@ fn cli_auxiliary_archive_members(stem: &str) -> Vec<(String, Vec<u8>)> {
 fn write_zip_archive(path: &Path, members: &[(String, Vec<u8>)]) {
     let file = File::create(path).expect("create zip archive");
     let mut archive = ZipWriter::new(file);
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
     for (name, content) in members {
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Stored)
+            .last_modified_time(ZipDateTime::DEFAULT)
+            .unix_permissions(release_archive_member_mode(name));
         archive
             .start_file(name, options)
             .expect("start zip archive member");
@@ -337,12 +340,24 @@ fn write_zip_archive(path: &Path, members: &[(String, Vec<u8>)]) {
 
 fn write_tar_gz_archive(path: &Path, members: &[(String, Vec<u8>)]) {
     let file = File::create(path).expect("create tar.gz archive");
-    let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+    let encoder = flate2::GzBuilder::new()
+        .mtime(0)
+        .write(file, flate2::Compression::default());
     let mut archive = tar::Builder::new(encoder);
     for (name, content) in members {
         let mut header = tar::Header::new_gnu();
         header.set_size(content.len() as u64);
-        header.set_mode(0o644);
+        header.set_mode(release_archive_member_mode(name));
+        header.set_mtime(0);
+        header.set_uid(0);
+        header.set_gid(0);
+        header
+            .set_username("")
+            .expect("set deterministic tar username");
+        header
+            .set_groupname("")
+            .expect("set deterministic tar group name");
+        header.set_entry_type(tar::EntryType::Regular);
         header.set_cksum();
         archive
             .append_data(&mut header, name, content.as_slice())
@@ -350,6 +365,17 @@ fn write_tar_gz_archive(path: &Path, members: &[(String, Vec<u8>)]) {
     }
     let encoder = archive.into_inner().expect("finish tar archive");
     encoder.finish().expect("finish gzip archive");
+}
+
+fn release_archive_member_mode(name: &str) -> u32 {
+    let file_name = Path::new(name)
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .expect("archive member file name");
+    match file_name {
+        "cairnid" | "cairnid-mcp" | "cairnid.exe" | "cairnid-mcp.exe" => 0o755,
+        _ => 0o644,
+    }
 }
 
 fn sha256_file(path: &Path) -> String {

@@ -921,6 +921,21 @@ fn stdio_evidence_status_returns_stable_tool_error_envelopes() {
     );
     request_id += 1;
 
+    let unknown_with_invalid_status = call_evidence_status(
+        &mut server,
+        request_id,
+        json!({
+            "evidence_dir": 123,
+            "unexpected": SENTINEL
+        }),
+    );
+    assert_tool_error_code(&unknown_with_invalid_status, "unknown_argument");
+    assert!(
+        !unknown_with_invalid_status.to_string().contains(SENTINEL),
+        "unknown argument value was echoed: {unknown_with_invalid_status}"
+    );
+    request_id += 1;
+
     let result = call_evidence_check(&mut server, request_id, json!({"evidence_dir": 123}));
     assert_tool_error_code(&result, "invalid_evidence_dir");
     request_id += 1;
@@ -929,7 +944,7 @@ fn stdio_evidence_status_returns_stable_tool_error_envelopes() {
         &mut server,
         request_id,
         json!({
-            "max_age_days": 0,
+            "max_age_days": "0",
             "unexpected": SENTINEL
         }),
     );
