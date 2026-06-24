@@ -24,7 +24,7 @@ fn config_error(message: &'static str) -> Box<dyn std::error::Error> {
 #[cfg(test)]
 mod tests {
     use super::{render_api_contract_json, run_api_contract_command};
-    use crate::http::api_contract::{API_CONTRACT_SCHEMA_VERSION, browser_admin_api_routes};
+    use crate::http::api_contract::{API_CONTRACT_SCHEMA_VERSION, api_contract_routes};
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
     #[test]
@@ -50,9 +50,9 @@ mod tests {
 
         let routes = json["routes"].as_array().expect("routes array");
         assert!(!routes.is_empty());
-        assert_eq!(routes.len(), browser_admin_api_routes().len());
+        assert_eq!(routes.len(), api_contract_routes().len());
 
-        for (exported, manifest) in routes.iter().zip(browser_admin_api_routes()) {
+        for (exported, manifest) in routes.iter().zip(api_contract_routes()) {
             assert_eq!(exported["method"], manifest.method.as_str());
             assert_eq!(exported["path"], manifest.path);
             assert_eq!(exported["audience"], manifest.audience.as_str());

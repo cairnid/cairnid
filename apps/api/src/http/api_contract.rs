@@ -9,6 +9,7 @@ pub(crate) const API_CONTRACT_SCHEMA_VERSION: &str = "cairnid.api_contract.v1";
 pub(crate) enum ApiMethod {
     Delete,
     Get,
+    Patch,
     Post,
     Put,
 }
@@ -18,6 +19,7 @@ impl ApiMethod {
         match self {
             Self::Delete => "DELETE",
             Self::Get => "GET",
+            Self::Patch => "PATCH",
             Self::Post => "POST",
             Self::Put => "PUT",
         }
@@ -28,6 +30,7 @@ impl ApiMethod {
         match self {
             Self::Delete => "delete(",
             Self::Get => "get(",
+            Self::Patch => "patch(",
             Self::Post => "post(",
             Self::Put => "put(",
         }
@@ -38,6 +41,9 @@ impl ApiMethod {
 pub(crate) enum ApiAudience {
     Admin,
     Browser,
+    Health,
+    Protocol,
+    Scim,
 }
 
 impl ApiAudience {
@@ -45,23 +51,34 @@ impl ApiAudience {
         match self {
             Self::Admin => "admin",
             Self::Browser => "browser",
+            Self::Health => "health",
+            Self::Protocol => "protocol",
+            Self::Scim => "scim",
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ApiSchema {
+    Empty(&'static str),
+    Form(&'static str),
     None,
     Json(&'static str),
     Ndjson(&'static str),
     Query(&'static str),
+    Redirect(&'static str),
 }
 
 impl ApiSchema {
     pub(crate) const fn name(self) -> Option<&'static str> {
         match self {
             Self::None => None,
-            Self::Json(name) | Self::Ndjson(name) | Self::Query(name) => Some(name),
+            Self::Empty(name)
+            | Self::Form(name)
+            | Self::Json(name)
+            | Self::Ndjson(name)
+            | Self::Query(name)
+            | Self::Redirect(name) => Some(name),
         }
     }
 }
@@ -94,15 +111,15 @@ pub(crate) struct ApiRouteContractReport {
     pub(crate) response_contract_label: Option<&'static str>,
 }
 
-pub(crate) fn browser_admin_api_routes() -> &'static [ApiRouteContract] {
-    BROWSER_ADMIN_API_ROUTES
+pub(crate) fn api_contract_routes() -> &'static [ApiRouteContract] {
+    API_CONTRACT_ROUTES
 }
 
 pub(crate) fn api_contract_report(generated_at: OffsetDateTime) -> ApiContractReport {
     ApiContractReport {
         schema_version: API_CONTRACT_SCHEMA_VERSION,
         generated_at,
-        routes: browser_admin_api_routes()
+        routes: api_contract_routes()
             .iter()
             .map(ApiRouteContractReport::from_route)
             .collect(),
@@ -140,7 +157,263 @@ const fn route(
     }
 }
 
-const BROWSER_ADMIN_API_ROUTES: &[ApiRouteContract] = &[
+const API_CONTRACT_ROUTES: &[ApiRouteContract] = &[
+    route(
+        ApiMethod::Get,
+        "/healthz",
+        ApiAudience::Health,
+        "healthz",
+        ApiSchema::None,
+        ApiSchema::Json("HealthStatusResponse"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/.well-known/openid-configuration",
+        ApiAudience::Protocol,
+        "openid_configuration",
+        ApiSchema::None,
+        ApiSchema::Json("ProviderMetadata"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/.well-known/jwks.json",
+        ApiAudience::Protocol,
+        "jwks",
+        ApiSchema::None,
+        ApiSchema::Json("JwkSet"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/oauth2/authorize",
+        ApiAudience::Protocol,
+        "authorize",
+        ApiSchema::Query("AuthorizationRequest"),
+        ApiSchema::Redirect("OAuthAuthorizationRedirect"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/oauth2/authorize",
+        ApiAudience::Protocol,
+        "authorize",
+        ApiSchema::Form("AuthorizationRequest"),
+        ApiSchema::Redirect("OAuthAuthorizationRedirect"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/oauth2/logout",
+        ApiAudience::Protocol,
+        "end_session",
+        ApiSchema::Query("EndSessionRequest"),
+        ApiSchema::Redirect("EndSessionResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/oauth2/logout",
+        ApiAudience::Protocol,
+        "end_session_post",
+        ApiSchema::Form("EndSessionRequest"),
+        ApiSchema::Redirect("EndSessionResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/oauth2/token",
+        ApiAudience::Protocol,
+        "token",
+        ApiSchema::Form("TokenRequest"),
+        ApiSchema::Json("TokenResponse"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/oauth2/userinfo",
+        ApiAudience::Protocol,
+        "userinfo_route",
+        ApiSchema::None,
+        ApiSchema::Json("UserInfoResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/oauth2/userinfo",
+        ApiAudience::Protocol,
+        "userinfo_route",
+        ApiSchema::Form("UserInfoRequest"),
+        ApiSchema::Json("UserInfoResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/oauth2/introspect",
+        ApiAudience::Protocol,
+        "introspect",
+        ApiSchema::Form("IntrospectionRequest"),
+        ApiSchema::Json("IntrospectionResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/oauth2/revoke",
+        ApiAudience::Protocol,
+        "revoke",
+        ApiSchema::Form("RevocationRequest"),
+        ApiSchema::Empty("OAuthRevocationResponse"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/ServiceProviderConfig",
+        ApiAudience::Scim,
+        "scim_service_provider_config",
+        ApiSchema::None,
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/Schemas",
+        ApiAudience::Scim,
+        "scim_schemas",
+        ApiSchema::None,
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:ListResponse"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/Schemas/{schema_id}",
+        ApiAudience::Scim,
+        "scim_schema",
+        ApiSchema::None,
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:Schema"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/ResourceTypes",
+        ApiAudience::Scim,
+        "scim_resource_types",
+        ApiSchema::None,
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:ListResponse"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/ResourceTypes/{resource_type}",
+        ApiAudience::Scim,
+        "scim_resource_type",
+        ApiSchema::None,
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:ResourceType"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/scim/v2/Bulk",
+        ApiAudience::Scim,
+        "scim_bulk",
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:BulkRequest"),
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:BulkResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/scim/v2/Users/.search",
+        ApiAudience::Scim,
+        "scim_search_users",
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:SearchRequest"),
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:ListResponse"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/Users",
+        ApiAudience::Scim,
+        "scim_list_users",
+        ApiSchema::Query("ScimUserListQuery"),
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:ListResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/scim/v2/Users",
+        ApiAudience::Scim,
+        "scim_create_user",
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:User"),
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:User"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/Users/{user_id}",
+        ApiAudience::Scim,
+        "scim_get_user",
+        ApiSchema::Query("ScimUserResourceQuery"),
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:User"),
+    ),
+    route(
+        ApiMethod::Put,
+        "/scim/v2/Users/{user_id}",
+        ApiAudience::Scim,
+        "scim_replace_user",
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:User"),
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:User"),
+    ),
+    route(
+        ApiMethod::Patch,
+        "/scim/v2/Users/{user_id}",
+        ApiAudience::Scim,
+        "scim_patch_user",
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:PatchOp"),
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:User"),
+    ),
+    route(
+        ApiMethod::Delete,
+        "/scim/v2/Users/{user_id}",
+        ApiAudience::Scim,
+        "scim_delete_user",
+        ApiSchema::None,
+        ApiSchema::Empty("ScimNoContentResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/scim/v2/Groups/.search",
+        ApiAudience::Scim,
+        "scim_search_groups",
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:SearchRequest"),
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:ListResponse"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/Groups",
+        ApiAudience::Scim,
+        "scim_list_groups",
+        ApiSchema::Query("ScimGroupListQuery"),
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:ListResponse"),
+    ),
+    route(
+        ApiMethod::Post,
+        "/scim/v2/Groups",
+        ApiAudience::Scim,
+        "scim_create_group",
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:Group"),
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:Group"),
+    ),
+    route(
+        ApiMethod::Get,
+        "/scim/v2/Groups/{group_id}",
+        ApiAudience::Scim,
+        "scim_get_group",
+        ApiSchema::Query("ScimGroupResourceQuery"),
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:Group"),
+    ),
+    route(
+        ApiMethod::Put,
+        "/scim/v2/Groups/{group_id}",
+        ApiAudience::Scim,
+        "scim_replace_group",
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:Group"),
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:Group"),
+    ),
+    route(
+        ApiMethod::Patch,
+        "/scim/v2/Groups/{group_id}",
+        ApiAudience::Scim,
+        "scim_patch_group",
+        ApiSchema::Json("urn:ietf:params:scim:api:messages:2.0:PatchOp"),
+        ApiSchema::Json("urn:ietf:params:scim:schemas:core:2.0:Group"),
+    ),
+    route(
+        ApiMethod::Delete,
+        "/scim/v2/Groups/{group_id}",
+        ApiAudience::Scim,
+        "scim_delete_group",
+        ApiSchema::None,
+        ApiSchema::Empty("ScimNoContentResponse"),
+    ),
     route(
         ApiMethod::Post,
         "/api/v1/bootstrap",
@@ -572,35 +845,41 @@ mod tests {
     }
 
     #[test]
-    fn manifest_covers_session_and_admin_router_routes() {
+    fn manifest_covers_public_router_routes() {
         let mut manifest_routes = manifest_route_keys();
         let mut router_routes = router_route_keys();
         manifest_routes.sort();
         router_routes.sort();
 
-        assert_eq!(BROWSER_ADMIN_API_ROUTES.len(), 52);
+        assert_eq!(API_CONTRACT_ROUTES.len(), 84);
         assert_eq!(manifest_routes, router_routes);
     }
 
     #[test]
-    fn manifest_excludes_protocol_and_scim_surfaces() {
-        for route in browser_admin_api_routes() {
-            assert!(
-                route.path.starts_with("/api/v1/"),
-                "{} {} must remain in the browser/admin API namespace",
-                route.method.as_str(),
-                route.path
-            );
-            assert!(!route.path.starts_with("/oauth2/"));
-            assert!(!route.path.starts_with("/.well-known/"));
-            assert!(!route.path.starts_with("/scim/"));
-            assert_ne!(route.path, "/healthz");
-        }
+    fn manifest_includes_protocol_scim_and_health_surfaces() {
+        assert_has_route(ApiMethod::Get, "/healthz");
+        assert_has_route(ApiMethod::Get, "/.well-known/openid-configuration");
+        assert_has_route(ApiMethod::Get, "/.well-known/jwks.json");
+        assert_has_route(ApiMethod::Get, "/oauth2/authorize");
+        assert_has_route(ApiMethod::Post, "/oauth2/authorize");
+        assert_has_route(ApiMethod::Post, "/oauth2/token");
+        assert_has_route(ApiMethod::Get, "/oauth2/userinfo");
+        assert_has_route(ApiMethod::Post, "/oauth2/userinfo");
+        assert_has_route(ApiMethod::Post, "/oauth2/introspect");
+        assert_has_route(ApiMethod::Post, "/oauth2/revoke");
+        assert_has_route(ApiMethod::Get, "/oauth2/logout");
+        assert_has_route(ApiMethod::Post, "/oauth2/logout");
+        assert_has_route(ApiMethod::Get, "/scim/v2/ServiceProviderConfig");
+        assert_has_route(ApiMethod::Get, "/scim/v2/Schemas");
+        assert_has_route(ApiMethod::Get, "/scim/v2/ResourceTypes");
+        assert_has_route(ApiMethod::Post, "/scim/v2/Bulk");
+        assert_has_route(ApiMethod::Patch, "/scim/v2/Users/{user_id}");
+        assert_has_route(ApiMethod::Patch, "/scim/v2/Groups/{group_id}");
     }
 
     #[test]
     fn manifest_schema_labels_are_explicit_and_safe() {
-        for route in BROWSER_ADMIN_API_ROUTES {
+        for route in API_CONTRACT_ROUTES {
             assert!(
                 !route.handler.is_empty(),
                 "{} {} must record the handler name",
@@ -608,13 +887,19 @@ mod tests {
                 route.path
             );
             assert!(
-                !matches!(route.request_schema, ApiSchema::Ndjson(_)),
-                "{} {} cannot accept NDJSON request bodies",
+                !matches!(
+                    route.request_schema,
+                    ApiSchema::Empty(_) | ApiSchema::Ndjson(_) | ApiSchema::Redirect(_)
+                ),
+                "{} {} cannot use a response-only request contract label",
                 route.method.as_str(),
                 route.path
             );
             assert!(
-                !matches!(route.response_schema, ApiSchema::None | ApiSchema::Query(_)),
+                !matches!(
+                    route.response_schema,
+                    ApiSchema::None | ApiSchema::Form(_) | ApiSchema::Query(_)
+                ),
                 "{} {} must record a concrete response schema",
                 route.method.as_str(),
                 route.path
@@ -627,16 +912,21 @@ mod tests {
 
     #[test]
     fn manifest_keeps_audience_labels_explicit() {
-        assert!(
-            browser_admin_api_routes()
-                .iter()
-                .any(|route| route.audience == ApiAudience::Browser)
-        );
-        assert!(
-            browser_admin_api_routes()
-                .iter()
-                .any(|route| route.audience == ApiAudience::Admin)
-        );
+        for audience in [
+            ApiAudience::Admin,
+            ApiAudience::Browser,
+            ApiAudience::Health,
+            ApiAudience::Protocol,
+            ApiAudience::Scim,
+        ] {
+            assert!(
+                api_contract_routes()
+                    .iter()
+                    .any(|route| route.audience == audience),
+                "{} audience must have at least one checked route",
+                audience.as_str()
+            );
+        }
     }
 
     #[test]
@@ -650,10 +940,10 @@ mod tests {
         assert_eq!(json["schema_version"], API_CONTRACT_SCHEMA_VERSION);
 
         let routes = json["routes"].as_array().expect("routes array");
-        assert_eq!(routes.len(), BROWSER_ADMIN_API_ROUTES.len());
+        assert_eq!(routes.len(), API_CONTRACT_ROUTES.len());
 
         let exported_routes = exported_route_keys(routes);
-        let manifest_routes = BROWSER_ADMIN_API_ROUTES
+        let manifest_routes = API_CONTRACT_ROUTES
             .iter()
             .map(expected_exported_route)
             .collect::<Vec<_>>();
@@ -662,30 +952,43 @@ mod tests {
     }
 
     #[test]
-    fn api_contract_export_json_excludes_protocol_scim_and_health_routes() {
+    fn api_contract_export_json_includes_protocol_scim_and_health_routes() {
         let report = api_contract_report(test_generated_at());
         let json = serde_json::to_value(&report).expect("serializable API contract report");
         let routes = json["routes"].as_array().expect("routes array");
 
-        let exported_paths = routes
+        let exported_route_keys = routes
             .iter()
-            .map(|route| route["path"].as_str().expect("route path"))
+            .map(|route| {
+                (
+                    route["method"].as_str().expect("route method"),
+                    route["path"].as_str().expect("route path"),
+                )
+            })
             .collect::<Vec<_>>();
 
-        for path in exported_paths {
+        for (method, path) in [
+            ("GET", "/healthz"),
+            ("GET", "/.well-known/openid-configuration"),
+            ("GET", "/.well-known/jwks.json"),
+            ("GET", "/oauth2/authorize"),
+            ("POST", "/oauth2/token"),
+            ("GET", "/oauth2/userinfo"),
+            ("POST", "/oauth2/introspect"),
+            ("GET", "/scim/v2/ServiceProviderConfig"),
+            ("POST", "/scim/v2/Bulk"),
+            ("PATCH", "/scim/v2/Users/{user_id}"),
+            ("PATCH", "/scim/v2/Groups/{group_id}"),
+        ] {
             assert!(
-                path.starts_with("/api/v1/"),
-                "{path} must remain in the browser/admin API namespace"
+                exported_route_keys.contains(&(method, path)),
+                "{method} {path} must be exported"
             );
-            assert!(!path.starts_with("/oauth2/"));
-            assert!(!path.starts_with("/.well-known/"));
-            assert!(!path.starts_with("/scim/"));
-            assert_ne!(path, "/healthz");
         }
     }
 
     fn manifest_route_keys() -> Vec<RouteEntry> {
-        browser_admin_api_routes()
+        api_contract_routes()
             .iter()
             .map(|route| RouteEntry {
                 method: route.method,
@@ -696,7 +999,9 @@ mod tests {
     }
 
     fn router_route_keys() -> Vec<RouteEntry> {
-        let mut routes = routes_from_router_source(include_str!("router/session.rs"));
+        let mut routes = routes_from_router_source(include_str!("router/protocol.rs"));
+        routes.extend(routes_from_router_source(include_str!("router/scim.rs")));
+        routes.extend(routes_from_router_source(include_str!("router/session.rs")));
         routes.extend(routes_from_router_source(include_str!("router/admin.rs")));
         routes
     }
@@ -714,9 +1019,23 @@ mod tests {
             let route_block = &route_source[..route_end];
             let path = route_path(route_block).expect("router route path");
 
+            if route_block.contains("userinfo_route()") {
+                routes.push(RouteEntry {
+                    method: ApiMethod::Get,
+                    path,
+                    handler: "userinfo_route",
+                });
+                routes.push(RouteEntry {
+                    method: ApiMethod::Post,
+                    path,
+                    handler: "userinfo_route",
+                });
+            }
+
             for method in [
                 ApiMethod::Delete,
                 ApiMethod::Get,
+                ApiMethod::Patch,
                 ApiMethod::Post,
                 ApiMethod::Put,
             ] {
@@ -779,6 +1098,16 @@ mod tests {
 
     fn test_generated_at() -> OffsetDateTime {
         OffsetDateTime::parse("2026-06-18T12:00:00Z", &Rfc3339).expect("test timestamp")
+    }
+
+    fn assert_has_route(method: ApiMethod, path: &'static str) {
+        assert!(
+            api_contract_routes()
+                .iter()
+                .any(|route| route.method == method && route.path == path),
+            "{} {path} must be in the checked API contract",
+            method.as_str()
+        );
     }
 
     fn assert_safe_schema_label(schema: ApiSchema) {

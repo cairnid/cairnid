@@ -66,7 +66,7 @@ See [scim.md](scim.md) for setup and operator smoke tests.
 
 Admin APIs require a valid browser session whose user has `owner` membership in the organization's built-in `administrators` group. `POST /api/v1/bootstrap` is the only exception and creates that initial owner membership atomically.
 
-The checked route/schema manifest for non-protocol browser/admin API routes lives in `apps/api/src/http/api_contract.rs`. It records method, path, audience, router handler, request contract label, and response contract label for `/api/v1/*` routes declared by the session and admin routers. Contract labels are stable names for the public JSON or NDJSON shapes; they are not generated JSON Schema and are not always Rust type names. The manifest intentionally excludes OIDC/OAuth protocol endpoints, discovery/JWKS, health, and SCIM v2 provisioning routes.
+The checked route/schema manifest for public API routes lives in `apps/api/src/http/api_contract.rs`. It records method, path, audience, router handler, request contract label, and response contract label for routes declared by the protocol, SCIM, session, and admin routers. Contract labels are stable names for the public query, form, JSON, NDJSON, redirect, or empty response shapes; they are not generated JSON Schema and are not always Rust type names. The manifest includes OIDC/OAuth browser/API discovery-relevant routes, JWKS, health, and SCIM v2 route/schema labels.
 
 Operators and docs tooling can print the same checked manifest as JSON without connecting to the database:
 
