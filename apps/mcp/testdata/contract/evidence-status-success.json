@@ -1,0 +1,555 @@
+{
+  "content": [
+    {
+      "text": "{\"artifact_count\":24,\"artifacts\":[{\"check_count\":0,\"command\":\"cairn-api operations preflight > operations-preflight.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"operations-preflight.json\",\"name\":\"operations_preflight\",\"release_gate\":\"Operations preflight\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api operations dependency-policy-evidence > dependency-policy-check.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"dependency-policy-check.json\",\"name\":\"dependency_policy_check\",\"release_gate\":\"Dependency policy\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"release-assets-verification.json\",\"name\":\"release_assets_verification\",\"release_gate\":\"CLI/MCP public release assets\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api conformance oidcc-static-registration > openid-static-registration.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"openid-static-registration.json\",\"name\":\"openid_static_registration\",\"release_gate\":\"Static OpenID artifacts\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api conformance oidcc-static-config > cairn-oidcc-static.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"cairn-oidcc-static.json\",\"name\":\"openid_static_config\",\"release_gate\":\"Static OpenID artifacts\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"oidc-metadata-smoke.json\",\"name\":\"oidc_metadata_smoke\",\"release_gate\":\"Deployed OIDC metadata\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"openid-config-op-result.json\",\"name\":\"openid_config_op_conformance\",\"release_gate\":\"OpenID conformance\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"openid-basic-op-result.json\",\"name\":\"openid_basic_op_conformance\",\"release_gate\":\"OpenID conformance\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api scim connector-profile generic > scim-generic-connector-profile.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"scim-generic-connector-profile.json\",\"name\":\"scim_generic_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api scim connector-profile okta > scim-okta-connector-profile.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"scim-okta-connector-profile.json\",\"name\":\"scim_okta_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api scim connector-profile entra > scim-entra-connector-profile.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"scim-entra-connector-profile.json\",\"name\":\"scim_entra_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api scim smoke > scim-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"scim-smoke.json\",\"name\":\"scim_public_smoke\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"save normalized Okta connector smoke summary as scim-okta-connector-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"scim-okta-connector-smoke.json\",\"name\":\"scim_okta_connector_smoke\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"scim-entra-connector-smoke.json\",\"name\":\"scim_entra_connector_smoke\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api operations browser-origin-smoke > browser-origin-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"browser-origin-smoke.json\",\"name\":\"browser_origin_smoke\",\"release_gate\":\"Browser origin defense\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api operations security-headers-smoke > security-headers-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"security-headers-smoke.json\",\"name\":\"security_headers_smoke\",\"release_gate\":\"Security headers\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"email-provider-smoke.json\",\"name\":\"email_provider_smoke\",\"release_gate\":\"Email delivery\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"lifecycle-email-smoke.json\",\"name\":\"lifecycle_email_smoke\",\"release_gate\":\"Email delivery\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"set DATABASE_URL to a restored production-like Postgres database, then run cairn-api operations restore-check > restore-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"restore-drill.json\",\"name\":\"restore_drill\",\"release_gate\":\"Restore drill\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api signing-key rotate > signing-key-rotation-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"signing-key-rotation-drill.json\",\"name\":\"signing_key_rotation_drill\",\"release_gate\":\"Key operations\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api key-encryption rotate > kek-rotation-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"kek-rotation-drill.json\",\"name\":\"kek_rotation_drill\",\"release_gate\":\"Key operations\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"break-glass-admin-recovery-drill.json\",\"name\":\"break_glass_admin_recovery_drill\",\"release_gate\":\"Emergency access\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"audit-export-archive-drill.json\",\"name\":\"audit_export_archive_drill\",\"release_gate\":\"Audit operations\",\"status\":\"missing\"},{\"check_count\":0,\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api audit purge-expired > audit-retention-purge-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"failure_count\":1,\"file_name\":\"audit-retention-purge-drill.json\",\"name\":\"audit_retention_purge_drill\",\"release_gate\":\"Audit operations\",\"status\":\"missing\"}],\"failed_artifact_count\":0,\"failure_codes\":{\"missing_evidence\":24},\"failure_count\":24,\"generated_at\":\"<generated_at>\",\"max_age_days\":30,\"missing_artifact_count\":24,\"next_actions\":[{\"command\":\"cairn-api operations preflight > operations-preflight.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"operations-preflight.json\",\"name\":\"operations_preflight\",\"release_gate\":\"Operations preflight\",\"status\":\"missing\"},{\"command\":\"cairn-api operations dependency-policy-evidence > dependency-policy-check.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"dependency-policy-check.json\",\"name\":\"dependency_policy_check\",\"release_gate\":\"Dependency policy\",\"status\":\"missing\"},{\"command\":\"cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"release-assets-verification.json\",\"name\":\"release_assets_verification\",\"release_gate\":\"CLI/MCP public release assets\",\"status\":\"missing\"},{\"command\":\"cairn-api conformance oidcc-static-registration > openid-static-registration.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"openid-static-registration.json\",\"name\":\"openid_static_registration\",\"release_gate\":\"Static OpenID artifacts\",\"status\":\"missing\"},{\"command\":\"cairn-api conformance oidcc-static-config > cairn-oidcc-static.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"cairn-oidcc-static.json\",\"name\":\"openid_static_config\",\"release_gate\":\"Static OpenID artifacts\",\"status\":\"missing\"},{\"command\":\"cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"oidc-metadata-smoke.json\",\"name\":\"oidc_metadata_smoke\",\"release_gate\":\"Deployed OIDC metadata\",\"status\":\"missing\"},{\"command\":\"save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"openid-config-op-result.json\",\"name\":\"openid_config_op_conformance\",\"release_gate\":\"OpenID conformance\",\"status\":\"missing\"},{\"command\":\"save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"openid-basic-op-result.json\",\"name\":\"openid_basic_op_conformance\",\"release_gate\":\"OpenID conformance\",\"status\":\"missing\"},{\"command\":\"cairn-api scim connector-profile generic > scim-generic-connector-profile.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"scim-generic-connector-profile.json\",\"name\":\"scim_generic_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"command\":\"cairn-api scim connector-profile okta > scim-okta-connector-profile.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"scim-okta-connector-profile.json\",\"name\":\"scim_okta_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"command\":\"cairn-api scim connector-profile entra > scim-entra-connector-profile.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"scim-entra-connector-profile.json\",\"name\":\"scim_entra_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"command\":\"cairn-api scim smoke > scim-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"scim-smoke.json\",\"name\":\"scim_public_smoke\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"command\":\"save normalized Okta connector smoke summary as scim-okta-connector-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"scim-okta-connector-smoke.json\",\"name\":\"scim_okta_connector_smoke\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"command\":\"save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"scim-entra-connector-smoke.json\",\"name\":\"scim_entra_connector_smoke\",\"release_gate\":\"SCIM provisioning\",\"status\":\"missing\"},{\"command\":\"cairn-api operations browser-origin-smoke > browser-origin-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"browser-origin-smoke.json\",\"name\":\"browser_origin_smoke\",\"release_gate\":\"Browser origin defense\",\"status\":\"missing\"},{\"command\":\"cairn-api operations security-headers-smoke > security-headers-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"security-headers-smoke.json\",\"name\":\"security_headers_smoke\",\"release_gate\":\"Security headers\",\"status\":\"missing\"},{\"command\":\"cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"email-provider-smoke.json\",\"name\":\"email_provider_smoke\",\"release_gate\":\"Email delivery\",\"status\":\"missing\"},{\"command\":\"cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"lifecycle-email-smoke.json\",\"name\":\"lifecycle_email_smoke\",\"release_gate\":\"Email delivery\",\"status\":\"missing\"},{\"command\":\"set DATABASE_URL to a restored production-like Postgres database, then run cairn-api operations restore-check > restore-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"restore-drill.json\",\"name\":\"restore_drill\",\"release_gate\":\"Restore drill\",\"status\":\"missing\"},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api signing-key rotate > signing-key-rotation-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"signing-key-rotation-drill.json\",\"name\":\"signing_key_rotation_drill\",\"release_gate\":\"Key operations\",\"status\":\"missing\"},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api key-encryption rotate > kek-rotation-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"kek-rotation-drill.json\",\"name\":\"kek_rotation_drill\",\"release_gate\":\"Key operations\",\"status\":\"missing\"},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"break-glass-admin-recovery-drill.json\",\"name\":\"break_glass_admin_recovery_drill\",\"release_gate\":\"Emergency access\",\"status\":\"missing\"},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"audit-export-archive-drill.json\",\"name\":\"audit_export_archive_drill\",\"release_gate\":\"Audit operations\",\"status\":\"missing\"},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api audit purge-expired > audit-retention-purge-drill.json\",\"failure_codes\":{\"missing_evidence\":1},\"file_name\":\"audit-retention-purge-drill.json\",\"name\":\"audit_retention_purge_drill\",\"release_gate\":\"Audit operations\",\"status\":\"missing\"}],\"passed_artifact_count\":0,\"schema_version\":\"cairnid.mcp.evidence.v1\",\"status\":\"incomplete\"}",
+      "type": "text"
+    }
+  ],
+  "isError": false,
+  "structuredContent": {
+    "artifact_count": 24,
+    "artifacts": [
+      {
+        "check_count": 0,
+        "command": "cairn-api operations preflight > operations-preflight.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "operations-preflight.json",
+        "name": "operations_preflight",
+        "release_gate": "Operations preflight",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api operations dependency-policy-evidence > dependency-policy-check.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "dependency-policy-check.json",
+        "name": "dependency_policy_check",
+        "release_gate": "Dependency policy",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "release-assets-verification.json",
+        "name": "release_assets_verification",
+        "release_gate": "CLI/MCP public release assets",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api conformance oidcc-static-registration > openid-static-registration.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "openid-static-registration.json",
+        "name": "openid_static_registration",
+        "release_gate": "Static OpenID artifacts",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api conformance oidcc-static-config > cairn-oidcc-static.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "cairn-oidcc-static.json",
+        "name": "openid_static_config",
+        "release_gate": "Static OpenID artifacts",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "oidc-metadata-smoke.json",
+        "name": "oidc_metadata_smoke",
+        "release_gate": "Deployed OIDC metadata",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "openid-config-op-result.json",
+        "name": "openid_config_op_conformance",
+        "release_gate": "OpenID conformance",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "openid-basic-op-result.json",
+        "name": "openid_basic_op_conformance",
+        "release_gate": "OpenID conformance",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api scim connector-profile generic > scim-generic-connector-profile.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "scim-generic-connector-profile.json",
+        "name": "scim_generic_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api scim connector-profile okta > scim-okta-connector-profile.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "scim-okta-connector-profile.json",
+        "name": "scim_okta_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api scim connector-profile entra > scim-entra-connector-profile.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "scim-entra-connector-profile.json",
+        "name": "scim_entra_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api scim smoke > scim-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "scim-smoke.json",
+        "name": "scim_public_smoke",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "save normalized Okta connector smoke summary as scim-okta-connector-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "scim-okta-connector-smoke.json",
+        "name": "scim_okta_connector_smoke",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "scim-entra-connector-smoke.json",
+        "name": "scim_entra_connector_smoke",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api operations browser-origin-smoke > browser-origin-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "browser-origin-smoke.json",
+        "name": "browser_origin_smoke",
+        "release_gate": "Browser origin defense",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api operations security-headers-smoke > security-headers-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "security-headers-smoke.json",
+        "name": "security_headers_smoke",
+        "release_gate": "Security headers",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "email-provider-smoke.json",
+        "name": "email_provider_smoke",
+        "release_gate": "Email delivery",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "lifecycle-email-smoke.json",
+        "name": "lifecycle_email_smoke",
+        "release_gate": "Email delivery",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "set DATABASE_URL to a restored production-like Postgres database, then run cairn-api operations restore-check > restore-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "restore-drill.json",
+        "name": "restore_drill",
+        "release_gate": "Restore drill",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api signing-key rotate > signing-key-rotation-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "signing-key-rotation-drill.json",
+        "name": "signing_key_rotation_drill",
+        "release_gate": "Key operations",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api key-encryption rotate > kek-rotation-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "kek-rotation-drill.json",
+        "name": "kek_rotation_drill",
+        "release_gate": "Key operations",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "break-glass-admin-recovery-drill.json",
+        "name": "break_glass_admin_recovery_drill",
+        "release_gate": "Emergency access",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "audit-export-archive-drill.json",
+        "name": "audit_export_archive_drill",
+        "release_gate": "Audit operations",
+        "status": "missing"
+      },
+      {
+        "check_count": 0,
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api audit purge-expired > audit-retention-purge-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "failure_count": 1,
+        "file_name": "audit-retention-purge-drill.json",
+        "name": "audit_retention_purge_drill",
+        "release_gate": "Audit operations",
+        "status": "missing"
+      }
+    ],
+    "failed_artifact_count": 0,
+    "failure_codes": {
+      "missing_evidence": 24
+    },
+    "failure_count": 24,
+    "generated_at": "<generated_at>",
+    "max_age_days": 30,
+    "missing_artifact_count": 24,
+    "next_actions": [
+      {
+        "command": "cairn-api operations preflight > operations-preflight.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "operations-preflight.json",
+        "name": "operations_preflight",
+        "release_gate": "Operations preflight",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api operations dependency-policy-evidence > dependency-policy-check.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "dependency-policy-check.json",
+        "name": "dependency_policy_check",
+        "release_gate": "Dependency policy",
+        "status": "missing"
+      },
+      {
+        "command": "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "release-assets-verification.json",
+        "name": "release_assets_verification",
+        "release_gate": "CLI/MCP public release assets",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api conformance oidcc-static-registration > openid-static-registration.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "openid-static-registration.json",
+        "name": "openid_static_registration",
+        "release_gate": "Static OpenID artifacts",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api conformance oidcc-static-config > cairn-oidcc-static.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "cairn-oidcc-static.json",
+        "name": "openid_static_config",
+        "release_gate": "Static OpenID artifacts",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "oidc-metadata-smoke.json",
+        "name": "oidc_metadata_smoke",
+        "release_gate": "Deployed OIDC metadata",
+        "status": "missing"
+      },
+      {
+        "command": "save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "openid-config-op-result.json",
+        "name": "openid_config_op_conformance",
+        "release_gate": "OpenID conformance",
+        "status": "missing"
+      },
+      {
+        "command": "save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "openid-basic-op-result.json",
+        "name": "openid_basic_op_conformance",
+        "release_gate": "OpenID conformance",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api scim connector-profile generic > scim-generic-connector-profile.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "scim-generic-connector-profile.json",
+        "name": "scim_generic_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api scim connector-profile okta > scim-okta-connector-profile.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "scim-okta-connector-profile.json",
+        "name": "scim_okta_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api scim connector-profile entra > scim-entra-connector-profile.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "scim-entra-connector-profile.json",
+        "name": "scim_entra_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api scim smoke > scim-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "scim-smoke.json",
+        "name": "scim_public_smoke",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "command": "save normalized Okta connector smoke summary as scim-okta-connector-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "scim-okta-connector-smoke.json",
+        "name": "scim_okta_connector_smoke",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "command": "save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "scim-entra-connector-smoke.json",
+        "name": "scim_entra_connector_smoke",
+        "release_gate": "SCIM provisioning",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api operations browser-origin-smoke > browser-origin-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "browser-origin-smoke.json",
+        "name": "browser_origin_smoke",
+        "release_gate": "Browser origin defense",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api operations security-headers-smoke > security-headers-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "security-headers-smoke.json",
+        "name": "security_headers_smoke",
+        "release_gate": "Security headers",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "email-provider-smoke.json",
+        "name": "email_provider_smoke",
+        "release_gate": "Email delivery",
+        "status": "missing"
+      },
+      {
+        "command": "cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "lifecycle-email-smoke.json",
+        "name": "lifecycle_email_smoke",
+        "release_gate": "Email delivery",
+        "status": "missing"
+      },
+      {
+        "command": "set DATABASE_URL to a restored production-like Postgres database, then run cairn-api operations restore-check > restore-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "restore-drill.json",
+        "name": "restore_drill",
+        "release_gate": "Restore drill",
+        "status": "missing"
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api signing-key rotate > signing-key-rotation-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "signing-key-rotation-drill.json",
+        "name": "signing_key_rotation_drill",
+        "release_gate": "Key operations",
+        "status": "missing"
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api key-encryption rotate > kek-rotation-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "kek-rotation-drill.json",
+        "name": "kek_rotation_drill",
+        "release_gate": "Key operations",
+        "status": "missing"
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "break-glass-admin-recovery-drill.json",
+        "name": "break_glass_admin_recovery_drill",
+        "release_gate": "Emergency access",
+        "status": "missing"
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "audit-export-archive-drill.json",
+        "name": "audit_export_archive_drill",
+        "release_gate": "Audit operations",
+        "status": "missing"
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api audit purge-expired > audit-retention-purge-drill.json",
+        "failure_codes": {
+          "missing_evidence": 1
+        },
+        "file_name": "audit-retention-purge-drill.json",
+        "name": "audit_retention_purge_drill",
+        "release_gate": "Audit operations",
+        "status": "missing"
+      }
+    ],
+    "passed_artifact_count": 0,
+    "schema_version": "cairnid.mcp.evidence.v1",
+    "status": "incomplete"
+  }
+}
