@@ -22,7 +22,7 @@ bun run build
 bun run test:e2e
 ```
 
-Use Bun for JavaScript package management. Do not add npm, pnpm, or yarn lockfiles.
+Use Bun for JavaScript package management, script execution, local tool execution, and web runtime paths. Do not add non-Bun JavaScript lockfiles.
 
 ## Release Tooling
 

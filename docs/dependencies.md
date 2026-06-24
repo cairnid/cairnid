@@ -53,7 +53,7 @@ Current overrides:
 
 - `cookie=0.7.2`: forces SvelteKit's transitive cookie parser above the vulnerable `<0.7.0` advisory range while upstream still declares `cookie ^0.6.0`.
 
-Use Bun for JavaScript package management. Do not add npm, pnpm, or yarn lockfiles.
+Use Bun for JavaScript package management, script execution, local tool execution, and web runtime paths. Do not add non-Bun JavaScript lockfiles.
 
 ## Review Expectations
 
