@@ -47,6 +47,13 @@
       "description": "Preflight, release evidence, backup, restore, key rotation, audit export, and drills."
     },
     {
+      "slug": "cli",
+      "title": "CLI",
+      "section": "Operate",
+      "source": "docs/cli.md",
+      "description": "Public cairnid command surface, JSON contracts, exit behavior, and release-asset verification boundary."
+    },
+    {
       "slug": "mcp",
       "title": "MCP",
       "section": "Operate",

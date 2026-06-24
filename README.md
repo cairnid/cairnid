@@ -18,6 +18,7 @@
   | <a href="docs/architecture/overview.md">Architecture</a>
   | <a href="docs/api.md">API</a>
   | <a href="docs/deployment.md">Deployment</a>
+  | <a href="docs/cli.md">CLI</a>
   | <a href="docs/security.md">Security</a>
   | <a href="docs/release-gates.md">Release Gates</a>
   | <a href="GOVERNANCE.md">Governance</a>
@@ -139,6 +140,7 @@ cargo test -p cairn-database --test postgres_migrations --locked
 - [Architecture](docs/architecture/overview.md)
 - [API](docs/api.md)
 - [Deployment](docs/deployment.md)
+- [CLI](docs/cli.md)
 - [Operations](docs/operations.md)
 - [MCP](docs/mcp.md)
 - [Security posture](docs/security.md)

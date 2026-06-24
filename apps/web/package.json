@@ -3,13 +3,14 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "packageManager": "bun@1.3.14",
   "scripts": {
-    "dev": "bun node_modules/vite/bin/vite.js --host 0.0.0.0",
-    "build": "bun scripts/run-vite-build.ts build",
-    "preview": "bun node_modules/vite/bin/vite.js preview --host 0.0.0.0",
-    "check": "bun scripts/run-svelte-check.ts --tsconfig ./tsconfig.json",
-    "test": "bun scripts/run-vitest.ts run",
-    "test:e2e": "bun scripts/run-playwright.ts"
+    "dev": "bun --bun vite --host 0.0.0.0",
+    "build": "bun --bun vite build",
+    "preview": "bun --bun vite preview --host 0.0.0.0",
+    "check": "bun --bun svelte-kit sync && bun --bun svelte-check --tsconfig ./tsconfig.json",
+    "test": "bun --bun vitest run",
+    "test:e2e": "bun --bun vite build && bun --bun playwright test"
   },
   "dependencies": {
     "@lucide/svelte": "^1.21.0",

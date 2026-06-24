@@ -8,6 +8,7 @@ CairnID documentation lives in this repository so implementation changes, review
 - [API](api.md): implemented HTTP, OIDC/OAuth, session, admin, MFA, account lifecycle, and SCIM endpoints.
 - [Deployment](deployment.md): local Compose, container runtime, environment variables, and Windows build notes.
 - [Operations](operations.md): release evidence, preflight, backup/restore, key rotation, audit export, and drills.
+- [CLI](cli.md): public `cairnid` command surface, JSON contracts, exit behavior, and release-asset verification boundary.
 - [MCP](mcp.md): local read-only release-evidence tools over stdio.
 - [Security posture](security.md): implemented controls, gaps, release evidence, and reporting boundaries.
 - [Release gates](release-gates.md): first-RC compatibility/support matrix and required evidence before production recommendation.
