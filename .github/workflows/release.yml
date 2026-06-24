@@ -66,7 +66,7 @@ jobs:
             echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -226,7 +226,7 @@ jobs:
       CLI_AUX_DIR: target/${{ matrix.target }}/release/cairnid-operator-files
       MCP_BINARY: target/${{ matrix.target }}/release/cairnid-mcp${{ matrix.binary_ext }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
@@ -1209,7 +1209,7 @@ jobs:
       RELEASE_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
       RELEASE_SOURCE_CI_RUN_URL: ${{ needs.prepare.outputs.ci_run_url }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Download packaged release assets
         uses: actions/download-artifact@v8
@@ -1591,7 +1591,7 @@ jobs:
       RELEASE_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
       RELEASE_SOURCE_CI_RUN_URL: ${{ needs.prepare.outputs.ci_run_url }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Download assembled release assets
         uses: actions/download-artifact@v8
@@ -1763,7 +1763,7 @@ jobs:
       RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
       RELEASE_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Download assembled release assets
         uses: actions/download-artifact@v8
