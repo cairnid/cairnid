@@ -1,0 +1,292 @@
+{
+  "content": [
+    {
+      "text": "{\"artifact_count\":24,\"artifacts\":[{\"command\":\"cairn-api operations preflight > operations-preflight.json\",\"contains_secrets\":false,\"file_name\":\"operations-preflight.json\",\"name\":\"operations_preflight\",\"release_gate\":\"Operations preflight\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"operations_preflight\",\"writes_application_state\":false},{\"command\":\"cairn-api operations dependency-policy-evidence > dependency-policy-check.json\",\"contains_secrets\":false,\"file_name\":\"dependency-policy-check.json\",\"name\":\"dependency_policy_check\",\"release_gate\":\"Dependency policy\",\"requires_production_like_environment\":false,\"touches_external_provider\":false,\"validator\":\"dependency_policy_check\",\"writes_application_state\":false},{\"command\":\"cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json\",\"contains_secrets\":false,\"file_name\":\"release-assets-verification.json\",\"name\":\"release_assets_verification\",\"release_gate\":\"CLI/MCP public release assets\",\"requires_production_like_environment\":false,\"touches_external_provider\":true,\"validator\":\"release_assets_verification\",\"writes_application_state\":false},{\"command\":\"cairn-api conformance oidcc-static-registration > openid-static-registration.json\",\"contains_secrets\":false,\"file_name\":\"openid-static-registration.json\",\"name\":\"openid_static_registration\",\"release_gate\":\"Static OpenID artifacts\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"openid_static_registration\",\"writes_application_state\":false},{\"command\":\"cairn-api conformance oidcc-static-config > cairn-oidcc-static.json\",\"contains_secrets\":true,\"file_name\":\"cairn-oidcc-static.json\",\"name\":\"openid_static_config\",\"release_gate\":\"Static OpenID artifacts\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"openid_static_config\",\"writes_application_state\":false},{\"command\":\"cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json\",\"contains_secrets\":false,\"file_name\":\"oidc-metadata-smoke.json\",\"name\":\"oidc_metadata_smoke\",\"release_gate\":\"Deployed OIDC metadata\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"oidc_metadata_smoke\",\"writes_application_state\":false},{\"command\":\"save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json\",\"contains_secrets\":false,\"file_name\":\"openid-config-op-result.json\",\"name\":\"openid_config_op_conformance\",\"release_gate\":\"OpenID conformance\",\"requires_production_like_environment\":true,\"touches_external_provider\":true,\"validator\":\"openid_config_op_conformance\",\"writes_application_state\":false},{\"command\":\"save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json\",\"contains_secrets\":false,\"file_name\":\"openid-basic-op-result.json\",\"name\":\"openid_basic_op_conformance\",\"release_gate\":\"OpenID conformance\",\"requires_production_like_environment\":true,\"touches_external_provider\":true,\"validator\":\"openid_basic_op_conformance\",\"writes_application_state\":false},{\"command\":\"cairn-api scim connector-profile generic > scim-generic-connector-profile.json\",\"contains_secrets\":false,\"file_name\":\"scim-generic-connector-profile.json\",\"name\":\"scim_generic_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"scim_connector_profile_generic\",\"writes_application_state\":false},{\"command\":\"cairn-api scim connector-profile okta > scim-okta-connector-profile.json\",\"contains_secrets\":false,\"file_name\":\"scim-okta-connector-profile.json\",\"name\":\"scim_okta_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"scim_connector_profile_okta\",\"writes_application_state\":false},{\"command\":\"cairn-api scim connector-profile entra > scim-entra-connector-profile.json\",\"contains_secrets\":false,\"file_name\":\"scim-entra-connector-profile.json\",\"name\":\"scim_entra_connector_profile\",\"release_gate\":\"SCIM provisioning\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"scim_connector_profile_entra\",\"writes_application_state\":false},{\"command\":\"cairn-api scim smoke > scim-smoke.json\",\"contains_secrets\":false,\"file_name\":\"scim-smoke.json\",\"name\":\"scim_public_smoke\",\"release_gate\":\"SCIM provisioning\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"scim_smoke\",\"writes_application_state\":true},{\"command\":\"save normalized Okta connector smoke summary as scim-okta-connector-smoke.json\",\"contains_secrets\":false,\"file_name\":\"scim-okta-connector-smoke.json\",\"name\":\"scim_okta_connector_smoke\",\"release_gate\":\"SCIM provisioning\",\"requires_production_like_environment\":true,\"touches_external_provider\":true,\"validator\":\"scim_connector_smoke_okta\",\"writes_application_state\":true},{\"command\":\"save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json\",\"contains_secrets\":false,\"file_name\":\"scim-entra-connector-smoke.json\",\"name\":\"scim_entra_connector_smoke\",\"release_gate\":\"SCIM provisioning\",\"requires_production_like_environment\":true,\"touches_external_provider\":true,\"validator\":\"scim_connector_smoke_entra\",\"writes_application_state\":true},{\"command\":\"cairn-api operations browser-origin-smoke > browser-origin-smoke.json\",\"contains_secrets\":false,\"file_name\":\"browser-origin-smoke.json\",\"name\":\"browser_origin_smoke\",\"release_gate\":\"Browser origin defense\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"browser_origin_smoke\",\"writes_application_state\":false},{\"command\":\"cairn-api operations security-headers-smoke > security-headers-smoke.json\",\"contains_secrets\":false,\"file_name\":\"security-headers-smoke.json\",\"name\":\"security_headers_smoke\",\"release_gate\":\"Security headers\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"security_headers_smoke\",\"writes_application_state\":false},{\"command\":\"cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json\",\"contains_secrets\":false,\"file_name\":\"email-provider-smoke.json\",\"name\":\"email_provider_smoke\",\"release_gate\":\"Email delivery\",\"requires_production_like_environment\":true,\"touches_external_provider\":true,\"validator\":\"email_provider_smoke\",\"writes_application_state\":false},{\"command\":\"cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json\",\"contains_secrets\":false,\"file_name\":\"lifecycle-email-smoke.json\",\"name\":\"lifecycle_email_smoke\",\"release_gate\":\"Email delivery\",\"requires_production_like_environment\":true,\"touches_external_provider\":true,\"validator\":\"lifecycle_email_smoke\",\"writes_application_state\":true},{\"command\":\"set DATABASE_URL to a restored production-like Postgres database, then run cairn-api operations restore-check > restore-drill.json\",\"contains_secrets\":false,\"file_name\":\"restore-drill.json\",\"name\":\"restore_drill\",\"release_gate\":\"Restore drill\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"restore_drill\",\"writes_application_state\":false},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api signing-key rotate > signing-key-rotation-drill.json\",\"contains_secrets\":false,\"file_name\":\"signing-key-rotation-drill.json\",\"name\":\"signing_key_rotation_drill\",\"release_gate\":\"Key operations\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"signing_key_rotation\",\"writes_application_state\":true},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api key-encryption rotate > kek-rotation-drill.json\",\"contains_secrets\":false,\"file_name\":\"kek-rotation-drill.json\",\"name\":\"kek_rotation_drill\",\"release_gate\":\"Key operations\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"key_encryption_rotation\",\"writes_application_state\":true},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json\",\"contains_secrets\":false,\"file_name\":\"break-glass-admin-recovery-drill.json\",\"name\":\"break_glass_admin_recovery_drill\",\"release_gate\":\"Emergency access\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"break_glass_admin_recovery\",\"writes_application_state\":true},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json\",\"contains_secrets\":false,\"file_name\":\"audit-export-archive-drill.json\",\"name\":\"audit_export_archive_drill\",\"release_gate\":\"Audit operations\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"audit_export_archive\",\"writes_application_state\":false},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api audit purge-expired > audit-retention-purge-drill.json\",\"contains_secrets\":false,\"file_name\":\"audit-retention-purge-drill.json\",\"name\":\"audit_retention_purge_drill\",\"release_gate\":\"Audit operations\",\"requires_production_like_environment\":true,\"touches_external_provider\":false,\"validator\":\"audit_retention_purge\",\"writes_application_state\":true}],\"default_max_age_days\":30,\"generated_at\":\"<generated_at>\",\"notes\":[\"Store release evidence in an access-controlled directory.\",\"Do not commit cairn-oidcc-static.json because it contains OIDC client secrets.\",\"This manifest is an operator checklist only; it does not produce artifacts, prove release approval, or claim production readiness.\",\"Review contains_secrets, requires_production_like_environment, writes_application_state, and touches_external_provider before running any command.\",\"State-changing artifacts such as lifecycle-email-smoke.json and signing-key-rotation-drill.json require explicit approval and an approved production-like or restored drill target.\",\"External-provider artifacts such as release-assets-verification.json and lifecycle-email-smoke.json must be normalized token-free receipts without raw provider exports, logs, screenshots, request headers, cookies, or tokens.\",\"release-assets-verification.json is final release evidence only after a published GitHub Release exists and provenance plus SBOM attestation checks have passed; workflow-run and rehearsal receipts are not final release evidence.\",\"Run cairnid evidence check against the completed directory before the first public RC and each public release.\"],\"schema_version\":\"cairnid.mcp.evidence.v1\",\"status\":\"ok\"}",
+      "type": "text"
+    }
+  ],
+  "isError": false,
+  "structuredContent": {
+    "artifact_count": 24,
+    "artifacts": [
+      {
+        "command": "cairn-api operations preflight > operations-preflight.json",
+        "contains_secrets": false,
+        "file_name": "operations-preflight.json",
+        "name": "operations_preflight",
+        "release_gate": "Operations preflight",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "operations_preflight",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api operations dependency-policy-evidence > dependency-policy-check.json",
+        "contains_secrets": false,
+        "file_name": "dependency-policy-check.json",
+        "name": "dependency_policy_check",
+        "release_gate": "Dependency policy",
+        "requires_production_like_environment": false,
+        "touches_external_provider": false,
+        "validator": "dependency_policy_check",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json",
+        "contains_secrets": false,
+        "file_name": "release-assets-verification.json",
+        "name": "release_assets_verification",
+        "release_gate": "CLI/MCP public release assets",
+        "requires_production_like_environment": false,
+        "touches_external_provider": true,
+        "validator": "release_assets_verification",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api conformance oidcc-static-registration > openid-static-registration.json",
+        "contains_secrets": false,
+        "file_name": "openid-static-registration.json",
+        "name": "openid_static_registration",
+        "release_gate": "Static OpenID artifacts",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "openid_static_registration",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api conformance oidcc-static-config > cairn-oidcc-static.json",
+        "contains_secrets": true,
+        "file_name": "cairn-oidcc-static.json",
+        "name": "openid_static_config",
+        "release_gate": "Static OpenID artifacts",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "openid_static_config",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json",
+        "contains_secrets": false,
+        "file_name": "oidc-metadata-smoke.json",
+        "name": "oidc_metadata_smoke",
+        "release_gate": "Deployed OIDC metadata",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "oidc_metadata_smoke",
+        "writes_application_state": false
+      },
+      {
+        "command": "save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json",
+        "contains_secrets": false,
+        "file_name": "openid-config-op-result.json",
+        "name": "openid_config_op_conformance",
+        "release_gate": "OpenID conformance",
+        "requires_production_like_environment": true,
+        "touches_external_provider": true,
+        "validator": "openid_config_op_conformance",
+        "writes_application_state": false
+      },
+      {
+        "command": "save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json",
+        "contains_secrets": false,
+        "file_name": "openid-basic-op-result.json",
+        "name": "openid_basic_op_conformance",
+        "release_gate": "OpenID conformance",
+        "requires_production_like_environment": true,
+        "touches_external_provider": true,
+        "validator": "openid_basic_op_conformance",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api scim connector-profile generic > scim-generic-connector-profile.json",
+        "contains_secrets": false,
+        "file_name": "scim-generic-connector-profile.json",
+        "name": "scim_generic_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "scim_connector_profile_generic",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api scim connector-profile okta > scim-okta-connector-profile.json",
+        "contains_secrets": false,
+        "file_name": "scim-okta-connector-profile.json",
+        "name": "scim_okta_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "scim_connector_profile_okta",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api scim connector-profile entra > scim-entra-connector-profile.json",
+        "contains_secrets": false,
+        "file_name": "scim-entra-connector-profile.json",
+        "name": "scim_entra_connector_profile",
+        "release_gate": "SCIM provisioning",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "scim_connector_profile_entra",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api scim smoke > scim-smoke.json",
+        "contains_secrets": false,
+        "file_name": "scim-smoke.json",
+        "name": "scim_public_smoke",
+        "release_gate": "SCIM provisioning",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "scim_smoke",
+        "writes_application_state": true
+      },
+      {
+        "command": "save normalized Okta connector smoke summary as scim-okta-connector-smoke.json",
+        "contains_secrets": false,
+        "file_name": "scim-okta-connector-smoke.json",
+        "name": "scim_okta_connector_smoke",
+        "release_gate": "SCIM provisioning",
+        "requires_production_like_environment": true,
+        "touches_external_provider": true,
+        "validator": "scim_connector_smoke_okta",
+        "writes_application_state": true
+      },
+      {
+        "command": "save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json",
+        "contains_secrets": false,
+        "file_name": "scim-entra-connector-smoke.json",
+        "name": "scim_entra_connector_smoke",
+        "release_gate": "SCIM provisioning",
+        "requires_production_like_environment": true,
+        "touches_external_provider": true,
+        "validator": "scim_connector_smoke_entra",
+        "writes_application_state": true
+      },
+      {
+        "command": "cairn-api operations browser-origin-smoke > browser-origin-smoke.json",
+        "contains_secrets": false,
+        "file_name": "browser-origin-smoke.json",
+        "name": "browser_origin_smoke",
+        "release_gate": "Browser origin defense",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "browser_origin_smoke",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api operations security-headers-smoke > security-headers-smoke.json",
+        "contains_secrets": false,
+        "file_name": "security-headers-smoke.json",
+        "name": "security_headers_smoke",
+        "release_gate": "Security headers",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "security_headers_smoke",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json",
+        "contains_secrets": false,
+        "file_name": "email-provider-smoke.json",
+        "name": "email_provider_smoke",
+        "release_gate": "Email delivery",
+        "requires_production_like_environment": true,
+        "touches_external_provider": true,
+        "validator": "email_provider_smoke",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json",
+        "contains_secrets": false,
+        "file_name": "lifecycle-email-smoke.json",
+        "name": "lifecycle_email_smoke",
+        "release_gate": "Email delivery",
+        "requires_production_like_environment": true,
+        "touches_external_provider": true,
+        "validator": "lifecycle_email_smoke",
+        "writes_application_state": true
+      },
+      {
+        "command": "set DATABASE_URL to a restored production-like Postgres database, then run cairn-api operations restore-check > restore-drill.json",
+        "contains_secrets": false,
+        "file_name": "restore-drill.json",
+        "name": "restore_drill",
+        "release_gate": "Restore drill",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "restore_drill",
+        "writes_application_state": false
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api signing-key rotate > signing-key-rotation-drill.json",
+        "contains_secrets": false,
+        "file_name": "signing-key-rotation-drill.json",
+        "name": "signing_key_rotation_drill",
+        "release_gate": "Key operations",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "signing_key_rotation",
+        "writes_application_state": true
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api key-encryption rotate > kek-rotation-drill.json",
+        "contains_secrets": false,
+        "file_name": "kek-rotation-drill.json",
+        "name": "kek_rotation_drill",
+        "release_gate": "Key operations",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "key_encryption_rotation",
+        "writes_application_state": true
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json",
+        "contains_secrets": false,
+        "file_name": "break-glass-admin-recovery-drill.json",
+        "name": "break_glass_admin_recovery_drill",
+        "release_gate": "Emergency access",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "break_glass_admin_recovery",
+        "writes_application_state": true
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json",
+        "contains_secrets": false,
+        "file_name": "audit-export-archive-drill.json",
+        "name": "audit_export_archive_drill",
+        "release_gate": "Audit operations",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "audit_export_archive",
+        "writes_application_state": false
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api audit purge-expired > audit-retention-purge-drill.json",
+        "contains_secrets": false,
+        "file_name": "audit-retention-purge-drill.json",
+        "name": "audit_retention_purge_drill",
+        "release_gate": "Audit operations",
+        "requires_production_like_environment": true,
+        "touches_external_provider": false,
+        "validator": "audit_retention_purge",
+        "writes_application_state": true
+      }
+    ],
+    "default_max_age_days": 30,
+    "generated_at": "<generated_at>",
+    "notes": [
+      "Store release evidence in an access-controlled directory.",
+      "Do not commit cairn-oidcc-static.json because it contains OIDC client secrets.",
+      "This manifest is an operator checklist only; it does not produce artifacts, prove release approval, or claim production readiness.",
+      "Review contains_secrets, requires_production_like_environment, writes_application_state, and touches_external_provider before running any command.",
+      "State-changing artifacts such as lifecycle-email-smoke.json and signing-key-rotation-drill.json require explicit approval and an approved production-like or restored drill target.",
+      "External-provider artifacts such as release-assets-verification.json and lifecycle-email-smoke.json must be normalized token-free receipts without raw provider exports, logs, screenshots, request headers, cookies, or tokens.",
+      "release-assets-verification.json is final release evidence only after a published GitHub Release exists and provenance plus SBOM attestation checks have passed; workflow-run and rehearsal receipts are not final release evidence.",
+      "Run cairnid evidence check against the completed directory before the first public RC and each public release."
+    ],
+    "schema_version": "cairnid.mcp.evidence.v1",
+    "status": "ok"
+  }
+}

@@ -24,9 +24,9 @@ pub use self::oidc::normalize_openid_conformance_export;
 use self::redaction::sanitize_release_evidence_failure;
 use self::registry::EVIDENCE_SPECS;
 pub use self::release_assets::{
-    ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions,
-    ReleaseAssetsVerificationReceipt, release_assets_verification_receipt,
-    release_assets_verification_report,
+    RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION, ReleaseAssetsVerificationError,
+    ReleaseAssetsVerificationOptions, ReleaseAssetsVerificationReceipt,
+    release_assets_verification_receipt, release_assets_verification_report,
 };
 pub use self::types::{
     RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseEvidenceArtifactReport,
@@ -143,6 +143,7 @@ pub fn summarize_release_evidence(report: &ReleaseEvidenceReport) -> ReleaseEvid
             status: artifact.status,
             command: artifact.command,
             failures: artifact.failures.clone(),
+            failure_codes: artifact.failure_codes.clone(),
         })
         .collect::<Vec<_>>();
 
@@ -170,6 +171,7 @@ pub fn summarize_release_evidence(report: &ReleaseEvidenceReport) -> ReleaseEvid
             .count(),
         next_actions,
         failures: report.failures.clone(),
+        failure_codes: report.failure_codes.clone(),
     }
 }
 

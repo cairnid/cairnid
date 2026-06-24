@@ -1,4 +1,5 @@
 use super::super::oidc::REQUIRED_OIDC_METADATA_SMOKE_CHECKS;
+use super::super::release_assets::RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION;
 use super::super::scim::{
     REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS, REQUIRED_SCIM_SMOKE_CHECKS,
     expected_scim_connector_display_name,
@@ -434,6 +435,7 @@ pub(super) fn dependency_policy_check() -> Value {
 pub(super) fn release_assets_verification() -> Value {
     let tag = "v0.1.0-rc.1";
     json!({
+        "schema_version": RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION,
         "status": "ok",
         "completed_at": "2026-06-07T12:00:00Z",
         "release_tag": tag,

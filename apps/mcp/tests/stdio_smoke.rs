@@ -26,6 +26,8 @@ const MCP_EVIDENCE_RESULT_SCHEMA_VERSION: &str = "cairnid.mcp.evidence.v1";
 const MCP_PROTOCOL_VERSION: &str = "2025-11-25";
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const SENTINEL: &str = "CAIRNID_MCP_STDIO_SMOKE_DO_NOT_EXPOSE";
+const UPDATE_CONTRACT_FIXTURES_ENV: &str = "CAIRNID_UPDATE_MCP_FIXTURES";
+const CONTRACT_GENERATED_AT: &str = "<generated_at>";
 const EVIDENCE_SUMMARY_KEYS: &[&str] = &[
     "schema_version",
     "status",
@@ -57,6 +59,64 @@ const NEXT_ACTION_KEYS: &[&str] = &[
     "status",
     "command",
     "failure_codes",
+];
+const REQUIRED_OIDC_METADATA_SMOKE_CHECKS: &[&str] = &[
+    "issuer_https_origin",
+    "discovery_http_status",
+    "discovery_issuer_matches",
+    "discovery_endpoint_urls_match_issuer",
+    "discovery_strict_code_flow",
+    "discovery_refresh_and_client_credentials",
+    "discovery_pkce_s256",
+    "discovery_rs256",
+    "discovery_request_objects_disabled",
+    "discovery_rfc9207_iss_supported",
+    "jwks_http_status",
+    "jwks_rs256_public_key_material",
+    "jwks_no_private_key_material",
+];
+const REQUIRED_SCIM_SMOKE_CHECKS: &[&str] = &[
+    "secondary_token",
+    "rejected_token",
+    "service_provider_config",
+    "schemas",
+    "resource_types",
+    "user_create",
+    "user_filter",
+    "user_search_request",
+    "user_projection",
+    "user_patch",
+    "user_replace",
+    "group_create",
+    "group_filter",
+    "group_search_request",
+    "group_projection",
+    "group_patch",
+    "group_replace",
+    "group_delete",
+    "bulk_mutations",
+    "user_delete",
+    "user_soft_delete",
+];
+const REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS: &[&str] = &[
+    "connector_enabled",
+    "service_provider_config",
+    "user_create",
+    "user_exact_filter",
+    "user_search_request",
+    "user_projection",
+    "user_patch",
+    "user_replace",
+    "group_create",
+    "group_exact_filter",
+    "group_search_request",
+    "group_projection",
+    "group_patch_members",
+    "group_replace",
+    "user_deactivation",
+    "group_delete",
+    "token_rotation_acceptance",
+    "retired_token_rejection",
 ];
 
 #[test]
@@ -324,6 +384,105 @@ fn stdio_smoke_lists_tools_and_returns_sanitized_evidence_status() {
         "MCP response exposed raw artifact content: {status}"
     );
     server.assert_stderr_empty();
+
+    drop(server);
+    remove_temp_root(root);
+}
+
+#[test]
+fn stdio_contract_matches_canonical_fixtures() {
+    let root = temp_root("contract-fixtures");
+    let incomplete_dir = root.join(DEFAULT_EVIDENCE_CHILD);
+    init_release_evidence_directory(&incomplete_dir, OffsetDateTime::now_utc(), false)
+        .expect("initialize incomplete evidence directory");
+    let ready_dir_name = "ready-evidence";
+    let ready_dir = root.join(ready_dir_name);
+    init_release_evidence_directory(&ready_dir, OffsetDateTime::now_utc(), false)
+        .expect("initialize ready evidence directory");
+    write_complete_release_evidence(&ready_dir);
+
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let tools = server.request(
+        2,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+        }),
+    );
+    assert_contract_fixture(
+        "tools-list-schemas.json",
+        tools_list_schema_contract(&tools["tools"]),
+    );
+
+    let plan = call_evidence_plan(&mut server, 3, json!({}));
+    assert_eq!(plan["isError"].as_bool(), Some(false));
+    assert_contract_fixture("evidence-plan-success.json", canonical_mcp_result(plan));
+
+    let manifest = call_evidence_manifest(&mut server, 4, json!({}));
+    assert_eq!(manifest["isError"].as_bool(), Some(false));
+    assert_contract_fixture(
+        "evidence-manifest-success.json",
+        canonical_mcp_result(manifest),
+    );
+
+    let status = call_evidence_status(
+        &mut server,
+        5,
+        json!({
+            "evidence_dir": DEFAULT_EVIDENCE_CHILD
+        }),
+    );
+    assert_eq!(status["isError"].as_bool(), Some(false));
+    assert_eq!(
+        status["structuredContent"]["status"].as_str(),
+        Some("incomplete")
+    );
+    assert_contract_fixture("evidence-status-success.json", canonical_mcp_result(status));
+
+    let check = call_evidence_check(
+        &mut server,
+        6,
+        json!({
+            "evidence_dir": ready_dir_name
+        }),
+    );
+    assert_eq!(
+        check["isError"].as_bool(),
+        Some(false),
+        "ready evidence check should pass: {check}"
+    );
+    assert_eq!(check["structuredContent"]["status"].as_str(), Some("ready"));
+    assert_contract_fixture("evidence-check-success.json", canonical_mcp_result(check));
+
+    let request_error = call_evidence_status(
+        &mut server,
+        7,
+        json!({
+            "evidence_dir": ""
+        }),
+    );
+    assert_tool_error_code(&request_error, "empty_evidence_dir");
+    assert_contract_fixture(
+        "request-error-empty-evidence-dir.json",
+        canonical_mcp_result(request_error),
+    );
+
+    let incomplete_check = call_evidence_check(
+        &mut server,
+        8,
+        json!({
+            "evidence_dir": DEFAULT_EVIDENCE_CHILD
+        }),
+    );
+    assert_tool_error_code(&incomplete_check, "release_evidence_incomplete");
+    assert_contract_fixture(
+        "incomplete-check-error.json",
+        canonical_mcp_result(incomplete_check),
+    );
 
     drop(server);
     remove_temp_root(root);
@@ -1030,6 +1189,956 @@ fn write_unsafe_artifact_shape(evidence_dir: &Path) {
         serde_json::to_vec_pretty(&artifact).expect("serialize artifact"),
     )
     .expect("write unsafe artifact");
+}
+
+fn tools_list_schema_contract(tools: &Value) -> Value {
+    let mut tools = tools
+        .as_array()
+        .expect("tools/list tools array")
+        .iter()
+        .map(|tool| {
+            json!({
+                "name": tool.get("name").expect("tool name"),
+                "inputSchema": tool.get("inputSchema").expect("tool inputSchema"),
+                "outputSchema": tool.get("outputSchema").expect("tool outputSchema"),
+            })
+        })
+        .collect::<Vec<_>>();
+    tools.sort_by(|left, right| {
+        left["name"]
+            .as_str()
+            .expect("left tool name")
+            .cmp(right["name"].as_str().expect("right tool name"))
+    });
+
+    Value::Array(tools)
+}
+
+fn canonical_mcp_result(mut result: Value) -> Value {
+    let structured = result
+        .get_mut("structuredContent")
+        .expect("MCP result structuredContent");
+    normalize_contract_value(structured);
+    let normalized_structured = structured.clone();
+
+    let content = result
+        .get_mut("content")
+        .and_then(Value::as_array_mut)
+        .and_then(|content| content.first_mut())
+        .expect("MCP result content[0]");
+    let text = content
+        .get_mut("text")
+        .and_then(|value| value.as_str())
+        .expect("MCP result content[0].text");
+    let mut text_json =
+        serde_json::from_str::<Value>(text).expect("MCP result content[0].text JSON");
+    normalize_contract_value(&mut text_json);
+    assert_eq!(
+        text_json, normalized_structured,
+        "content[0].text should mirror structuredContent after canonical normalization"
+    );
+    content["text"] = Value::String(canonical_json_compact(&text_json));
+
+    normalize_contract_value(&mut result);
+    result
+}
+
+fn normalize_contract_value(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            if object.contains_key("generated_at") {
+                object.insert(
+                    "generated_at".to_owned(),
+                    Value::String(CONTRACT_GENERATED_AT.to_owned()),
+                );
+            }
+            for child in object.values_mut() {
+                normalize_contract_value(child);
+            }
+        }
+        Value::Array(values) => {
+            for child in values {
+                normalize_contract_value(child);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn assert_contract_fixture(name: &str, actual: Value) {
+    let path = contract_fixture_path(name);
+    let actual = canonical_json_pretty(&actual);
+
+    if std::env::var_os(UPDATE_CONTRACT_FIXTURES_ENV).is_some() {
+        let parent = path.parent().expect("fixture parent");
+        fs::create_dir_all(parent).expect("create contract fixture directory");
+        fs::write(&path, &actual).expect("write contract fixture");
+        return;
+    }
+
+    let expected = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read contract fixture {}: {error}", path.display()));
+    assert_eq!(actual, expected, "contract fixture {name} drifted");
+}
+
+fn contract_fixture_path(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("testdata")
+        .join("contract")
+        .join(name)
+}
+
+fn canonical_json_pretty(value: &Value) -> String {
+    let sorted = sorted_json_value(value);
+    serde_json::to_string_pretty(&sorted).expect("serialize canonical JSON") + "\n"
+}
+
+fn canonical_json_compact(value: &Value) -> String {
+    let sorted = sorted_json_value(value);
+    serde_json::to_string(&sorted).expect("serialize compact canonical JSON")
+}
+
+fn sorted_json_value(value: &Value) -> Value {
+    match value {
+        Value::Object(object) => {
+            let mut keys = object.keys().collect::<Vec<_>>();
+            keys.sort();
+            let mut sorted = serde_json::Map::new();
+            for key in keys {
+                sorted.insert(key.clone(), sorted_json_value(&object[key]));
+            }
+            Value::Object(sorted)
+        }
+        Value::Array(values) => Value::Array(values.iter().map(sorted_json_value).collect()),
+        _ => value.clone(),
+    }
+}
+
+fn write_complete_release_evidence(evidence_dir: &Path) {
+    write_json_fixture(
+        evidence_dir,
+        "operations-preflight.json",
+        production_preflight(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "dependency-policy-check.json",
+        dependency_policy_check(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "release-assets-verification.json",
+        release_assets_verification(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "openid-static-registration.json",
+        openid_static_registration_report(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "cairn-oidcc-static.json",
+        openid_static_config(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "oidc-metadata-smoke.json",
+        oidc_metadata_smoke(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "openid-config-op-result.json",
+        openid_conformance_summary_with_provenance(
+            "Config OP",
+            "oidcc-config-certification-test-plan",
+            "https://www.certification.openid.net/plan-detail.html?plan=config-op",
+        ),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "openid-basic-op-result.json",
+        openid_conformance_plan_export("oidcc-basic-certification-test-plan", "PASSED"),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "scim-generic-connector-profile.json",
+        scim_connector_profile("generic"),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "scim-okta-connector-profile.json",
+        scim_connector_profile("okta"),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "scim-entra-connector-profile.json",
+        scim_connector_profile("entra"),
+    );
+    write_json_fixture(evidence_dir, "scim-smoke.json", scim_smoke());
+    write_json_fixture(
+        evidence_dir,
+        "scim-okta-connector-smoke.json",
+        scim_connector_smoke("okta"),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "scim-entra-connector-smoke.json",
+        scim_connector_smoke("entra"),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "browser-origin-smoke.json",
+        browser_origin_smoke(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "security-headers-smoke.json",
+        security_headers_smoke(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "email-provider-smoke.json",
+        json!({
+            "status": "sent",
+            "provider": "command",
+            "recipient_email": "ops@example.com",
+            "completed_at": "2026-06-07T12:00:00Z",
+            "provider_message_id": "provider-smoke-1"
+        }),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "lifecycle-email-smoke.json",
+        lifecycle_email_smoke_receipt(),
+    );
+    write_json_fixture(evidence_dir, "restore-drill.json", restore_drill_receipt());
+    write_json_fixture(
+        evidence_dir,
+        "signing-key-rotation-drill.json",
+        signing_key_rotation_receipt(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "kek-rotation-drill.json",
+        key_encryption_rotation_receipt(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "break-glass-admin-recovery-drill.json",
+        break_glass_admin_recovery_receipt(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "audit-export-archive-drill.json",
+        audit_export_receipt(),
+    );
+    write_json_fixture(
+        evidence_dir,
+        "audit-retention-purge-drill.json",
+        audit_retention_purge_receipt(),
+    );
+}
+
+fn write_json_fixture(root: &Path, file_name: &str, value: Value) {
+    fs::write(
+        root.join(file_name),
+        serde_json::to_string_pretty(&value).expect("serialize evidence fixture"),
+    )
+    .expect("write evidence fixture");
+}
+
+fn production_preflight() -> Value {
+    json!({
+        "status": "ok",
+        "environment": "production",
+        "failures": [],
+        "database": {
+            "reachable": true,
+            "applied_migrations": 12
+        },
+        "signing": {
+            "database_active_kid": "rs256-active",
+            "active_jwks_count": 2,
+            "database_active_key_decryptable": true,
+            "lifecycle": {
+                "active_key_count": 1
+            }
+        },
+        "email_delivery": {
+            "production_ready": true,
+            "queue": {
+                "failed": 0
+            }
+        },
+        "openid_conformance": {
+            "issuer_https_origin_ready": true,
+            "static_client_environment_ready": true
+        }
+    })
+}
+
+fn dependency_policy_check() -> Value {
+    json!({
+        "status": "ok",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "workspace": {
+            "cargo_lock_present": true,
+            "bun_lock_present": true,
+            "package_json_present": true,
+            "deny_toml_present": true,
+            "cargo_audit_config_present": true,
+            "dependency_docs_present": true
+        },
+        "checks": [
+            {
+                "name": "cargo_deny",
+                "command": "cargo deny check",
+                "status": "passed",
+                "exit_code": 0,
+                "stdout_bytes": 81,
+                "stderr_bytes": 0,
+                "tool_version": "cargo-deny 0.19.8"
+            },
+            {
+                "name": "cargo_audit",
+                "command": "cargo audit",
+                "status": "passed",
+                "exit_code": 0,
+                "stdout_bytes": 128,
+                "stderr_bytes": 0,
+                "tool_version": "cargo-audit 0.22.2"
+            },
+            {
+                "name": "bun_audit",
+                "command": "bun run audit",
+                "status": "passed",
+                "exit_code": 0,
+                "stdout_bytes": 19,
+                "stderr_bytes": 0,
+                "tool_version": "1.3.14"
+            }
+        ],
+        "failures": []
+    })
+}
+
+fn release_assets_verification() -> Value {
+    let tag = "v0.1.0-rc.1";
+    json!({
+        "schema_version": "cairnid.release_assets_verification.v1",
+        "status": "ok",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "release_tag": tag,
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "release_url": "https://github.com/cairnid/cairnid/releases/tag/v0.1.0-rc.1",
+        "run_url": "https://github.com/cairnid/cairnid/actions/runs/123456789",
+        "github_release_immutability_enabled_before_publish": true,
+        "checksums": {
+            "file_name": "SHA256SUMS.txt",
+            "algorithm": "SHA-256",
+            "present": true,
+            "verified": true
+        },
+        "release_manifest": {
+            "file_name": "release-manifest.json",
+            "present": true,
+            "sha256_verified": true
+        },
+        "attestations": {
+            "signer_workflow": "cairnid/cairnid/.github/workflows/release.yml",
+            "source_ref": "refs/tags/v0.1.0-rc.1",
+            "provenance_verified": true,
+            "sbom_attestations_verified": true
+        },
+        "archives": [
+            release_archive("cairnid", tag, "x86_64-unknown-linux-gnu", "tar.gz"),
+            release_archive("cairnid", tag, "x86_64-pc-windows-msvc", "zip"),
+            release_archive("cairnid-mcp", tag, "x86_64-unknown-linux-gnu", "tar.gz"),
+            release_archive("cairnid-mcp", tag, "x86_64-pc-windows-msvc", "zip")
+        ],
+        "sboms": [
+            release_sbom("cairnid", tag, "x86_64-unknown-linux-gnu"),
+            release_sbom("cairnid", tag, "x86_64-pc-windows-msvc"),
+            release_sbom("cairnid-mcp", tag, "x86_64-unknown-linux-gnu"),
+            release_sbom("cairnid-mcp", tag, "x86_64-pc-windows-msvc")
+        ],
+        "failures": []
+    })
+}
+
+fn release_archive(binary: &str, tag: &str, target: &str, archive_format: &str) -> Value {
+    json!({
+        "file_name": format!("{binary}-{tag}-{target}.{archive_format}"),
+        "binary": binary,
+        "target": target,
+        "archive_format": archive_format,
+        "present": true,
+        "sha256": "a".repeat(64),
+        "sha256_verified": true,
+        "manifest_entry_present": true,
+        "github_attestation_verified": true,
+        "sbom_file_name": format!("{binary}-{tag}-{target}.sbom.cdx.json"),
+        "sbom_attestation_verified": true
+    })
+}
+
+fn release_sbom(binary: &str, tag: &str, target: &str) -> Value {
+    json!({
+        "file_name": format!("{binary}-{tag}-{target}.sbom.cdx.json"),
+        "binary": binary,
+        "target": target,
+        "format": "CycloneDX JSON",
+        "present": true,
+        "sha256": "b".repeat(64),
+        "sha256_verified": true,
+        "manifest_entry_present": true,
+        "github_attestation_verified": true
+    })
+}
+
+fn openid_static_registration_report() -> Value {
+    json!({
+        "generated_at": "2026-06-07T12:00:00Z",
+        "status": "ready",
+        "issuer": "https://id.example.com",
+        "suite_alias": "cairn-basic-op",
+        "certification_profiles": ["Config OP", "Basic OP"],
+        "run_plan_commands": [
+            "scripts/run-test-plan.py oidcc-config-certification-test-plan cairn-oidcc-static.json",
+            "scripts/run-test-plan.py oidcc-basic-certification-test-plan cairn-oidcc-static.json"
+        ],
+        "static_clients": [
+            openid_static_client_registration("primary", "oidf-client"),
+            openid_static_client_registration("secondary", "oidf-client-2")
+        ],
+        "unsupported_v1_profiles": [
+            "Implicit OP",
+            "Hybrid OP",
+            "Dynamic OP",
+            "Form Post OP"
+        ]
+    })
+}
+
+fn openid_static_client_registration(role: &str, client_id: &str) -> Value {
+    json!({
+        "role": role,
+        "client_id": client_id,
+        "redirect_uris": [
+            "https://www.certification.openid.net/test/a/cairn-basic-op/callback"
+        ],
+        "post_logout_redirect_uris": [
+            "https://www.certification.openid.net/test/a/cairn-basic-op/post_logout_redirect"
+        ],
+        "response_types": ["code"],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "token_endpoint_auth_methods": ["client_secret_basic", "client_secret_post"],
+        "allowed_scopes": ["openid", "profile", "email", "groups", "offline_access"],
+        "pkce_methods": ["S256"]
+    })
+}
+
+fn openid_static_config() -> Value {
+    json!({
+        "generated_at": "2026-06-07T12:00:00Z",
+        "alias": "cairn-basic-op",
+        "description": "Cairn Identity OIDC static client certification",
+        "server": {
+            "discoveryUrl": "https://id.example.com/.well-known/openid-configuration"
+        },
+        "client": {
+            "client_id": "oidf-client",
+            "client_secret": "primary-secret"
+        },
+        "client2": {
+            "client_id": "oidf-client-2",
+            "client_secret": "secondary-secret"
+        }
+    })
+}
+
+fn openid_conformance_summary_with_provenance(
+    profile: &str,
+    plan_name: &str,
+    published_result_url: &str,
+) -> Value {
+    let module_names = if plan_name == "oidcc-basic-certification-test-plan" {
+        vec!["oidcc-claims-essential", "oidcc-server"]
+    } else {
+        vec!["oidcc-server"]
+    };
+    let selected_instances = module_names
+        .iter()
+        .map(|module_name| {
+            json!({
+                "module_name": module_name,
+                "test_id": format!("{module_name}-selected-test")
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "source": "openid-conformance-suite",
+        "certification_profile": profile,
+        "plan_name": plan_name,
+        "status": "FINISHED",
+        "result": "PASSED",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "published_result_url": published_result_url,
+        "oidf_export_provenance": {
+            "schema": "cairnid.oidf-export-provenance.v1",
+            "normalizer": "cairn-api conformance oidcc-normalize-export",
+            "source_format": "zip",
+            "exported_from": "https://www.certification.openid.net/",
+            "suite_version": "5.1.24",
+            "plan_module_count": module_names.len(),
+            "test_log_count": module_names.len(),
+            "module_names": module_names,
+            "selected_instances": selected_instances,
+            "plan_modules_sha256": "a".repeat(64),
+            "test_logs_sha256": "b".repeat(64)
+        }
+    })
+}
+
+fn openid_conformance_plan_export(plan_name: &str, result: &str) -> Value {
+    json!({
+        "exportedAt": "2026-06-07T12:00:00Z",
+        "exportedFrom": "https://www.certification.openid.net/",
+        "exportedVersion": "5.1.24",
+        "planInfo": {
+            "planName": plan_name,
+            "modules": [
+                {
+                    "testModule": "oidcc-server",
+                    "instances": ["test-inst-001"]
+                },
+                {
+                    "testModule": "oidcc-server-rotate-keys",
+                    "instances": ["test-inst-002"]
+                }
+            ]
+        },
+        "testLogExports": [
+            openid_conformance_test_export("test-inst-001", "oidcc-server", result),
+            openid_conformance_test_export("test-inst-002", "oidcc-server-rotate-keys", "WARNING")
+        ]
+    })
+}
+
+fn openid_conformance_test_export(test_id: &str, test_module_name: &str, result: &str) -> Value {
+    json!({
+        "testId": test_id,
+        "testModuleName": test_module_name,
+        "export": {
+            "exportedAt": "2026-06-07T12:00:00Z",
+            "exportedFrom": "https://www.certification.openid.net/",
+            "exportedVersion": "5.1.24",
+            "testInfo": {
+                "testId": test_id,
+                "testName": test_module_name,
+                "status": "FINISHED",
+                "result": result
+            },
+            "results": [
+                {
+                    "result": "SUCCESS",
+                    "msg": "Test completed"
+                }
+            ]
+        }
+    })
+}
+
+fn scim_connector_profile(profile: &str) -> Value {
+    let display_name = expected_scim_connector_display_name(profile);
+    let connector_settings = match profile {
+        "generic" => json!([
+            {"name": "SCIM base URL", "value": "https://id.example.com/scim/v2", "note": "service root"},
+            {"name": "Authentication", "value": "Bearer token", "note": "authorization header"},
+            {"name": "Unique user key", "value": "userName", "note": "exact lookups"},
+            {"name": "Stable user ID", "value": "externalId", "note": "immutable user ID"},
+            {"name": "Stable group ID", "value": "externalId", "note": "immutable group ID"}
+        ]),
+        "okta" => json!([
+            {"name": "Base URL", "value": "https://id.example.com/scim/v2", "note": "Okta connector base URL"},
+            {"name": "Unique identifier field for users", "value": "userName", "note": "assignment reconciliation"},
+            {"name": "Authentication mode", "value": "HTTP Header", "note": "bearer token header"},
+            {"name": "Supported provisioning actions", "value": "Create Users, Update User Attributes, Deactivate Users, Push Groups", "note": "lifecycle and group push"}
+        ]),
+        "entra" => json!([
+            {"name": "Tenant URL", "value": "https://id.example.com/scim/v2", "note": "directory application provisioning"},
+            {"name": "Secret Token", "value": "<raw-token>", "note": "raw token is configured only in Entra"},
+            {"name": "Provisioning mode", "value": "Automatic", "note": "test connection first"},
+            {"name": "Target object actions", "value": "Create, Update, Delete", "note": "delete maps to soft deprovisioning"}
+        ]),
+        _ => panic!("unsupported test SCIM connector profile"),
+    };
+
+    json!({
+        "generated_at": "2026-06-07T12:00:00Z",
+        "status": "ready",
+        "profile": profile,
+        "display_name": display_name,
+        "issuer": "https://id.example.com",
+        "scim_base_url": "https://id.example.com/scim/v2",
+        "service_provider_config_url": "https://id.example.com/scim/v2/ServiceProviderConfig",
+        "authentication": {
+            "scheme": "bearer",
+            "connector_header": "Authorization: Bearer <raw-token>",
+            "server_env": "CAIRN_SCIM_BEARER_TOKEN_SHA256=<sha256(raw-token)>",
+            "rotation_env": "CAIRN_SCIM_BEARER_TOKEN_SHA256=<old-sha256>,<new-sha256>"
+        },
+        "connector_settings": connector_settings,
+        "recommended_mappings": [
+            {"resource": "User", "connector_attribute": "primary email", "scim_attribute": "userName", "note": "Required login identifier"},
+            {"resource": "User", "connector_attribute": "primary email", "scim_attribute": "emails[type eq \"work\"].value", "note": "Primary work email"},
+            {"resource": "User", "connector_attribute": "display name", "scim_attribute": "displayName", "note": "Optional display name"},
+            {"resource": "User", "connector_attribute": "directory immutable user ID", "scim_attribute": "externalId", "note": "Recommended immutable key"},
+            {"resource": "User", "connector_attribute": "assignment state", "scim_attribute": "active", "note": "false suspends users"},
+            {"resource": "Group", "connector_attribute": "group name", "scim_attribute": "displayName", "note": "Group display name"},
+            {"resource": "Group", "connector_attribute": "directory immutable group ID", "scim_attribute": "externalId", "note": "Recommended immutable key"},
+            {"resource": "Group", "connector_attribute": "assigned User resources", "scim_attribute": "members.value", "note": "Cairn User resource IDs"}
+        ],
+        "supported_operations": [
+            "ServiceProviderConfig, Schemas, and ResourceTypes discovery",
+            "User create, list, SearchRequest, get, full replace, bounded PATCH, and soft deprovision",
+            "Group create, list, SearchRequest, get, full replace, bounded PATCH, and delete",
+            "Built-in smoke covers bounded Bulk mutations with same-request bulkId references",
+            "Token rotation with up to four active SHA-256 token hashes"
+        ],
+        "validation_checks": [
+            "https://id.example.com/scim/v2/ServiceProviderConfig returns application/scim+json",
+            "connector can create and update a user with userName, emails[type eq \"work\"].value, displayName, externalId, and active",
+            "connector can create and update a group with displayName, externalId, and User members",
+            "connector deactivation maps to active=false or DELETE /Users/{id} and leaves audit history intact",
+            "retired bearer tokens receive 401 Unauthorized after the rotation window closes"
+        ],
+        "unsupported_v1_features": [
+            "password synchronization",
+            "nested group membership",
+            "SCIM change-password operation",
+            "SCIM ETags",
+            "SCIM cursor pagination",
+            "Shared Signals Framework events"
+        ],
+        "smoke_commands": [
+            "$env:CAIRN_SCIM_SMOKE_BASE_URL=\"https://id.example.com\"",
+            "$env:CAIRN_SCIM_BEARER_TOKEN=\"<raw-token>\"",
+            "$env:CAIRN_SCIM_SECONDARY_BEARER_TOKEN=\"<old-or-new-token-during-rotation>\"",
+            "$env:CAIRN_SCIM_REJECTED_BEARER_TOKEN=\"<old-or-invalid-token>\"",
+            "cairn-api scim smoke"
+        ],
+        "operator_notes": [
+            "Do not store the raw connector token in application environment variables; store only its SHA-256 digest.",
+            "Use stable directory object IDs for externalId so retries and renames remain idempotent.",
+            "Map SCIM Group members to User resources returned by Cairn; nested Group members are rejected."
+        ]
+    })
+}
+
+fn expected_scim_connector_display_name(profile: &str) -> &'static str {
+    match profile {
+        "generic" => "Generic SCIM 2.0",
+        "okta" => "Okta SCIM 2.0",
+        "entra" => "Microsoft Entra SCIM 2.0",
+        _ => panic!("unsupported test SCIM connector profile"),
+    }
+}
+
+fn scim_smoke() -> Value {
+    let created_user_ids = [
+        fixed_uuid(1).to_owned(),
+        fixed_uuid(2).to_owned(),
+        fixed_uuid(3).to_owned(),
+    ];
+    json!({
+        "status": "ok",
+        "base_url": "https://id.example.com",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "secondary_token_checked": true,
+        "rejected_token_checked": true,
+        "created_user_ids": created_user_ids,
+        "soft_deleted_user_ids": created_user_ids,
+        "deleted_group_id": fixed_uuid(4),
+        "checks": REQUIRED_SCIM_SMOKE_CHECKS
+            .iter()
+            .map(|name| {
+                json!({
+                    "name": name,
+                    "status": "passed",
+                    "detail": format!("{name} passed")
+                })
+            })
+            .collect::<Vec<_>>()
+    })
+}
+
+fn scim_connector_smoke(provider: &str) -> Value {
+    json!({
+        "status": "ok",
+        "source": "external-scim-connector",
+        "provider": provider,
+        "display_name": expected_scim_connector_display_name(provider),
+        "scim_base_url": "https://id.example.com/scim/v2",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "connector_application_id": format!("{provider}-application-id"),
+        "provisioning_job_id": format!("{provider}-provisioning-job-id"),
+        "secondary_token_checked": true,
+        "rejected_token_checked": true,
+        "created_user_ids": [
+            fixed_uuid(5),
+            fixed_uuid(6)
+        ],
+        "deactivated_user_id": fixed_uuid(5),
+        "deleted_group_id": fixed_uuid(7),
+        "checks": REQUIRED_SCIM_CONNECTOR_SMOKE_CHECKS
+            .iter()
+            .map(|name| {
+                json!({
+                    "name": name,
+                    "status": "passed",
+                    "detail": format!("{provider} {name} passed")
+                })
+            })
+            .collect::<Vec<_>>()
+    })
+}
+
+fn oidc_metadata_smoke() -> Value {
+    json!({
+        "status": "ok",
+        "issuer": "https://id.example.com",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "checks": REQUIRED_OIDC_METADATA_SMOKE_CHECKS
+            .iter()
+            .map(|name| {
+                json!({
+                    "name": name,
+                    "status": "passed",
+                    "detail": format!("{name} passed")
+                })
+            })
+            .collect::<Vec<_>>()
+    })
+}
+
+fn browser_origin_smoke() -> Value {
+    json!({
+        "status": "ok",
+        "base_url": "https://id.example.com",
+        "hostile_origin": "https://browser-origin-smoke.invalid",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "routes_checked": 2,
+        "checks": [
+            {
+                "name": "logout",
+                "method": "POST",
+                "path": "/api/v1/session/logout",
+                "status": "passed",
+                "origin_status": 403,
+                "referer_status": 403,
+                "no_store": true,
+                "pragma_no_cache": true,
+                "content_type_options_nosniff": true
+            },
+            {
+                "name": "admin user create",
+                "method": "POST",
+                "path": "/api/v1/users",
+                "status": "passed",
+                "origin_status": 403,
+                "referer_status": 403,
+                "no_store": true,
+                "pragma_no_cache": true,
+                "content_type_options_nosniff": true
+            }
+        ]
+    })
+}
+
+fn security_headers_smoke() -> Value {
+    json!({
+        "status": "ok",
+        "api_base_url": "https://id.example.com",
+        "web_base_url": "https://app.example.com",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "checks": [
+            security_headers_smoke_check("api", "/healthz", Value::Null),
+            security_headers_smoke_check("api", "/.well-known/openid-configuration", Value::Null),
+            security_headers_smoke_check("web", "/healthz", json!(true)),
+            security_headers_smoke_check("web", "/login", Value::Null)
+        ]
+    })
+}
+
+fn security_headers_smoke_check(service: &str, path: &str, cache_control_no_store: Value) -> Value {
+    json!({
+        "service": service,
+        "path": path,
+        "status": "passed",
+        "status_code": 200,
+        "content_security_policy": true,
+        "strict_transport_security": true,
+        "x_content_type_options_nosniff": true,
+        "x_frame_options_deny": true,
+        "referrer_policy_no_referrer": true,
+        "permissions_policy_restrictive": true,
+        "cross_origin_opener_policy_same_origin": true,
+        "cache_control_no_store": cache_control_no_store
+    })
+}
+
+fn lifecycle_email_smoke_receipt() -> Value {
+    json!({
+        "status": "completed",
+        "provider": "command",
+        "completed_at": "2026-06-07T12:00:00Z",
+        "messages": [
+            lifecycle_email_message("invitation", true),
+            lifecycle_email_message("email_verification", true),
+            lifecycle_email_message("password_recovery", true),
+            lifecycle_email_message("password_recovered_notification", false),
+            lifecycle_email_message("password_changed_notification", false),
+            lifecycle_email_message("new_login_notification", false)
+        ]
+    })
+}
+
+fn lifecycle_email_message(kind: &str, action_url_present: bool) -> Value {
+    json!({
+        "kind": kind,
+        "template": lifecycle_email_template(kind),
+        "status": "sent",
+        "action_url_present": action_url_present,
+        "provider_message_id": format!("provider-{kind}")
+    })
+}
+
+fn lifecycle_email_template(kind: &str) -> &str {
+    match kind {
+        "invitation" => "account_invitation",
+        _ => kind,
+    }
+}
+
+fn restore_drill_receipt() -> Value {
+    json!({
+        "status": "ok",
+        "organization_slug": "default",
+        "organization_id": fixed_uuid(8),
+        "completed_at": "2026-06-07T12:00:00Z",
+        "database": {
+            "reachable": true,
+            "applied_migrations": 12,
+            "migrations_present": true
+        },
+        "signing": {
+            "legacy_env_configured": false,
+            "key_encryption_key_configured": true,
+            "active_database_kid": "rs256-active",
+            "active_jwks_count": 1,
+            "active_database_key_decryptable": true,
+            "signing_source_available": true
+        },
+        "checks": [
+            "database is reachable",
+            "restored database exposes active JWKS material"
+        ],
+        "failures": []
+    })
+}
+
+fn signing_key_rotation_receipt() -> Value {
+    json!({
+        "status": "rotated",
+        "active_kid": "rs256-active",
+        "active": true,
+        "completed_at": "2026-06-07T12:00:00Z"
+    })
+}
+
+fn key_encryption_rotation_receipt() -> Value {
+    json!({
+        "status": "rotated",
+        "signing_keys": 1,
+        "email_delivery_tokens": 0,
+        "completed_at": "2026-06-07T12:00:00Z"
+    })
+}
+
+fn break_glass_admin_recovery_receipt() -> Value {
+    json!({
+        "status": "granted",
+        "organization_id": fixed_uuid(9),
+        "user_id": fixed_uuid(10),
+        "user_email": "ops@example.com",
+        "user_status_before": "suspended",
+        "user_status_after": "active",
+        "admin_group_id": fixed_uuid(11),
+        "admin_group_created": true,
+        "membership_role_before": null,
+        "membership_role_after": "owner",
+        "audit_event_id": fixed_uuid(12),
+        "completed_at": "2026-06-07T12:00:00Z"
+    })
+}
+
+fn audit_export_receipt() -> Value {
+    json!({
+        "status": "ok",
+        "organization_id": fixed_uuid(13),
+        "output_path": "evidence/cairn-audit-events.ndjson",
+        "rows_exported": 2,
+        "bytes_written": 256,
+        "limit": 100,
+        "export_max_rows": 1000,
+        "has_more": true,
+        "next_after_created_at": "2026-06-07T12:00:00Z",
+        "next_after_id": fixed_uuid(14),
+        "filters": {
+            "action_prefix": "admin.",
+            "target_prefix": null,
+            "actor_kind": "system",
+            "actor_id": null,
+            "created_from": "2026-01-01T00:00:00Z",
+            "created_to": null
+        },
+        "completed_at": "2026-06-07T12:00:00Z"
+    })
+}
+
+fn audit_retention_purge_receipt() -> Value {
+    json!({
+        "status": "ok",
+        "organization_id": fixed_uuid(15),
+        "retention_days": 365,
+        "cutoff": "2025-06-07T12:00:00Z",
+        "batch_size": 1000,
+        "deleted": 0,
+        "completed_at": "2026-06-07T12:00:00Z"
+    })
+}
+
+fn fixed_uuid(index: u8) -> &'static str {
+    match index {
+        1 => "01890d6f-109f-767a-96cb-2927626f4501",
+        2 => "01890d6f-109f-767a-96cb-2927626f4502",
+        3 => "01890d6f-109f-767a-96cb-2927626f4503",
+        4 => "01890d6f-109f-767a-96cb-2927626f4504",
+        5 => "01890d6f-109f-767a-96cb-2927626f4505",
+        6 => "01890d6f-109f-767a-96cb-2927626f4506",
+        7 => "01890d6f-109f-767a-96cb-2927626f4507",
+        8 => "01890d6f-109f-767a-96cb-2927626f4508",
+        9 => "01890d6f-109f-767a-96cb-2927626f4509",
+        10 => "01890d6f-109f-767a-96cb-2927626f4510",
+        11 => "01890d6f-109f-767a-96cb-2927626f4511",
+        12 => "01890d6f-109f-767a-96cb-2927626f4512",
+        13 => "01890d6f-109f-767a-96cb-2927626f4513",
+        14 => "01890d6f-109f-767a-96cb-2927626f4514",
+        15 => "01890d6f-109f-767a-96cb-2927626f4515",
+        _ => panic!("fixed UUID index out of range: {index}"),
+    }
 }
 
 fn assert_allowed_keys(

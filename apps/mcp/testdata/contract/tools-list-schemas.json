@@ -1,0 +1,1406 @@
+[
+  {
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_dir": {
+          "default": "release-evidence",
+          "description": "Optional evidence directory. Defaults to release-evidence when omitted or null. Must be a non-empty relative path under the allowlisted evidence root, or an absolute path that resolves inside that root. Parent traversal (`..`), drive-relative paths, symlinked directories, and symlink entries are rejected.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_age_days": {
+          "default": 30,
+          "description": "Optional artifact freshness window in days. Defaults to 30 when omitted or null. Must be an integer from 1 through 365 inclusive.",
+          "format": "int64",
+          "maximum": 365,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "EvidenceDirectoryRequest",
+      "type": "object"
+    },
+    "name": "cairnid.evidence_check",
+    "outputSchema": {
+      "$defs": {
+        "McpEvidenceArtifactSummary": {
+          "properties": {
+            "check_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "command": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "command",
+            "status",
+            "check_count",
+            "failure_count",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceErrorBody": {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "failure_code": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "message": {
+              "type": "string"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpEvidenceSummary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "failure_code",
+            "message",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceNextAction": {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "status",
+            "command",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceSummary": {
+          "properties": {
+            "artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "artifacts": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceArtifactSummary"
+              },
+              "type": "array"
+            },
+            "failed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "max_age_days": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "missing_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "next_actions": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceNextAction"
+              },
+              "type": "array"
+            },
+            "passed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "status",
+            "generated_at",
+            "max_age_days",
+            "artifact_count",
+            "passed_artifact_count",
+            "missing_artifact_count",
+            "failed_artifact_count",
+            "failure_count",
+            "failure_codes",
+            "artifacts",
+            "next_actions"
+          ],
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "artifacts": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceArtifactSummary"
+              },
+              "type": "array"
+            },
+            "failed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "max_age_days": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "missing_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "next_actions": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceNextAction"
+              },
+              "type": "array"
+            },
+            "passed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "status",
+            "generated_at",
+            "max_age_days",
+            "artifact_count",
+            "passed_artifact_count",
+            "missing_artifact_count",
+            "failed_artifact_count",
+            "failure_count",
+            "failure_codes",
+            "artifacts",
+            "next_actions"
+          ],
+          "title": "McpEvidenceSummary",
+          "type": "object"
+        },
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/McpEvidenceErrorBody"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "error"
+          ],
+          "title": "McpEvidenceErrorEnvelope",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "cairnid.evidence_manifest",
+    "outputSchema": {
+      "$defs": {
+        "McpEvidenceArtifactSummary": {
+          "properties": {
+            "check_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "command": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "command",
+            "status",
+            "check_count",
+            "failure_count",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceErrorBody": {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "failure_code": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "message": {
+              "type": "string"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpEvidenceSummary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "failure_code",
+            "message",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceManifestArtifact": {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "contains_secrets": {
+              "type": "boolean"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "requires_production_like_environment": {
+              "type": "boolean"
+            },
+            "touches_external_provider": {
+              "type": "boolean"
+            },
+            "validator": {
+              "type": "string"
+            },
+            "writes_application_state": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "command",
+            "validator",
+            "contains_secrets",
+            "requires_production_like_environment",
+            "writes_application_state",
+            "touches_external_provider"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceNextAction": {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "status",
+            "command",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceSummary": {
+          "properties": {
+            "artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "artifacts": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceArtifactSummary"
+              },
+              "type": "array"
+            },
+            "failed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "max_age_days": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "missing_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "next_actions": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceNextAction"
+              },
+              "type": "array"
+            },
+            "passed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "status",
+            "generated_at",
+            "max_age_days",
+            "artifact_count",
+            "passed_artifact_count",
+            "missing_artifact_count",
+            "failed_artifact_count",
+            "failure_count",
+            "failure_codes",
+            "artifacts",
+            "next_actions"
+          ],
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "artifacts": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceManifestArtifact"
+              },
+              "type": "array"
+            },
+            "default_max_age_days": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "status",
+            "generated_at",
+            "default_max_age_days",
+            "artifact_count",
+            "artifacts",
+            "notes"
+          ],
+          "title": "McpEvidenceManifest",
+          "type": "object"
+        },
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/McpEvidenceErrorBody"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "error"
+          ],
+          "title": "McpEvidenceErrorEnvelope",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "cairnid.evidence_plan",
+    "outputSchema": {
+      "$defs": {
+        "McpEvidenceArtifactSummary": {
+          "properties": {
+            "check_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "command": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "command",
+            "status",
+            "check_count",
+            "failure_count",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceEnvironmentRequirement": {
+          "properties": {
+            "alternatives": {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "contains_secret": {
+              "type": "boolean"
+            },
+            "purpose": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "alternatives",
+            "purpose",
+            "contains_secret"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceErrorBody": {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "failure_code": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "message": {
+              "type": "string"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpEvidenceSummary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "failure_code",
+            "message",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceNextAction": {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "status",
+            "command",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidencePlanStep": {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "contains_secrets": {
+              "type": "boolean"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "missing_environment": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "name": {
+              "type": "string"
+            },
+            "operator_notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "required_environment": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceEnvironmentRequirement"
+              },
+              "type": "array"
+            },
+            "requires_production_like_environment": {
+              "type": "boolean"
+            },
+            "status": {
+              "type": "string"
+            },
+            "touches_external_provider": {
+              "type": "boolean"
+            },
+            "validator": {
+              "type": "string"
+            },
+            "writes_application_state": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "command",
+            "validator",
+            "status",
+            "contains_secrets",
+            "requires_production_like_environment",
+            "writes_application_state",
+            "touches_external_provider",
+            "required_environment",
+            "missing_environment",
+            "operator_notes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceSummary": {
+          "properties": {
+            "artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "artifacts": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceArtifactSummary"
+              },
+              "type": "array"
+            },
+            "failed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "max_age_days": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "missing_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "next_actions": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceNextAction"
+              },
+              "type": "array"
+            },
+            "passed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "status",
+            "generated_at",
+            "max_age_days",
+            "artifact_count",
+            "passed_artifact_count",
+            "missing_artifact_count",
+            "failed_artifact_count",
+            "failure_count",
+            "failure_codes",
+            "artifacts",
+            "next_actions"
+          ],
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "external_provider_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "manual_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "missing_environment": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "missing_environment_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "ready_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            },
+            "secret_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "state_changing_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "type": "string"
+            },
+            "steps": {
+              "items": {
+                "$ref": "#/$defs/McpEvidencePlanStep"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "schema_version",
+            "status",
+            "generated_at",
+            "artifact_count",
+            "ready_artifact_count",
+            "manual_artifact_count",
+            "missing_environment_artifact_count",
+            "secret_artifact_count",
+            "state_changing_artifact_count",
+            "external_provider_artifact_count",
+            "steps",
+            "missing_environment",
+            "notes"
+          ],
+          "title": "McpEvidencePlan",
+          "type": "object"
+        },
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/McpEvidenceErrorBody"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "error"
+          ],
+          "title": "McpEvidenceErrorEnvelope",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_dir": {
+          "default": "release-evidence",
+          "description": "Optional evidence directory. Defaults to release-evidence when omitted or null. Must be a non-empty relative path under the allowlisted evidence root, or an absolute path that resolves inside that root. Parent traversal (`..`), drive-relative paths, symlinked directories, and symlink entries are rejected.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_age_days": {
+          "default": 30,
+          "description": "Optional artifact freshness window in days. Defaults to 30 when omitted or null. Must be an integer from 1 through 365 inclusive.",
+          "format": "int64",
+          "maximum": 365,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "EvidenceDirectoryRequest",
+      "type": "object"
+    },
+    "name": "cairnid.evidence_status",
+    "outputSchema": {
+      "$defs": {
+        "McpEvidenceArtifactSummary": {
+          "properties": {
+            "check_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "command": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "command",
+            "status",
+            "check_count",
+            "failure_count",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceErrorBody": {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "failure_code": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "message": {
+              "type": "string"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/McpEvidenceSummary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "failure_code",
+            "message",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceNextAction": {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "file_name": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "release_gate": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "file_name",
+            "release_gate",
+            "status",
+            "command",
+            "failure_codes"
+          ],
+          "type": "object"
+        },
+        "McpEvidenceSummary": {
+          "properties": {
+            "artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "artifacts": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceArtifactSummary"
+              },
+              "type": "array"
+            },
+            "failed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "max_age_days": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "missing_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "next_actions": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceNextAction"
+              },
+              "type": "array"
+            },
+            "passed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "status",
+            "generated_at",
+            "max_age_days",
+            "artifact_count",
+            "passed_artifact_count",
+            "missing_artifact_count",
+            "failed_artifact_count",
+            "failure_count",
+            "failure_codes",
+            "artifacts",
+            "next_actions"
+          ],
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "artifacts": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceArtifactSummary"
+              },
+              "type": "array"
+            },
+            "failed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failure_codes": {
+              "additionalProperties": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "failure_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "max_age_days": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "missing_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "next_actions": {
+              "items": {
+                "$ref": "#/$defs/McpEvidenceNextAction"
+              },
+              "type": "array"
+            },
+            "passed_artifact_count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "status",
+            "generated_at",
+            "max_age_days",
+            "artifact_count",
+            "passed_artifact_count",
+            "missing_artifact_count",
+            "failed_artifact_count",
+            "failure_count",
+            "failure_codes",
+            "artifacts",
+            "next_actions"
+          ],
+          "title": "McpEvidenceSummary",
+          "type": "object"
+        },
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/McpEvidenceErrorBody"
+            },
+            "schema_version": {
+              "const": "cairnid.mcp.evidence.v1",
+              "type": "string"
+            }
+          },
+          "required": [
+            "schema_version",
+            "error"
+          ],
+          "title": "McpEvidenceErrorEnvelope",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    }
+  }
+]

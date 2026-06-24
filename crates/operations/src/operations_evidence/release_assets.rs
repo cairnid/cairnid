@@ -17,6 +17,8 @@ use zip::ZipArchive;
 
 pub(in crate::operations_evidence) const CHECKSUM_FILE_NAME: &str = "SHA256SUMS.txt";
 pub(in crate::operations_evidence) const RELEASE_MANIFEST_FILE_NAME: &str = "release-manifest.json";
+pub const RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION: &str =
+    "cairnid.release_assets_verification.v1";
 const RELEASE_WORKFLOW_NAME: &str = "Release";
 const RELEASE_WORKFLOW_PATH: &str = ".github/workflows/release.yml";
 pub(in crate::operations_evidence) const SIGNER_WORKFLOW: &str =
@@ -181,6 +183,7 @@ pub struct ReleaseAssetsVerificationOptions {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReleaseAssetsVerificationReceipt {
+    pub schema_version: &'static str,
     pub status: &'static str,
     #[serde(with = "time::serde::rfc3339")]
     pub completed_at: OffsetDateTime,
@@ -422,6 +425,7 @@ pub fn release_assets_verification_report(
     }
 
     let mut receipt = ReleaseAssetsVerificationReceipt {
+        schema_version: RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION,
         status: if failures.is_empty() { "ok" } else { "failed" },
         completed_at,
         release_tag: options.release_tag.clone(),

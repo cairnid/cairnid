@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
-use cairn_operations::RELEASE_EVIDENCE_SCHEMA_VERSION;
+use cairn_operations::{
+    RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION, RELEASE_EVIDENCE_SCHEMA_VERSION,
+};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -394,6 +396,10 @@ fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
     assert!(!receipt_stdout.contains(SECRET_SENTINEL));
 
     let receipt: Value = serde_json::from_slice(&output.stdout).expect("valid receipt JSON");
+    assert_eq!(
+        receipt["schema_version"],
+        json!(RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION)
+    );
     assert_eq!(receipt["status"], "ok");
     assert_eq!(receipt["release_tag"], RELEASE_ASSET_TAG);
     assert_eq!(receipt["source_commit"], RELEASE_ASSET_SOURCE_COMMIT);
@@ -433,6 +439,7 @@ fn release_assets_verify_emits_validator_compatible_receipt_for_local_assets() {
         .expect("release assets artifact");
     assert_eq!(release_assets_artifact["status"], "passed");
     assert_eq!(release_assets_artifact["failures"], json!([]));
+    assert_eq!(release_assets_artifact["failure_codes"], json!([]));
     assert!(!stdout(&check).contains(SECRET_SENTINEL));
     assert!(!stderr(&check).contains(SECRET_SENTINEL));
 }
@@ -445,6 +452,10 @@ fn release_assets_verify_emits_failed_json_for_workflow_run_only_receipt() {
 
     assert_failed_release_assets_stdout(&output, "release_url must be present");
     let receipt: Value = serde_json::from_slice(&output.stdout).expect("valid failed receipt JSON");
+    assert_eq!(
+        receipt["schema_version"],
+        json!(RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION)
+    );
     assert_eq!(receipt["release_url"], Value::Null);
     assert_eq!(receipt["run_url"], RELEASE_ASSET_RUN_URL);
     assert_eq!(
@@ -781,6 +792,13 @@ fn evidence_init_creates_scaffold_and_status_reports_incomplete_lifecycle() {
     assert_eq!(status_json["missing_artifact_count"], 24);
     assert_eq!(status_json["failed_artifact_count"], 0);
     assert_eq!(
+        status_json["failure_codes"]
+            .as_array()
+            .expect("failure codes array")
+            .len(),
+        24
+    );
+    assert_eq!(
         status_json["next_actions"]
             .as_array()
             .expect("next actions array")
@@ -795,6 +813,7 @@ fn evidence_init_creates_scaffold_and_status_reports_incomplete_lifecycle() {
             .any(
                 |action| action["file_name"] == "dependency-policy-check.json"
                     && action["release_gate"] == "Dependency policy"
+                    && action["failure_codes"] == json!(["missing_evidence"])
                     && action["command"]
                         .as_str()
                         .is_some_and(|command| command.contains("dependency-policy-evidence"))
@@ -850,6 +869,13 @@ fn evidence_status_redacts_secret_like_artifact_failures() {
     assert_eq!(json["status"], "incomplete");
     assert_eq!(json["failed_artifact_count"], 1);
     assert_eq!(json["missing_artifact_count"], 23);
+    assert!(
+        json["failure_codes"]
+            .as_array()
+            .expect("failure codes array")
+            .iter()
+            .any(|code| code == "contract_mismatch")
+    );
 }
 
 #[test]
@@ -875,6 +901,13 @@ fn evidence_check_reports_incomplete_scaffold_and_redacts_secret_like_failures()
     let json: Value = serde_json::from_slice(&output.stdout).expect("valid check JSON");
     assert_schema_version(&json);
     assert_eq!(json["status"], "incomplete");
+    assert!(
+        json["failure_codes"]
+            .as_array()
+            .expect("failure codes array")
+            .iter()
+            .any(|code| code == "contract_mismatch")
+    );
     assert_eq!(
         json["artifacts"].as_array().expect("artifacts array").len(),
         24
@@ -886,7 +919,12 @@ fn evidence_check_reports_incomplete_scaffold_and_redacts_secret_like_failures()
             .iter()
             .any(|artifact| artifact["name"] == "operations_preflight"
                 && artifact["release_gate"] == "Operations preflight"
-                && artifact["status"] == "failed")
+                && artifact["status"] == "failed"
+                && artifact["failure_codes"]
+                    .as_array()
+                    .expect("artifact failure codes array")
+                    .iter()
+                    .any(|code| code == "contract_mismatch"))
     );
     assert!(
         json["artifacts"]
@@ -894,7 +932,8 @@ fn evidence_check_reports_incomplete_scaffold_and_redacts_secret_like_failures()
             .expect("artifacts array")
             .iter()
             .any(|artifact| artifact["name"] == "dependency_policy_check"
-                && artifact["status"] == "missing")
+                && artifact["status"] == "missing"
+                && artifact["failure_codes"] == json!(["missing_evidence"]))
     );
 }
 

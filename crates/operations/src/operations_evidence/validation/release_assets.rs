@@ -3,7 +3,7 @@ use url::Url;
 
 use crate::operations_evidence::release_assets::{
     EXPECTED_RELEASE_ASSETS, ExpectedReleaseAsset, PUBLIC_RELEASE_URL_REQUIRED_FAILURE,
-    archive_file_name, sbom_file_name,
+    RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION, archive_file_name, sbom_file_name,
 };
 
 use super::{
@@ -15,6 +15,12 @@ pub(in crate::operations_evidence) fn validate_release_assets_verification(
     checks: &mut Vec<String>,
     failures: &mut Vec<String>,
 ) {
+    require_string(
+        value,
+        "schema_version",
+        RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION,
+        failures,
+    );
     require_string(value, "status", "ok", failures);
     require_empty_array(value, "failures", failures);
     require_rfc3339_timestamp(value, "completed_at", "release assets", checks, failures);
@@ -482,6 +488,7 @@ mod tests {
     fn release_assets_verification() -> Value {
         let tag = "v0.1.0-rc.1";
         json!({
+            "schema_version": "cairnid.release_assets_verification.v1",
             "status": "ok",
             "completed_at": "2026-06-07T12:00:00Z",
             "release_tag": tag,

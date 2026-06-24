@@ -1,12 +1,12 @@
 mod fixtures;
 
 use super::{
-    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_EVIDENCE_SCHEMA_VERSION,
-    ReleaseAssetsVerificationError, ReleaseAssetsVerificationOptions, ReleaseEvidenceError,
-    ReleaseEvidenceFailureCode, check_release_evidence, init_release_evidence_directory,
-    normalize_openid_conformance_export, release_assets_verification_receipt,
-    release_assets_verification_report, release_evidence_capture_plan, release_evidence_manifest,
-    release_evidence_status_report,
+    DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS, RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION,
+    RELEASE_EVIDENCE_SCHEMA_VERSION, ReleaseAssetsVerificationError,
+    ReleaseAssetsVerificationOptions, ReleaseEvidenceError, ReleaseEvidenceFailureCode,
+    check_release_evidence, init_release_evidence_directory, normalize_openid_conformance_export,
+    release_assets_verification_receipt, release_assets_verification_report,
+    release_evidence_capture_plan, release_evidence_manifest, release_evidence_status_report,
 };
 use fixtures::*;
 use serde_json::{Value, json};
@@ -1274,6 +1274,10 @@ fn release_assets_receipt_generation_accepts_downloaded_release_assets() {
     )
     .expect("release assets receipt");
 
+    assert_eq!(
+        receipt.schema_version,
+        RELEASE_ASSETS_VERIFICATION_SCHEMA_VERSION
+    );
     assert_eq!(receipt.status, "ok");
     assert!(receipt.failures.is_empty());
     assert_eq!(receipt.release_tag, RELEASE_ASSET_TAG);

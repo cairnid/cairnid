@@ -1,0 +1,1001 @@
+{
+  "content": [
+    {
+      "text": "{\"artifact_count\":24,\"external_provider_artifact_count\":7,\"generated_at\":\"<generated_at>\",\"manual_artifact_count\":5,\"missing_environment\":[\"audit_export_archive_drill: set DATABASE_URL for production-like or restored Postgres drill database for release evidence; local rehearsal receipts are not release-ready evidence\",\"audit_retention_purge_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\",\"break_glass_admin_recovery_drill: set CAIRN_BREAK_GLASS_CONFIRM for explicit break-glass acknowledgement\",\"break_glass_admin_recovery_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\",\"browser_origin_smoke: set CAIRN_BROWSER_ORIGIN_SMOKE_BASE_URL OR CAIRN_ISSUER for deployed API base URL for browser-origin rejection smoke\",\"email_provider_smoke: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path\",\"email_provider_smoke: set CAIRN_EMAIL_PROVIDER for production email provider mode\",\"kek_rotation_drill: set CAIRN_NEW_KEY_ENCRYPTION_KEY for new database key-encryption key\",\"kek_rotation_drill: set CAIRN_OLD_KEY_ENCRYPTION_KEY for old database key-encryption key\",\"kek_rotation_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\",\"lifecycle_email_smoke: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path\",\"lifecycle_email_smoke: set CAIRN_EMAIL_PROVIDER for production email provider mode\",\"lifecycle_email_smoke: set CAIRN_KEY_ENCRYPTION_KEY for encrypted lifecycle action-link rendering\",\"lifecycle_email_smoke: set DATABASE_URL for database connectivity\",\"oidc_metadata_smoke: set CAIRN_OIDC_METADATA_SMOKE_ISSUER OR CAIRN_ISSUER for deployed HTTPS issuer for metadata/JWKS smoke\",\"openid_static_config: set CAIRN_CONFORMANCE_ALIAS for OpenID conformance suite alias\",\"openid_static_config: set CAIRN_CONFORMANCE_CLIENT2_ID for secondary static client ID\",\"openid_static_config: set CAIRN_CONFORMANCE_CLIENT2_SECRET for secondary static client secret\",\"openid_static_config: set CAIRN_CONFORMANCE_CLIENT_ID for primary static client ID\",\"openid_static_config: set CAIRN_CONFORMANCE_CLIENT_SECRET for primary static client secret\",\"openid_static_config: set CAIRN_ISSUER for public HTTPS issuer\",\"openid_static_registration: set CAIRN_CONFORMANCE_ALIAS for OpenID conformance suite alias\",\"openid_static_registration: set CAIRN_CONFORMANCE_CLIENT2_ID for secondary static client ID\",\"openid_static_registration: set CAIRN_CONFORMANCE_CLIENT_ID for primary static client ID\",\"openid_static_registration: set CAIRN_CONFORMANCE_SUITE_BASE_URL for OpenID conformance suite base URL\",\"openid_static_registration: set CAIRN_ISSUER for public HTTPS issuer\",\"operations_preflight: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path\",\"operations_preflight: set CAIRN_EMAIL_PROVIDER for production email provider mode\",\"operations_preflight: set CAIRN_ENV for production-mode preflight\",\"operations_preflight: set CAIRN_ISSUER for public HTTPS issuer\",\"operations_preflight: set CAIRN_KEY_ENCRYPTION_KEY OR CAIRN_SIGNING_KEY_ID + CAIRN_SIGNING_PRIVATE_KEY_PEM + CAIRN_SIGNING_PUBLIC_JWK for OIDC signing source\",\"operations_preflight: set CAIRN_PUBLIC_WEB_ORIGIN for public web origin\",\"operations_preflight: set DATABASE_URL for database connectivity\",\"restore_drill: set CAIRN_KEY_ENCRYPTION_KEY OR CAIRN_SIGNING_KEY_ID + CAIRN_SIGNING_PRIVATE_KEY_PEM + CAIRN_SIGNING_PUBLIC_JWK for post-restore OIDC signing source\",\"restore_drill: set DATABASE_URL for restored production-like Postgres database for release evidence; local rehearsal receipts are not release-ready evidence\",\"scim_entra_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs\",\"scim_generic_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs\",\"scim_okta_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs\",\"scim_public_smoke: set CAIRN_SCIM_BEARER_TOKEN for primary raw SCIM smoke token\",\"scim_public_smoke: set CAIRN_SCIM_REJECTED_BEARER_TOKEN for retired or invalid raw SCIM token for rejection release evidence\",\"scim_public_smoke: set CAIRN_SCIM_SECONDARY_BEARER_TOKEN for secondary raw SCIM token for rotation-window release evidence\",\"scim_public_smoke: set CAIRN_SCIM_SMOKE_BASE_URL OR CAIRN_ISSUER for deployed SCIM base URL\",\"security_headers_smoke: set CAIRN_SECURITY_HEADERS_API_BASE_URL OR CAIRN_ISSUER for deployed API base URL for security-header smoke\",\"security_headers_smoke: set CAIRN_SECURITY_HEADERS_WEB_BASE_URL OR CAIRN_PUBLIC_WEB_ORIGIN for deployed web base URL for security-header smoke\",\"signing_key_rotation_drill: set CAIRN_KEY_ENCRYPTION_KEY for database-backed signing-key encryption\",\"signing_key_rotation_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\"],\"missing_environment_artifact_count\":18,\"notes\":[\"This plan only reports whether required command inputs are present; it never prints environment values.\",\"Run first-public-RC evidence with CAIRN_ENV=production and production-like HTTPS origins where the artifact requires them.\",\"status=\\\"ready\\\" means local/generated capture prerequisites are present; it does not mean manual or provider-backed evidence has been captured.\",\"Review pending_manual_evidence and pending_external_evidence before collecting artifacts, then run cairnid evidence check.\"],\"ready_artifact_count\":1,\"schema_version\":\"cairnid.mcp.evidence.v1\",\"secret_artifact_count\":1,\"state_changing_artifact_count\":8,\"status\":\"missing_environment\",\"steps\":[{\"command\":\"cairn-api operations preflight > operations-preflight.json\",\"contains_secrets\":false,\"file_name\":\"operations-preflight.json\",\"missing_environment\":[\"operations_preflight: set CAIRN_ENV for production-mode preflight\",\"operations_preflight: set DATABASE_URL for database connectivity\",\"operations_preflight: set CAIRN_ISSUER for public HTTPS issuer\",\"operations_preflight: set CAIRN_PUBLIC_WEB_ORIGIN for public web origin\",\"operations_preflight: set CAIRN_KEY_ENCRYPTION_KEY OR CAIRN_SIGNING_KEY_ID + CAIRN_SIGNING_PRIVATE_KEY_PEM + CAIRN_SIGNING_PUBLIC_JWK for OIDC signing source\",\"operations_preflight: set CAIRN_EMAIL_PROVIDER for production email provider mode\",\"operations_preflight: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path\"],\"name\":\"operations_preflight\",\"operator_notes\":[],\"release_gate\":\"Operations preflight\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_ENV\"]],\"contains_secret\":false,\"purpose\":\"production-mode preflight\"},{\"alternatives\":[[\"DATABASE_URL\"]],\"contains_secret\":true,\"purpose\":\"database connectivity\"},{\"alternatives\":[[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"public HTTPS issuer\"},{\"alternatives\":[[\"CAIRN_PUBLIC_WEB_ORIGIN\"]],\"contains_secret\":false,\"purpose\":\"public web origin\"},{\"alternatives\":[[\"CAIRN_KEY_ENCRYPTION_KEY\"],[\"CAIRN_SIGNING_KEY_ID\",\"CAIRN_SIGNING_PRIVATE_KEY_PEM\",\"CAIRN_SIGNING_PUBLIC_JWK\"]],\"contains_secret\":true,\"purpose\":\"OIDC signing source\"},{\"alternatives\":[[\"CAIRN_EMAIL_PROVIDER\"]],\"contains_secret\":false,\"purpose\":\"production email provider mode\"},{\"alternatives\":[[\"CAIRN_EMAIL_COMMAND_PATH\"]],\"contains_secret\":false,\"purpose\":\"production email provider command path\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"operations_preflight\",\"writes_application_state\":false},{\"command\":\"cairn-api operations dependency-policy-evidence > dependency-policy-check.json\",\"contains_secrets\":false,\"file_name\":\"dependency-policy-check.json\",\"missing_environment\":[],\"name\":\"dependency_policy_check\",\"operator_notes\":[\"Run from the repository root after installing the pinned dependency-security tools.\",\"The generated receipt records tool versions, exit codes, and byte counts only; do not archive full audit stdout or stderr in release evidence.\"],\"release_gate\":\"Dependency policy\",\"required_environment\":[],\"requires_production_like_environment\":false,\"status\":\"ready\",\"touches_external_provider\":false,\"validator\":\"dependency_policy_check\",\"writes_application_state\":false},{\"command\":\"cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json\",\"contains_secrets\":false,\"file_name\":\"release-assets-verification.json\",\"missing_environment\":[],\"name\":\"release_assets_verification\",\"operator_notes\":[\"Verify the published GitHub Release assets, checksum file, release manifest, CycloneDX SBOMs, and GitHub provenance plus SBOM attestations before saving this token-free receipt.\",\"Do not archive gh debug logs, request headers, cookies, tokens, or raw attestation payloads in this JSON artifact.\"],\"release_gate\":\"CLI/MCP public release assets\",\"required_environment\":[],\"requires_production_like_environment\":false,\"status\":\"manual_external\",\"touches_external_provider\":true,\"validator\":\"release_assets_verification\",\"writes_application_state\":false},{\"command\":\"cairn-api conformance oidcc-static-registration > openid-static-registration.json\",\"contains_secrets\":false,\"file_name\":\"openid-static-registration.json\",\"missing_environment\":[\"openid_static_registration: set CAIRN_ISSUER for public HTTPS issuer\",\"openid_static_registration: set CAIRN_CONFORMANCE_ALIAS for OpenID conformance suite alias\",\"openid_static_registration: set CAIRN_CONFORMANCE_SUITE_BASE_URL for OpenID conformance suite base URL\",\"openid_static_registration: set CAIRN_CONFORMANCE_CLIENT_ID for primary static client ID\",\"openid_static_registration: set CAIRN_CONFORMANCE_CLIENT2_ID for secondary static client ID\"],\"name\":\"openid_static_registration\",\"operator_notes\":[],\"release_gate\":\"Static OpenID artifacts\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"public HTTPS issuer\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_ALIAS\"]],\"contains_secret\":false,\"purpose\":\"OpenID conformance suite alias\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_SUITE_BASE_URL\"]],\"contains_secret\":false,\"purpose\":\"OpenID conformance suite base URL\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_CLIENT_ID\"]],\"contains_secret\":false,\"purpose\":\"primary static client ID\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_CLIENT2_ID\"]],\"contains_secret\":false,\"purpose\":\"secondary static client ID\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"openid_static_registration\",\"writes_application_state\":false},{\"command\":\"cairn-api conformance oidcc-static-config > cairn-oidcc-static.json\",\"contains_secrets\":true,\"file_name\":\"cairn-oidcc-static.json\",\"missing_environment\":[\"openid_static_config: set CAIRN_ISSUER for public HTTPS issuer\",\"openid_static_config: set CAIRN_CONFORMANCE_ALIAS for OpenID conformance suite alias\",\"openid_static_config: set CAIRN_CONFORMANCE_CLIENT_ID for primary static client ID\",\"openid_static_config: set CAIRN_CONFORMANCE_CLIENT_SECRET for primary static client secret\",\"openid_static_config: set CAIRN_CONFORMANCE_CLIENT2_ID for secondary static client ID\",\"openid_static_config: set CAIRN_CONFORMANCE_CLIENT2_SECRET for secondary static client secret\"],\"name\":\"openid_static_config\",\"operator_notes\":[\"The artifact or command inputs can contain secrets; keep the evidence directory access-controlled and uncommitted.\"],\"release_gate\":\"Static OpenID artifacts\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"public HTTPS issuer\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_ALIAS\"]],\"contains_secret\":false,\"purpose\":\"OpenID conformance suite alias\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_CLIENT_ID\"]],\"contains_secret\":false,\"purpose\":\"primary static client ID\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_CLIENT_SECRET\"]],\"contains_secret\":true,\"purpose\":\"primary static client secret\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_CLIENT2_ID\"]],\"contains_secret\":false,\"purpose\":\"secondary static client ID\"},{\"alternatives\":[[\"CAIRN_CONFORMANCE_CLIENT2_SECRET\"]],\"contains_secret\":true,\"purpose\":\"secondary static client secret\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"openid_static_config\",\"writes_application_state\":false},{\"command\":\"cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json\",\"contains_secrets\":false,\"file_name\":\"oidc-metadata-smoke.json\",\"missing_environment\":[\"oidc_metadata_smoke: set CAIRN_OIDC_METADATA_SMOKE_ISSUER OR CAIRN_ISSUER for deployed HTTPS issuer for metadata/JWKS smoke\"],\"name\":\"oidc_metadata_smoke\",\"operator_notes\":[],\"release_gate\":\"Deployed OIDC metadata\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_OIDC_METADATA_SMOKE_ISSUER\"],[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"deployed HTTPS issuer for metadata/JWKS smoke\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"oidc_metadata_smoke\",\"writes_application_state\":false},{\"command\":\"save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json\",\"contains_secrets\":false,\"file_name\":\"openid-config-op-result.json\",\"missing_environment\":[],\"name\":\"openid_config_op_conformance\",\"operator_notes\":[\"Export this artifact from the OpenID Foundation conformance suite after running the generated static-client plan.\",\"Use `cairn-api conformance oidcc-result-template <config-op|basic-op>` to generate the token-free normalized published-result shape when archiving an official result URL instead of a full suite export.\",\"Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized OpenID result summaries.\"],\"release_gate\":\"OpenID conformance\",\"required_environment\":[],\"requires_production_like_environment\":true,\"status\":\"manual_external\",\"touches_external_provider\":true,\"validator\":\"openid_config_op_conformance\",\"writes_application_state\":false},{\"command\":\"save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json\",\"contains_secrets\":false,\"file_name\":\"openid-basic-op-result.json\",\"missing_environment\":[],\"name\":\"openid_basic_op_conformance\",\"operator_notes\":[\"Export this artifact from the OpenID Foundation conformance suite after running the generated static-client plan.\",\"Use `cairn-api conformance oidcc-result-template <config-op|basic-op>` to generate the token-free normalized published-result shape when archiving an official result URL instead of a full suite export.\",\"Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized OpenID result summaries.\"],\"release_gate\":\"OpenID conformance\",\"required_environment\":[],\"requires_production_like_environment\":true,\"status\":\"manual_external\",\"touches_external_provider\":true,\"validator\":\"openid_basic_op_conformance\",\"writes_application_state\":false},{\"command\":\"cairn-api scim connector-profile generic > scim-generic-connector-profile.json\",\"contains_secrets\":false,\"file_name\":\"scim-generic-connector-profile.json\",\"missing_environment\":[\"scim_generic_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs\"],\"name\":\"scim_generic_connector_profile\",\"operator_notes\":[],\"release_gate\":\"SCIM provisioning\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"public HTTPS issuer for connector profile URLs\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"scim_connector_profile_generic\",\"writes_application_state\":false},{\"command\":\"cairn-api scim connector-profile okta > scim-okta-connector-profile.json\",\"contains_secrets\":false,\"file_name\":\"scim-okta-connector-profile.json\",\"missing_environment\":[\"scim_okta_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs\"],\"name\":\"scim_okta_connector_profile\",\"operator_notes\":[],\"release_gate\":\"SCIM provisioning\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"public HTTPS issuer for connector profile URLs\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"scim_connector_profile_okta\",\"writes_application_state\":false},{\"command\":\"cairn-api scim connector-profile entra > scim-entra-connector-profile.json\",\"contains_secrets\":false,\"file_name\":\"scim-entra-connector-profile.json\",\"missing_environment\":[\"scim_entra_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs\"],\"name\":\"scim_entra_connector_profile\",\"operator_notes\":[],\"release_gate\":\"SCIM provisioning\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"public HTTPS issuer for connector profile URLs\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"scim_connector_profile_entra\",\"writes_application_state\":false},{\"command\":\"cairn-api scim smoke > scim-smoke.json\",\"contains_secrets\":false,\"file_name\":\"scim-smoke.json\",\"missing_environment\":[\"scim_public_smoke: set CAIRN_SCIM_SMOKE_BASE_URL OR CAIRN_ISSUER for deployed SCIM base URL\",\"scim_public_smoke: set CAIRN_SCIM_BEARER_TOKEN for primary raw SCIM smoke token\",\"scim_public_smoke: set CAIRN_SCIM_SECONDARY_BEARER_TOKEN for secondary raw SCIM token for rotation-window release evidence\",\"scim_public_smoke: set CAIRN_SCIM_REJECTED_BEARER_TOKEN for retired or invalid raw SCIM token for rejection release evidence\"],\"name\":\"scim_public_smoke\",\"operator_notes\":[\"First-public-RC SCIM evidence requires primary, secondary, and rejected token checks even though the smoke command can run without optional rotation variables.\",\"Run this command only against a production-like tenant prepared for state-changing release smoke.\"],\"release_gate\":\"SCIM provisioning\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_SCIM_SMOKE_BASE_URL\"],[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"deployed SCIM base URL\"},{\"alternatives\":[[\"CAIRN_SCIM_BEARER_TOKEN\"]],\"contains_secret\":true,\"purpose\":\"primary raw SCIM smoke token\"},{\"alternatives\":[[\"CAIRN_SCIM_SECONDARY_BEARER_TOKEN\"]],\"contains_secret\":true,\"purpose\":\"secondary raw SCIM token for rotation-window release evidence\"},{\"alternatives\":[[\"CAIRN_SCIM_REJECTED_BEARER_TOKEN\"]],\"contains_secret\":true,\"purpose\":\"retired or invalid raw SCIM token for rejection release evidence\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"scim_smoke\",\"writes_application_state\":true},{\"command\":\"save normalized Okta connector smoke summary as scim-okta-connector-smoke.json\",\"contains_secrets\":false,\"file_name\":\"scim-okta-connector-smoke.json\",\"missing_environment\":[],\"name\":\"scim_okta_connector_smoke\",\"operator_notes\":[\"Record a normalized connector smoke summary after the external provisioning client completes the required provider-emitted SCIM create, update, deactivation, deletion, and token-rotation checks.\",\"Keep SCIM Bulk proof in the built-in scim-smoke.json evidence; Okta and Microsoft Entra connector summaries do not require provider-emitted Bulk.\",\"Use `cairn-api scim connector-smoke-template <okta|entra>` to generate the token-free JSON shape, then replace every placeholder with verified external connector evidence.\",\"Do not include raw connector bearer tokens, provider credentials, end-user secrets, or provider console screenshots in this JSON artifact.\",\"Run this command only against a production-like tenant prepared for state-changing release smoke.\"],\"release_gate\":\"SCIM provisioning\",\"required_environment\":[],\"requires_production_like_environment\":true,\"status\":\"manual_external\",\"touches_external_provider\":true,\"validator\":\"scim_connector_smoke_okta\",\"writes_application_state\":true},{\"command\":\"save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json\",\"contains_secrets\":false,\"file_name\":\"scim-entra-connector-smoke.json\",\"missing_environment\":[],\"name\":\"scim_entra_connector_smoke\",\"operator_notes\":[\"Record a normalized connector smoke summary after the external provisioning client completes the required provider-emitted SCIM create, update, deactivation, deletion, and token-rotation checks.\",\"Keep SCIM Bulk proof in the built-in scim-smoke.json evidence; Okta and Microsoft Entra connector summaries do not require provider-emitted Bulk.\",\"Use `cairn-api scim connector-smoke-template <okta|entra>` to generate the token-free JSON shape, then replace every placeholder with verified external connector evidence.\",\"Do not include raw connector bearer tokens, provider credentials, end-user secrets, or provider console screenshots in this JSON artifact.\",\"Run this command only against a production-like tenant prepared for state-changing release smoke.\"],\"release_gate\":\"SCIM provisioning\",\"required_environment\":[],\"requires_production_like_environment\":true,\"status\":\"manual_external\",\"touches_external_provider\":true,\"validator\":\"scim_connector_smoke_entra\",\"writes_application_state\":true},{\"command\":\"cairn-api operations browser-origin-smoke > browser-origin-smoke.json\",\"contains_secrets\":false,\"file_name\":\"browser-origin-smoke.json\",\"missing_environment\":[\"browser_origin_smoke: set CAIRN_BROWSER_ORIGIN_SMOKE_BASE_URL OR CAIRN_ISSUER for deployed API base URL for browser-origin rejection smoke\"],\"name\":\"browser_origin_smoke\",\"operator_notes\":[],\"release_gate\":\"Browser origin defense\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_BROWSER_ORIGIN_SMOKE_BASE_URL\"],[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"deployed API base URL for browser-origin rejection smoke\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"browser_origin_smoke\",\"writes_application_state\":false},{\"command\":\"cairn-api operations security-headers-smoke > security-headers-smoke.json\",\"contains_secrets\":false,\"file_name\":\"security-headers-smoke.json\",\"missing_environment\":[\"security_headers_smoke: set CAIRN_SECURITY_HEADERS_API_BASE_URL OR CAIRN_ISSUER for deployed API base URL for security-header smoke\",\"security_headers_smoke: set CAIRN_SECURITY_HEADERS_WEB_BASE_URL OR CAIRN_PUBLIC_WEB_ORIGIN for deployed web base URL for security-header smoke\"],\"name\":\"security_headers_smoke\",\"operator_notes\":[],\"release_gate\":\"Security headers\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_SECURITY_HEADERS_API_BASE_URL\"],[\"CAIRN_ISSUER\"]],\"contains_secret\":false,\"purpose\":\"deployed API base URL for security-header smoke\"},{\"alternatives\":[[\"CAIRN_SECURITY_HEADERS_WEB_BASE_URL\"],[\"CAIRN_PUBLIC_WEB_ORIGIN\"]],\"contains_secret\":false,\"purpose\":\"deployed web base URL for security-header smoke\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"security_headers_smoke\",\"writes_application_state\":false},{\"command\":\"cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json\",\"contains_secrets\":false,\"file_name\":\"email-provider-smoke.json\",\"missing_environment\":[\"email_provider_smoke: set CAIRN_EMAIL_PROVIDER for production email provider mode\",\"email_provider_smoke: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path\"],\"name\":\"email_provider_smoke\",\"operator_notes\":[\"The smoke-provider command also requires a controlled recipient email argument; the plan does not record mailbox addresses.\"],\"release_gate\":\"Email delivery\",\"required_environment\":[{\"alternatives\":[[\"CAIRN_EMAIL_PROVIDER\"]],\"contains_secret\":false,\"purpose\":\"production email provider mode\"},{\"alternatives\":[[\"CAIRN_EMAIL_COMMAND_PATH\"]],\"contains_secret\":false,\"purpose\":\"production email provider command path\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":true,\"validator\":\"email_provider_smoke\",\"writes_application_state\":false},{\"command\":\"cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json\",\"contains_secrets\":false,\"file_name\":\"lifecycle-email-smoke.json\",\"missing_environment\":[\"lifecycle_email_smoke: set DATABASE_URL for database connectivity\",\"lifecycle_email_smoke: set CAIRN_EMAIL_PROVIDER for production email provider mode\",\"lifecycle_email_smoke: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path\",\"lifecycle_email_smoke: set CAIRN_KEY_ENCRYPTION_KEY for encrypted lifecycle action-link rendering\"],\"name\":\"lifecycle_email_smoke\",\"operator_notes\":[\"Run this command only against a production-like tenant prepared for state-changing release smoke.\"],\"release_gate\":\"Email delivery\",\"required_environment\":[{\"alternatives\":[[\"DATABASE_URL\"]],\"contains_secret\":true,\"purpose\":\"database connectivity\"},{\"alternatives\":[[\"CAIRN_EMAIL_PROVIDER\"]],\"contains_secret\":false,\"purpose\":\"production email provider mode\"},{\"alternatives\":[[\"CAIRN_EMAIL_COMMAND_PATH\"]],\"contains_secret\":false,\"purpose\":\"production email provider command path\"},{\"alternatives\":[[\"CAIRN_KEY_ENCRYPTION_KEY\"]],\"contains_secret\":true,\"purpose\":\"encrypted lifecycle action-link rendering\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":true,\"validator\":\"lifecycle_email_smoke\",\"writes_application_state\":true},{\"command\":\"set DATABASE_URL to a restored production-like Postgres database, then run cairn-api operations restore-check > restore-drill.json\",\"contains_secrets\":false,\"file_name\":\"restore-drill.json\",\"missing_environment\":[\"restore_drill: set DATABASE_URL for restored production-like Postgres database for release evidence; local rehearsal receipts are not release-ready evidence\",\"restore_drill: set CAIRN_KEY_ENCRYPTION_KEY OR CAIRN_SIGNING_KEY_ID + CAIRN_SIGNING_PRIVATE_KEY_PEM + CAIRN_SIGNING_PUBLIC_JWK for post-restore OIDC signing source\"],\"name\":\"restore_drill\",\"operator_notes\":[],\"release_gate\":\"Restore drill\",\"required_environment\":[{\"alternatives\":[[\"DATABASE_URL\"]],\"contains_secret\":true,\"purpose\":\"restored production-like Postgres database for release evidence; local rehearsal receipts are not release-ready evidence\"},{\"alternatives\":[[\"CAIRN_KEY_ENCRYPTION_KEY\"],[\"CAIRN_SIGNING_KEY_ID\",\"CAIRN_SIGNING_PRIVATE_KEY_PEM\",\"CAIRN_SIGNING_PUBLIC_JWK\"]],\"contains_secret\":true,\"purpose\":\"post-restore OIDC signing source\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"restore_drill\",\"writes_application_state\":false},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api signing-key rotate > signing-key-rotation-drill.json\",\"contains_secrets\":false,\"file_name\":\"signing-key-rotation-drill.json\",\"missing_environment\":[\"signing_key_rotation_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\",\"signing_key_rotation_drill: set CAIRN_KEY_ENCRYPTION_KEY for database-backed signing-key encryption\"],\"name\":\"signing_key_rotation_drill\",\"operator_notes\":[\"Run this command only against a production-like tenant prepared for state-changing release smoke.\"],\"release_gate\":\"Key operations\",\"required_environment\":[{\"alternatives\":[[\"DATABASE_URL\"]],\"contains_secret\":true,\"purpose\":\"production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\"},{\"alternatives\":[[\"CAIRN_KEY_ENCRYPTION_KEY\"]],\"contains_secret\":true,\"purpose\":\"database-backed signing-key encryption\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"signing_key_rotation\",\"writes_application_state\":true},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api key-encryption rotate > kek-rotation-drill.json\",\"contains_secrets\":false,\"file_name\":\"kek-rotation-drill.json\",\"missing_environment\":[\"kek_rotation_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\",\"kek_rotation_drill: set CAIRN_OLD_KEY_ENCRYPTION_KEY for old database key-encryption key\",\"kek_rotation_drill: set CAIRN_NEW_KEY_ENCRYPTION_KEY for new database key-encryption key\"],\"name\":\"kek_rotation_drill\",\"operator_notes\":[\"Run this command only against a production-like tenant prepared for state-changing release smoke.\"],\"release_gate\":\"Key operations\",\"required_environment\":[{\"alternatives\":[[\"DATABASE_URL\"]],\"contains_secret\":true,\"purpose\":\"production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\"},{\"alternatives\":[[\"CAIRN_OLD_KEY_ENCRYPTION_KEY\"]],\"contains_secret\":true,\"purpose\":\"old database key-encryption key\"},{\"alternatives\":[[\"CAIRN_NEW_KEY_ENCRYPTION_KEY\"]],\"contains_secret\":true,\"purpose\":\"new database key-encryption key\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"key_encryption_rotation\",\"writes_application_state\":true},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json\",\"contains_secrets\":false,\"file_name\":\"break-glass-admin-recovery-drill.json\",\"missing_environment\":[\"break_glass_admin_recovery_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\",\"break_glass_admin_recovery_drill: set CAIRN_BREAK_GLASS_CONFIRM for explicit break-glass acknowledgement\"],\"name\":\"break_glass_admin_recovery_drill\",\"operator_notes\":[\"Run this command only against a production-like tenant prepared for state-changing release smoke.\"],\"release_gate\":\"Emergency access\",\"required_environment\":[{\"alternatives\":[[\"DATABASE_URL\"]],\"contains_secret\":true,\"purpose\":\"production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\"},{\"alternatives\":[[\"CAIRN_BREAK_GLASS_CONFIRM\"]],\"contains_secret\":false,\"purpose\":\"explicit break-glass acknowledgement\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"break_glass_admin_recovery\",\"writes_application_state\":true},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json\",\"contains_secrets\":false,\"file_name\":\"audit-export-archive-drill.json\",\"missing_environment\":[\"audit_export_archive_drill: set DATABASE_URL for production-like or restored Postgres drill database for release evidence; local rehearsal receipts are not release-ready evidence\"],\"name\":\"audit_export_archive_drill\",\"operator_notes\":[],\"release_gate\":\"Audit operations\",\"required_environment\":[{\"alternatives\":[[\"DATABASE_URL\"]],\"contains_secret\":true,\"purpose\":\"production-like or restored Postgres drill database for release evidence; local rehearsal receipts are not release-ready evidence\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"audit_export_archive\",\"writes_application_state\":false},{\"command\":\"set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api audit purge-expired > audit-retention-purge-drill.json\",\"contains_secrets\":false,\"file_name\":\"audit-retention-purge-drill.json\",\"missing_environment\":[\"audit_retention_purge_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\"],\"name\":\"audit_retention_purge_drill\",\"operator_notes\":[\"Run this command only against a production-like tenant prepared for state-changing release smoke.\"],\"release_gate\":\"Audit operations\",\"required_environment\":[{\"alternatives\":[[\"DATABASE_URL\"]],\"contains_secret\":true,\"purpose\":\"production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence\"}],\"requires_production_like_environment\":true,\"status\":\"missing_environment\",\"touches_external_provider\":false,\"validator\":\"audit_retention_purge\",\"writes_application_state\":true}]}",
+      "type": "text"
+    }
+  ],
+  "isError": false,
+  "structuredContent": {
+    "artifact_count": 24,
+    "external_provider_artifact_count": 7,
+    "generated_at": "<generated_at>",
+    "manual_artifact_count": 5,
+    "missing_environment": [
+      "audit_export_archive_drill: set DATABASE_URL for production-like or restored Postgres drill database for release evidence; local rehearsal receipts are not release-ready evidence",
+      "audit_retention_purge_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence",
+      "break_glass_admin_recovery_drill: set CAIRN_BREAK_GLASS_CONFIRM for explicit break-glass acknowledgement",
+      "break_glass_admin_recovery_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence",
+      "browser_origin_smoke: set CAIRN_BROWSER_ORIGIN_SMOKE_BASE_URL OR CAIRN_ISSUER for deployed API base URL for browser-origin rejection smoke",
+      "email_provider_smoke: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path",
+      "email_provider_smoke: set CAIRN_EMAIL_PROVIDER for production email provider mode",
+      "kek_rotation_drill: set CAIRN_NEW_KEY_ENCRYPTION_KEY for new database key-encryption key",
+      "kek_rotation_drill: set CAIRN_OLD_KEY_ENCRYPTION_KEY for old database key-encryption key",
+      "kek_rotation_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence",
+      "lifecycle_email_smoke: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path",
+      "lifecycle_email_smoke: set CAIRN_EMAIL_PROVIDER for production email provider mode",
+      "lifecycle_email_smoke: set CAIRN_KEY_ENCRYPTION_KEY for encrypted lifecycle action-link rendering",
+      "lifecycle_email_smoke: set DATABASE_URL for database connectivity",
+      "oidc_metadata_smoke: set CAIRN_OIDC_METADATA_SMOKE_ISSUER OR CAIRN_ISSUER for deployed HTTPS issuer for metadata/JWKS smoke",
+      "openid_static_config: set CAIRN_CONFORMANCE_ALIAS for OpenID conformance suite alias",
+      "openid_static_config: set CAIRN_CONFORMANCE_CLIENT2_ID for secondary static client ID",
+      "openid_static_config: set CAIRN_CONFORMANCE_CLIENT2_SECRET for secondary static client secret",
+      "openid_static_config: set CAIRN_CONFORMANCE_CLIENT_ID for primary static client ID",
+      "openid_static_config: set CAIRN_CONFORMANCE_CLIENT_SECRET for primary static client secret",
+      "openid_static_config: set CAIRN_ISSUER for public HTTPS issuer",
+      "openid_static_registration: set CAIRN_CONFORMANCE_ALIAS for OpenID conformance suite alias",
+      "openid_static_registration: set CAIRN_CONFORMANCE_CLIENT2_ID for secondary static client ID",
+      "openid_static_registration: set CAIRN_CONFORMANCE_CLIENT_ID for primary static client ID",
+      "openid_static_registration: set CAIRN_CONFORMANCE_SUITE_BASE_URL for OpenID conformance suite base URL",
+      "openid_static_registration: set CAIRN_ISSUER for public HTTPS issuer",
+      "operations_preflight: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path",
+      "operations_preflight: set CAIRN_EMAIL_PROVIDER for production email provider mode",
+      "operations_preflight: set CAIRN_ENV for production-mode preflight",
+      "operations_preflight: set CAIRN_ISSUER for public HTTPS issuer",
+      "operations_preflight: set CAIRN_KEY_ENCRYPTION_KEY OR CAIRN_SIGNING_KEY_ID + CAIRN_SIGNING_PRIVATE_KEY_PEM + CAIRN_SIGNING_PUBLIC_JWK for OIDC signing source",
+      "operations_preflight: set CAIRN_PUBLIC_WEB_ORIGIN for public web origin",
+      "operations_preflight: set DATABASE_URL for database connectivity",
+      "restore_drill: set CAIRN_KEY_ENCRYPTION_KEY OR CAIRN_SIGNING_KEY_ID + CAIRN_SIGNING_PRIVATE_KEY_PEM + CAIRN_SIGNING_PUBLIC_JWK for post-restore OIDC signing source",
+      "restore_drill: set DATABASE_URL for restored production-like Postgres database for release evidence; local rehearsal receipts are not release-ready evidence",
+      "scim_entra_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs",
+      "scim_generic_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs",
+      "scim_okta_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs",
+      "scim_public_smoke: set CAIRN_SCIM_BEARER_TOKEN for primary raw SCIM smoke token",
+      "scim_public_smoke: set CAIRN_SCIM_REJECTED_BEARER_TOKEN for retired or invalid raw SCIM token for rejection release evidence",
+      "scim_public_smoke: set CAIRN_SCIM_SECONDARY_BEARER_TOKEN for secondary raw SCIM token for rotation-window release evidence",
+      "scim_public_smoke: set CAIRN_SCIM_SMOKE_BASE_URL OR CAIRN_ISSUER for deployed SCIM base URL",
+      "security_headers_smoke: set CAIRN_SECURITY_HEADERS_API_BASE_URL OR CAIRN_ISSUER for deployed API base URL for security-header smoke",
+      "security_headers_smoke: set CAIRN_SECURITY_HEADERS_WEB_BASE_URL OR CAIRN_PUBLIC_WEB_ORIGIN for deployed web base URL for security-header smoke",
+      "signing_key_rotation_drill: set CAIRN_KEY_ENCRYPTION_KEY for database-backed signing-key encryption",
+      "signing_key_rotation_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence"
+    ],
+    "missing_environment_artifact_count": 18,
+    "notes": [
+      "This plan only reports whether required command inputs are present; it never prints environment values.",
+      "Run first-public-RC evidence with CAIRN_ENV=production and production-like HTTPS origins where the artifact requires them.",
+      "status=\"ready\" means local/generated capture prerequisites are present; it does not mean manual or provider-backed evidence has been captured.",
+      "Review pending_manual_evidence and pending_external_evidence before collecting artifacts, then run cairnid evidence check."
+    ],
+    "ready_artifact_count": 1,
+    "schema_version": "cairnid.mcp.evidence.v1",
+    "secret_artifact_count": 1,
+    "state_changing_artifact_count": 8,
+    "status": "missing_environment",
+    "steps": [
+      {
+        "command": "cairn-api operations preflight > operations-preflight.json",
+        "contains_secrets": false,
+        "file_name": "operations-preflight.json",
+        "missing_environment": [
+          "operations_preflight: set CAIRN_ENV for production-mode preflight",
+          "operations_preflight: set DATABASE_URL for database connectivity",
+          "operations_preflight: set CAIRN_ISSUER for public HTTPS issuer",
+          "operations_preflight: set CAIRN_PUBLIC_WEB_ORIGIN for public web origin",
+          "operations_preflight: set CAIRN_KEY_ENCRYPTION_KEY OR CAIRN_SIGNING_KEY_ID + CAIRN_SIGNING_PRIVATE_KEY_PEM + CAIRN_SIGNING_PUBLIC_JWK for OIDC signing source",
+          "operations_preflight: set CAIRN_EMAIL_PROVIDER for production email provider mode",
+          "operations_preflight: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path"
+        ],
+        "name": "operations_preflight",
+        "operator_notes": [],
+        "release_gate": "Operations preflight",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_ENV"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "production-mode preflight"
+          },
+          {
+            "alternatives": [
+              [
+                "DATABASE_URL"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "database connectivity"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "public HTTPS issuer"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_PUBLIC_WEB_ORIGIN"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "public web origin"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_KEY_ENCRYPTION_KEY"
+              ],
+              [
+                "CAIRN_SIGNING_KEY_ID",
+                "CAIRN_SIGNING_PRIVATE_KEY_PEM",
+                "CAIRN_SIGNING_PUBLIC_JWK"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "OIDC signing source"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_EMAIL_PROVIDER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "production email provider mode"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_EMAIL_COMMAND_PATH"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "production email provider command path"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "operations_preflight",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api operations dependency-policy-evidence > dependency-policy-check.json",
+        "contains_secrets": false,
+        "file_name": "dependency-policy-check.json",
+        "missing_environment": [],
+        "name": "dependency_policy_check",
+        "operator_notes": [
+          "Run from the repository root after installing the pinned dependency-security tools.",
+          "The generated receipt records tool versions, exit codes, and byte counts only; do not archive full audit stdout or stderr in release evidence."
+        ],
+        "release_gate": "Dependency policy",
+        "required_environment": [],
+        "requires_production_like_environment": false,
+        "status": "ready",
+        "touches_external_provider": false,
+        "validator": "dependency_policy_check",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairnid release-assets verify <release-dir> --tag <tag> --source-commit <sha> --release-url <url> --github-release-immutability-enabled-before-publish --provenance-attestations-verified --sbom-attestations-verified > release-assets-verification.json",
+        "contains_secrets": false,
+        "file_name": "release-assets-verification.json",
+        "missing_environment": [],
+        "name": "release_assets_verification",
+        "operator_notes": [
+          "Verify the published GitHub Release assets, checksum file, release manifest, CycloneDX SBOMs, and GitHub provenance plus SBOM attestations before saving this token-free receipt.",
+          "Do not archive gh debug logs, request headers, cookies, tokens, or raw attestation payloads in this JSON artifact."
+        ],
+        "release_gate": "CLI/MCP public release assets",
+        "required_environment": [],
+        "requires_production_like_environment": false,
+        "status": "manual_external",
+        "touches_external_provider": true,
+        "validator": "release_assets_verification",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api conformance oidcc-static-registration > openid-static-registration.json",
+        "contains_secrets": false,
+        "file_name": "openid-static-registration.json",
+        "missing_environment": [
+          "openid_static_registration: set CAIRN_ISSUER for public HTTPS issuer",
+          "openid_static_registration: set CAIRN_CONFORMANCE_ALIAS for OpenID conformance suite alias",
+          "openid_static_registration: set CAIRN_CONFORMANCE_SUITE_BASE_URL for OpenID conformance suite base URL",
+          "openid_static_registration: set CAIRN_CONFORMANCE_CLIENT_ID for primary static client ID",
+          "openid_static_registration: set CAIRN_CONFORMANCE_CLIENT2_ID for secondary static client ID"
+        ],
+        "name": "openid_static_registration",
+        "operator_notes": [],
+        "release_gate": "Static OpenID artifacts",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "public HTTPS issuer"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_ALIAS"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "OpenID conformance suite alias"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_SUITE_BASE_URL"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "OpenID conformance suite base URL"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_CLIENT_ID"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "primary static client ID"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_CLIENT2_ID"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "secondary static client ID"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "openid_static_registration",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api conformance oidcc-static-config > cairn-oidcc-static.json",
+        "contains_secrets": true,
+        "file_name": "cairn-oidcc-static.json",
+        "missing_environment": [
+          "openid_static_config: set CAIRN_ISSUER for public HTTPS issuer",
+          "openid_static_config: set CAIRN_CONFORMANCE_ALIAS for OpenID conformance suite alias",
+          "openid_static_config: set CAIRN_CONFORMANCE_CLIENT_ID for primary static client ID",
+          "openid_static_config: set CAIRN_CONFORMANCE_CLIENT_SECRET for primary static client secret",
+          "openid_static_config: set CAIRN_CONFORMANCE_CLIENT2_ID for secondary static client ID",
+          "openid_static_config: set CAIRN_CONFORMANCE_CLIENT2_SECRET for secondary static client secret"
+        ],
+        "name": "openid_static_config",
+        "operator_notes": [
+          "The artifact or command inputs can contain secrets; keep the evidence directory access-controlled and uncommitted."
+        ],
+        "release_gate": "Static OpenID artifacts",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "public HTTPS issuer"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_ALIAS"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "OpenID conformance suite alias"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_CLIENT_ID"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "primary static client ID"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_CLIENT_SECRET"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "primary static client secret"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_CLIENT2_ID"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "secondary static client ID"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_CONFORMANCE_CLIENT2_SECRET"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "secondary static client secret"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "openid_static_config",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api operations oidc-metadata-smoke > oidc-metadata-smoke.json",
+        "contains_secrets": false,
+        "file_name": "oidc-metadata-smoke.json",
+        "missing_environment": [
+          "oidc_metadata_smoke: set CAIRN_OIDC_METADATA_SMOKE_ISSUER OR CAIRN_ISSUER for deployed HTTPS issuer for metadata/JWKS smoke"
+        ],
+        "name": "oidc_metadata_smoke",
+        "operator_notes": [],
+        "release_gate": "Deployed OIDC metadata",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_OIDC_METADATA_SMOKE_ISSUER"
+              ],
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "deployed HTTPS issuer for metadata/JWKS smoke"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "oidc_metadata_smoke",
+        "writes_application_state": false
+      },
+      {
+        "command": "save OpenID Foundation Config OP suite result JSON as openid-config-op-result.json",
+        "contains_secrets": false,
+        "file_name": "openid-config-op-result.json",
+        "missing_environment": [],
+        "name": "openid_config_op_conformance",
+        "operator_notes": [
+          "Export this artifact from the OpenID Foundation conformance suite after running the generated static-client plan.",
+          "Use `cairn-api conformance oidcc-result-template <config-op|basic-op>` to generate the token-free normalized published-result shape when archiving an official result URL instead of a full suite export.",
+          "Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized OpenID result summaries."
+        ],
+        "release_gate": "OpenID conformance",
+        "required_environment": [],
+        "requires_production_like_environment": true,
+        "status": "manual_external",
+        "touches_external_provider": true,
+        "validator": "openid_config_op_conformance",
+        "writes_application_state": false
+      },
+      {
+        "command": "save OpenID Foundation Basic OP suite result JSON as openid-basic-op-result.json",
+        "contains_secrets": false,
+        "file_name": "openid-basic-op-result.json",
+        "missing_environment": [],
+        "name": "openid_basic_op_conformance",
+        "operator_notes": [
+          "Export this artifact from the OpenID Foundation conformance suite after running the generated static-client plan.",
+          "Use `cairn-api conformance oidcc-result-template <config-op|basic-op>` to generate the token-free normalized published-result shape when archiving an official result URL instead of a full suite export.",
+          "Do not include static-client secrets, cookies, request headers, passwords, screenshots, or browser session data in normalized OpenID result summaries."
+        ],
+        "release_gate": "OpenID conformance",
+        "required_environment": [],
+        "requires_production_like_environment": true,
+        "status": "manual_external",
+        "touches_external_provider": true,
+        "validator": "openid_basic_op_conformance",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api scim connector-profile generic > scim-generic-connector-profile.json",
+        "contains_secrets": false,
+        "file_name": "scim-generic-connector-profile.json",
+        "missing_environment": [
+          "scim_generic_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs"
+        ],
+        "name": "scim_generic_connector_profile",
+        "operator_notes": [],
+        "release_gate": "SCIM provisioning",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "public HTTPS issuer for connector profile URLs"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "scim_connector_profile_generic",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api scim connector-profile okta > scim-okta-connector-profile.json",
+        "contains_secrets": false,
+        "file_name": "scim-okta-connector-profile.json",
+        "missing_environment": [
+          "scim_okta_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs"
+        ],
+        "name": "scim_okta_connector_profile",
+        "operator_notes": [],
+        "release_gate": "SCIM provisioning",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "public HTTPS issuer for connector profile URLs"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "scim_connector_profile_okta",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api scim connector-profile entra > scim-entra-connector-profile.json",
+        "contains_secrets": false,
+        "file_name": "scim-entra-connector-profile.json",
+        "missing_environment": [
+          "scim_entra_connector_profile: set CAIRN_ISSUER for public HTTPS issuer for connector profile URLs"
+        ],
+        "name": "scim_entra_connector_profile",
+        "operator_notes": [],
+        "release_gate": "SCIM provisioning",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "public HTTPS issuer for connector profile URLs"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "scim_connector_profile_entra",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api scim smoke > scim-smoke.json",
+        "contains_secrets": false,
+        "file_name": "scim-smoke.json",
+        "missing_environment": [
+          "scim_public_smoke: set CAIRN_SCIM_SMOKE_BASE_URL OR CAIRN_ISSUER for deployed SCIM base URL",
+          "scim_public_smoke: set CAIRN_SCIM_BEARER_TOKEN for primary raw SCIM smoke token",
+          "scim_public_smoke: set CAIRN_SCIM_SECONDARY_BEARER_TOKEN for secondary raw SCIM token for rotation-window release evidence",
+          "scim_public_smoke: set CAIRN_SCIM_REJECTED_BEARER_TOKEN for retired or invalid raw SCIM token for rejection release evidence"
+        ],
+        "name": "scim_public_smoke",
+        "operator_notes": [
+          "First-public-RC SCIM evidence requires primary, secondary, and rejected token checks even though the smoke command can run without optional rotation variables.",
+          "Run this command only against a production-like tenant prepared for state-changing release smoke."
+        ],
+        "release_gate": "SCIM provisioning",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_SCIM_SMOKE_BASE_URL"
+              ],
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "deployed SCIM base URL"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_SCIM_BEARER_TOKEN"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "primary raw SCIM smoke token"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_SCIM_SECONDARY_BEARER_TOKEN"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "secondary raw SCIM token for rotation-window release evidence"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_SCIM_REJECTED_BEARER_TOKEN"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "retired or invalid raw SCIM token for rejection release evidence"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "scim_smoke",
+        "writes_application_state": true
+      },
+      {
+        "command": "save normalized Okta connector smoke summary as scim-okta-connector-smoke.json",
+        "contains_secrets": false,
+        "file_name": "scim-okta-connector-smoke.json",
+        "missing_environment": [],
+        "name": "scim_okta_connector_smoke",
+        "operator_notes": [
+          "Record a normalized connector smoke summary after the external provisioning client completes the required provider-emitted SCIM create, update, deactivation, deletion, and token-rotation checks.",
+          "Keep SCIM Bulk proof in the built-in scim-smoke.json evidence; Okta and Microsoft Entra connector summaries do not require provider-emitted Bulk.",
+          "Use `cairn-api scim connector-smoke-template <okta|entra>` to generate the token-free JSON shape, then replace every placeholder with verified external connector evidence.",
+          "Do not include raw connector bearer tokens, provider credentials, end-user secrets, or provider console screenshots in this JSON artifact.",
+          "Run this command only against a production-like tenant prepared for state-changing release smoke."
+        ],
+        "release_gate": "SCIM provisioning",
+        "required_environment": [],
+        "requires_production_like_environment": true,
+        "status": "manual_external",
+        "touches_external_provider": true,
+        "validator": "scim_connector_smoke_okta",
+        "writes_application_state": true
+      },
+      {
+        "command": "save normalized Microsoft Entra connector smoke summary as scim-entra-connector-smoke.json",
+        "contains_secrets": false,
+        "file_name": "scim-entra-connector-smoke.json",
+        "missing_environment": [],
+        "name": "scim_entra_connector_smoke",
+        "operator_notes": [
+          "Record a normalized connector smoke summary after the external provisioning client completes the required provider-emitted SCIM create, update, deactivation, deletion, and token-rotation checks.",
+          "Keep SCIM Bulk proof in the built-in scim-smoke.json evidence; Okta and Microsoft Entra connector summaries do not require provider-emitted Bulk.",
+          "Use `cairn-api scim connector-smoke-template <okta|entra>` to generate the token-free JSON shape, then replace every placeholder with verified external connector evidence.",
+          "Do not include raw connector bearer tokens, provider credentials, end-user secrets, or provider console screenshots in this JSON artifact.",
+          "Run this command only against a production-like tenant prepared for state-changing release smoke."
+        ],
+        "release_gate": "SCIM provisioning",
+        "required_environment": [],
+        "requires_production_like_environment": true,
+        "status": "manual_external",
+        "touches_external_provider": true,
+        "validator": "scim_connector_smoke_entra",
+        "writes_application_state": true
+      },
+      {
+        "command": "cairn-api operations browser-origin-smoke > browser-origin-smoke.json",
+        "contains_secrets": false,
+        "file_name": "browser-origin-smoke.json",
+        "missing_environment": [
+          "browser_origin_smoke: set CAIRN_BROWSER_ORIGIN_SMOKE_BASE_URL OR CAIRN_ISSUER for deployed API base URL for browser-origin rejection smoke"
+        ],
+        "name": "browser_origin_smoke",
+        "operator_notes": [],
+        "release_gate": "Browser origin defense",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_BROWSER_ORIGIN_SMOKE_BASE_URL"
+              ],
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "deployed API base URL for browser-origin rejection smoke"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "browser_origin_smoke",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api operations security-headers-smoke > security-headers-smoke.json",
+        "contains_secrets": false,
+        "file_name": "security-headers-smoke.json",
+        "missing_environment": [
+          "security_headers_smoke: set CAIRN_SECURITY_HEADERS_API_BASE_URL OR CAIRN_ISSUER for deployed API base URL for security-header smoke",
+          "security_headers_smoke: set CAIRN_SECURITY_HEADERS_WEB_BASE_URL OR CAIRN_PUBLIC_WEB_ORIGIN for deployed web base URL for security-header smoke"
+        ],
+        "name": "security_headers_smoke",
+        "operator_notes": [],
+        "release_gate": "Security headers",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_SECURITY_HEADERS_API_BASE_URL"
+              ],
+              [
+                "CAIRN_ISSUER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "deployed API base URL for security-header smoke"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_SECURITY_HEADERS_WEB_BASE_URL"
+              ],
+              [
+                "CAIRN_PUBLIC_WEB_ORIGIN"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "deployed web base URL for security-header smoke"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "security_headers_smoke",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api email-outbox smoke-provider <recipient-email> > email-provider-smoke.json",
+        "contains_secrets": false,
+        "file_name": "email-provider-smoke.json",
+        "missing_environment": [
+          "email_provider_smoke: set CAIRN_EMAIL_PROVIDER for production email provider mode",
+          "email_provider_smoke: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path"
+        ],
+        "name": "email_provider_smoke",
+        "operator_notes": [
+          "The smoke-provider command also requires a controlled recipient email argument; the plan does not record mailbox addresses."
+        ],
+        "release_gate": "Email delivery",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "CAIRN_EMAIL_PROVIDER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "production email provider mode"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_EMAIL_COMMAND_PATH"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "production email provider command path"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": true,
+        "validator": "email_provider_smoke",
+        "writes_application_state": false
+      },
+      {
+        "command": "cairn-api email-outbox lifecycle-smoke-evidence > lifecycle-email-smoke.json",
+        "contains_secrets": false,
+        "file_name": "lifecycle-email-smoke.json",
+        "missing_environment": [
+          "lifecycle_email_smoke: set DATABASE_URL for database connectivity",
+          "lifecycle_email_smoke: set CAIRN_EMAIL_PROVIDER for production email provider mode",
+          "lifecycle_email_smoke: set CAIRN_EMAIL_COMMAND_PATH for production email provider command path",
+          "lifecycle_email_smoke: set CAIRN_KEY_ENCRYPTION_KEY for encrypted lifecycle action-link rendering"
+        ],
+        "name": "lifecycle_email_smoke",
+        "operator_notes": [
+          "Run this command only against a production-like tenant prepared for state-changing release smoke."
+        ],
+        "release_gate": "Email delivery",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "DATABASE_URL"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "database connectivity"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_EMAIL_PROVIDER"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "production email provider mode"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_EMAIL_COMMAND_PATH"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "production email provider command path"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_KEY_ENCRYPTION_KEY"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "encrypted lifecycle action-link rendering"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": true,
+        "validator": "lifecycle_email_smoke",
+        "writes_application_state": true
+      },
+      {
+        "command": "set DATABASE_URL to a restored production-like Postgres database, then run cairn-api operations restore-check > restore-drill.json",
+        "contains_secrets": false,
+        "file_name": "restore-drill.json",
+        "missing_environment": [
+          "restore_drill: set DATABASE_URL for restored production-like Postgres database for release evidence; local rehearsal receipts are not release-ready evidence",
+          "restore_drill: set CAIRN_KEY_ENCRYPTION_KEY OR CAIRN_SIGNING_KEY_ID + CAIRN_SIGNING_PRIVATE_KEY_PEM + CAIRN_SIGNING_PUBLIC_JWK for post-restore OIDC signing source"
+        ],
+        "name": "restore_drill",
+        "operator_notes": [],
+        "release_gate": "Restore drill",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "DATABASE_URL"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "restored production-like Postgres database for release evidence; local rehearsal receipts are not release-ready evidence"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_KEY_ENCRYPTION_KEY"
+              ],
+              [
+                "CAIRN_SIGNING_KEY_ID",
+                "CAIRN_SIGNING_PRIVATE_KEY_PEM",
+                "CAIRN_SIGNING_PUBLIC_JWK"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "post-restore OIDC signing source"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "restore_drill",
+        "writes_application_state": false
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api signing-key rotate > signing-key-rotation-drill.json",
+        "contains_secrets": false,
+        "file_name": "signing-key-rotation-drill.json",
+        "missing_environment": [
+          "signing_key_rotation_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence",
+          "signing_key_rotation_drill: set CAIRN_KEY_ENCRYPTION_KEY for database-backed signing-key encryption"
+        ],
+        "name": "signing_key_rotation_drill",
+        "operator_notes": [
+          "Run this command only against a production-like tenant prepared for state-changing release smoke."
+        ],
+        "release_gate": "Key operations",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "DATABASE_URL"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_KEY_ENCRYPTION_KEY"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "database-backed signing-key encryption"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "signing_key_rotation",
+        "writes_application_state": true
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api key-encryption rotate > kek-rotation-drill.json",
+        "contains_secrets": false,
+        "file_name": "kek-rotation-drill.json",
+        "missing_environment": [
+          "kek_rotation_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence",
+          "kek_rotation_drill: set CAIRN_OLD_KEY_ENCRYPTION_KEY for old database key-encryption key",
+          "kek_rotation_drill: set CAIRN_NEW_KEY_ENCRYPTION_KEY for new database key-encryption key"
+        ],
+        "name": "kek_rotation_drill",
+        "operator_notes": [
+          "Run this command only against a production-like tenant prepared for state-changing release smoke."
+        ],
+        "release_gate": "Key operations",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "DATABASE_URL"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_OLD_KEY_ENCRYPTION_KEY"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "old database key-encryption key"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_NEW_KEY_ENCRYPTION_KEY"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "new database key-encryption key"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "key_encryption_rotation",
+        "writes_application_state": true
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api admin break-glass-owner <user-email> > break-glass-admin-recovery-drill.json",
+        "contains_secrets": false,
+        "file_name": "break-glass-admin-recovery-drill.json",
+        "missing_environment": [
+          "break_glass_admin_recovery_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence",
+          "break_glass_admin_recovery_drill: set CAIRN_BREAK_GLASS_CONFIRM for explicit break-glass acknowledgement"
+        ],
+        "name": "break_glass_admin_recovery_drill",
+        "operator_notes": [
+          "Run this command only against a production-like tenant prepared for state-changing release smoke."
+        ],
+        "release_gate": "Emergency access",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "DATABASE_URL"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence"
+          },
+          {
+            "alternatives": [
+              [
+                "CAIRN_BREAK_GLASS_CONFIRM"
+              ]
+            ],
+            "contains_secret": false,
+            "purpose": "explicit break-glass acknowledgement"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "break_glass_admin_recovery",
+        "writes_application_state": true
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run cairn-api audit export-ndjson <output-path> > audit-export-archive-drill.json",
+        "contains_secrets": false,
+        "file_name": "audit-export-archive-drill.json",
+        "missing_environment": [
+          "audit_export_archive_drill: set DATABASE_URL for production-like or restored Postgres drill database for release evidence; local rehearsal receipts are not release-ready evidence"
+        ],
+        "name": "audit_export_archive_drill",
+        "operator_notes": [],
+        "release_gate": "Audit operations",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "DATABASE_URL"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "production-like or restored Postgres drill database for release evidence; local rehearsal receipts are not release-ready evidence"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "audit_export_archive",
+        "writes_application_state": false
+      },
+      {
+        "command": "set DATABASE_URL to a production-like or restored Postgres drill database, then run the state-changing command cairn-api audit purge-expired > audit-retention-purge-drill.json",
+        "contains_secrets": false,
+        "file_name": "audit-retention-purge-drill.json",
+        "missing_environment": [
+          "audit_retention_purge_drill: set DATABASE_URL for production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence"
+        ],
+        "name": "audit_retention_purge_drill",
+        "operator_notes": [
+          "Run this command only against a production-like tenant prepared for state-changing release smoke."
+        ],
+        "release_gate": "Audit operations",
+        "required_environment": [
+          {
+            "alternatives": [
+              [
+                "DATABASE_URL"
+              ]
+            ],
+            "contains_secret": true,
+            "purpose": "production-like or restored Postgres drill database prepared for state-changing release evidence; local rehearsal receipts are not release-ready evidence"
+          }
+        ],
+        "requires_production_like_environment": true,
+        "status": "missing_environment",
+        "touches_external_provider": false,
+        "validator": "audit_retention_purge",
+        "writes_application_state": true
+      }
+    ]
+  }
+}

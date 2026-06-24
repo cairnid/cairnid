@@ -46,7 +46,6 @@ pub struct ReleaseEvidenceReport {
     pub max_age_days: i64,
     pub artifacts: Vec<ReleaseEvidenceArtifactReport>,
     pub failures: Vec<String>,
-    #[serde(skip_serializing)]
     pub failure_codes: Vec<ReleaseEvidenceFailureCode>,
 }
 
@@ -62,7 +61,6 @@ pub struct ReleaseEvidenceArtifactReport {
     pub modified_at: Option<OffsetDateTime>,
     pub checks: Vec<String>,
     pub failures: Vec<String>,
-    #[serde(skip_serializing)]
     pub failure_codes: Vec<ReleaseEvidenceFailureCode>,
 }
 
@@ -183,6 +181,7 @@ pub struct ReleaseEvidenceStatusReport {
     pub external_provider_artifact_count: usize,
     pub next_actions: Vec<ReleaseEvidenceNextAction>,
     pub failures: Vec<String>,
+    pub failure_codes: Vec<ReleaseEvidenceFailureCode>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -193,6 +192,7 @@ pub struct ReleaseEvidenceNextAction {
     pub status: &'static str,
     pub command: &'static str,
     pub failures: Vec<String>,
+    pub failure_codes: Vec<ReleaseEvidenceFailureCode>,
 }
 
 #[derive(Debug, thiserror::Error)]

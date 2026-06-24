@@ -1,0 +1,20 @@
+{
+  "content": [
+    {
+      "text": "{\"error\":{\"code\":\"empty_evidence_dir\",\"failure_code\":\"missing_evidence\",\"failure_codes\":{\"missing_evidence\":1},\"message\":\"evidence_dir must be a non-empty path\"},\"schema_version\":\"cairnid.mcp.evidence.v1\"}",
+      "type": "text"
+    }
+  ],
+  "isError": true,
+  "structuredContent": {
+    "error": {
+      "code": "empty_evidence_dir",
+      "failure_code": "missing_evidence",
+      "failure_codes": {
+        "missing_evidence": 1
+      },
+      "message": "evidence_dir must be a non-empty path"
+    },
+    "schema_version": "cairnid.mcp.evidence.v1"
+  }
+}
