@@ -13,7 +13,7 @@ use std::{
 };
 use time::OffsetDateTime;
 use url::Url;
-use zip::ZipArchive;
+use zip::{DateTime as ZipDateTime, ZipArchive};
 
 pub(in crate::operations_evidence) const CHECKSUM_FILE_NAME: &str = "SHA256SUMS.txt";
 pub(in crate::operations_evidence) const RELEASE_MANIFEST_FILE_NAME: &str = "release-manifest.json";
@@ -25,6 +25,10 @@ pub(in crate::operations_evidence) const SIGNER_WORKFLOW: &str =
     "cairnid/cairnid/.github/workflows/release.yml";
 pub(in crate::operations_evidence) const PUBLIC_RELEASE_URL_REQUIRED_FAILURE: &str = "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only";
 pub(in crate::operations_evidence) const GITHUB_RELEASE_IMMUTABILITY_REQUIRED_FAILURE: &str = "--github-release-immutability-enabled-before-publish must be supplied for published release evidence after confirming GitHub release immutability was enabled before publication";
+const DETERMINISTIC_TAR_GZ_MTIME: u32 = 0;
+const DETERMINISTIC_TAR_MEMBER_MTIME: u64 = 0;
+const RELEASE_BINARY_MODE: u32 = 0o755;
+const RELEASE_FILE_MODE: u32 = 0o644;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CliAuxiliaryFile {
@@ -1128,14 +1132,28 @@ fn validate_archive_structure(
         Ok(members) => {
             validate_archive_member_paths(file_name, &members, failures);
             let stem = format!("{}-{release_tag}-{}", expected.binary, expected.target);
-            let missing = expected_archive_members(expected, &stem)
+            let expected_members = expected_archive_members(expected, &stem)
                 .into_iter()
-                .filter(|member| !members.contains(member))
+                .collect::<BTreeSet<_>>();
+            let missing = expected_members
+                .iter()
+                .filter(|member| !members.contains(*member))
+                .cloned()
                 .collect::<Vec<_>>();
             if !missing.is_empty() {
                 failures.push(format!(
                     "{file_name} is missing required archive members: {}",
                     missing.join(", ")
+                ));
+            }
+            let unexpected = members
+                .difference(&expected_members)
+                .cloned()
+                .collect::<Vec<_>>();
+            if !unexpected.is_empty() {
+                failures.push(format!(
+                    "{file_name} contains unexpected archive members: {}",
+                    unexpected.join(", ")
                 ));
             }
 
@@ -1151,6 +1169,13 @@ fn validate_archive_structure(
                     ));
                 }
             }
+            validate_archive_member_metadata(
+                &release_dir.join(file_name),
+                file_name,
+                expected,
+                release_tag,
+                failures,
+            );
         }
         Err(error) => failures.push(format!(
             "{file_name} archive structure could not be read: {error}"
@@ -1187,6 +1212,171 @@ fn archive_member_names(path: &Path, archive_format: &str) -> Result<BTreeSet<St
         "zip" => zip_member_names(path),
         "tar.gz" => tar_gz_member_names(path),
         other => Err(format!("unsupported archive format {other}")),
+    }
+}
+
+fn validate_archive_member_metadata(
+    path: &Path,
+    file_name: &str,
+    expected: &ExpectedReleaseAsset,
+    release_tag: &str,
+    failures: &mut Vec<String>,
+) {
+    let result = match expected.archive_format {
+        "zip" => validate_zip_member_metadata(path, file_name, expected, release_tag, failures),
+        "tar.gz" => {
+            validate_tar_gz_member_metadata(path, file_name, expected, release_tag, failures)
+        }
+        other => Err(format!("unsupported archive format {other}")),
+    };
+    if let Err(error) = result {
+        failures.push(format!(
+            "{file_name} archive metadata could not be read: {error}"
+        ));
+    }
+}
+
+fn validate_tar_gz_member_metadata(
+    path: &Path,
+    file_name: &str,
+    expected: &ExpectedReleaseAsset,
+    release_tag: &str,
+    failures: &mut Vec<String>,
+) -> Result<(), String> {
+    validate_gzip_header(path, file_name, failures)?;
+
+    let file = File::open(path).map_err(|error| error.to_string())?;
+    let reader = BufReader::new(file);
+    let decoder = GzDecoder::new(reader);
+    let mut archive = tar::Archive::new(decoder);
+    for entry in archive.entries().map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let header = entry.header();
+        let member_name = normalize_archive_member_name(
+            &entry
+                .path()
+                .map_err(|error| error.to_string())?
+                .to_string_lossy(),
+        );
+        if !header.entry_type().is_file() {
+            failures.push(format!(
+                "{file_name} member {member_name} must be a regular file"
+            ));
+            continue;
+        }
+
+        let mode = header.mode().map_err(|error| error.to_string())?;
+        let expected_mode = expected_archive_member_mode(&member_name, expected, release_tag);
+        if mode != expected_mode {
+            failures.push(format!(
+                "{file_name} member {member_name} mode must be {:03o}",
+                expected_mode
+            ));
+        }
+        let mtime = header.mtime().map_err(|error| error.to_string())?;
+        if mtime != DETERMINISTIC_TAR_MEMBER_MTIME {
+            failures.push(format!(
+                "{file_name} member {member_name} mtime must be {DETERMINISTIC_TAR_MEMBER_MTIME}"
+            ));
+        }
+        let uid = header.uid().map_err(|error| error.to_string())?;
+        let gid = header.gid().map_err(|error| error.to_string())?;
+        if uid != 0 || gid != 0 {
+            failures.push(format!(
+                "{file_name} member {member_name} owner must be 0:0"
+            ));
+        }
+        let username = header.username().map_err(|error| error.to_string())?;
+        let groupname = header.groupname().map_err(|error| error.to_string())?;
+        if username.unwrap_or_default() != "" || groupname.unwrap_or_default() != "" {
+            failures.push(format!(
+                "{file_name} member {member_name} owner names must be empty"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_gzip_header(
+    path: &Path,
+    file_name: &str,
+    failures: &mut Vec<String>,
+) -> Result<(), String> {
+    let mut file = File::open(path).map_err(|error| error.to_string())?;
+    let mut header = [0_u8; 10];
+    file.read_exact(&mut header)
+        .map_err(|error| error.to_string())?;
+    if header[0] != 0x1f || header[1] != 0x8b || header[2] != 8 {
+        return Ok(());
+    }
+
+    let flags = header[3];
+    let mtime = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
+    if mtime != DETERMINISTIC_TAR_GZ_MTIME {
+        failures.push(format!(
+            "{file_name} gzip header mtime must be {DETERMINISTIC_TAR_GZ_MTIME}"
+        ));
+    }
+    if flags & 0x1e != 0 {
+        failures.push(format!(
+            "{file_name} gzip header must not include optional original-name, comment, extra, or header-CRC fields"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_zip_member_metadata(
+    path: &Path,
+    file_name: &str,
+    expected: &ExpectedReleaseAsset,
+    release_tag: &str,
+    failures: &mut Vec<String>,
+) -> Result<(), String> {
+    let file = File::open(path).map_err(|error| error.to_string())?;
+    let mut archive = ZipArchive::new(file).map_err(|error| error.to_string())?;
+    for index in 0..archive.len() {
+        let member = archive.by_index(index).map_err(|error| error.to_string())?;
+        let member_name = normalize_archive_member_name(member.name());
+        if !member.is_file() {
+            failures.push(format!(
+                "{file_name} member {member_name} must be a regular file"
+            ));
+            continue;
+        }
+
+        match member.last_modified() {
+            Some(modified) if modified == ZipDateTime::DEFAULT => {}
+            Some(_) | None => failures.push(format!(
+                "{file_name} member {member_name} timestamp must be 1980-01-01 00:00:00"
+            )),
+        }
+        let expected_mode = expected_archive_member_mode(&member_name, expected, release_tag);
+        match member.unix_mode().map(|mode| mode & 0o777) {
+            Some(mode) if mode == expected_mode => {}
+            Some(_) | None => failures.push(format!(
+                "{file_name} member {member_name} mode must be {:03o}",
+                expected_mode
+            )),
+        }
+    }
+    Ok(())
+}
+
+fn expected_archive_member_mode(
+    member_name: &str,
+    expected: &ExpectedReleaseAsset,
+    release_tag: &str,
+) -> u32 {
+    let stem = format!("{}-{release_tag}-{}", expected.binary, expected.target);
+    let binary_member = if expected.target == "x86_64-pc-windows-msvc" {
+        format!("{stem}/{}.exe", expected.binary)
+    } else {
+        format!("{stem}/{}", expected.binary)
+    };
+    if member_name == binary_member {
+        RELEASE_BINARY_MODE
+    } else {
+        RELEASE_FILE_MODE
     }
 }
 

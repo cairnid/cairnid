@@ -746,43 +746,107 @@ jobs:
 
       - name: Package Linux archives
         if: runner.os == 'Linux'
-        shell: bash
+        shell: python
         run: |
-          set -euo pipefail
-          mkdir -p dist
-          release_dir="target/${TARGET}/release"
+          import gzip
+          import os
+          import pathlib
+          import shutil
+          import tarfile
 
-          for binary in cairnid cairnid-mcp; do
-            archive_base="${binary}-${RELEASE_TAG}-${TARGET}"
-            staging_dir="${RUNNER_TEMP}/${archive_base}"
-            mkdir -p "$staging_dir"
-            cp "${release_dir}/${binary}" "$staging_dir/"
-            cp LICENSE README.md "$staging_dir/"
-            if [[ "$binary" == "cairnid" ]]; then
-              cp -R "${CLI_AUX_DIR}/." "$staging_dir/"
-            fi
-            tar -czf "dist/${archive_base}.tar.gz" -C "$RUNNER_TEMP" "$archive_base"
-          done
+          DETERMINISTIC_MTIME = 0
+          EXECUTABLE_MODE = 0o755
+          FILE_MODE = 0o644
+
+          target = os.environ["TARGET"]
+          release_tag = os.environ["RELEASE_TAG"]
+          release_dir = pathlib.Path("target") / target / "release"
+          runner_temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          cli_aux_dir = pathlib.Path(os.environ["CLI_AUX_DIR"])
+          pathlib.Path("dist").mkdir(exist_ok=True)
+
+          def stage_archive(binary):
+              archive_base = f"{binary}-{release_tag}-{target}"
+              staging_dir = runner_temp / archive_base
+              if staging_dir.exists():
+                  shutil.rmtree(staging_dir)
+              staging_dir.mkdir(parents=True)
+              shutil.copy2(release_dir / binary, staging_dir / binary)
+              shutil.copy2("LICENSE", staging_dir / "LICENSE")
+              shutil.copy2("README.md", staging_dir / "README.md")
+              if binary == "cairnid":
+                  shutil.copytree(cli_aux_dir, staging_dir, dirs_exist_ok=True)
+              return archive_base, staging_dir
+
+          def archive_members(staging_dir):
+              return sorted(path for path in staging_dir.rglob("*") if path.is_file())
+
+          for binary in ("cairnid", "cairnid-mcp"):
+              archive_base, staging_dir = stage_archive(binary)
+              output_path = pathlib.Path("dist") / f"{archive_base}.tar.gz"
+              with output_path.open("wb") as raw:
+                  with gzip.GzipFile(fileobj=raw, mode="wb", filename="", mtime=DETERMINISTIC_MTIME) as gzip_file:
+                      with tarfile.open(fileobj=gzip_file, mode="w", format=tarfile.GNU_FORMAT) as archive:
+                          for path in archive_members(staging_dir):
+                              member_name = f"{archive_base}/{path.relative_to(staging_dir).as_posix()}"
+                              info = archive.gettarinfo(str(path), arcname=member_name)
+                              info.uid = 0
+                              info.gid = 0
+                              info.uname = ""
+                              info.gname = ""
+                              info.mtime = DETERMINISTIC_MTIME
+                              info.mode = EXECUTABLE_MODE if path.name == binary else FILE_MODE
+                              with path.open("rb") as handle:
+                                  archive.addfile(info, handle)
 
       - name: Package Windows archives
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: python
         run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $releaseDir = Join-Path $PWD "target\$env:TARGET\release"
+          import os
+          import pathlib
+          import shutil
+          import zipfile
 
-          foreach ($binary in @("cairnid", "cairnid-mcp")) {
-            $archiveBase = "$binary-$env:RELEASE_TAG-$env:TARGET"
-            $stagingDir = Join-Path $env:RUNNER_TEMP $archiveBase
-            New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
-            Copy-Item (Join-Path $releaseDir "$binary.exe") $stagingDir
-            Copy-Item LICENSE, README.md $stagingDir
-            if ($binary -eq "cairnid") {
-              Get-ChildItem -LiteralPath $env:CLI_AUX_DIR | Copy-Item -Destination $stagingDir -Recurse -Force
-            }
-            Compress-Archive -Path $stagingDir -DestinationPath "dist\$archiveBase.zip" -Force
-          }
+          DETERMINISTIC_ZIP_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+          EXECUTABLE_MODE = 0o755
+          FILE_MODE = 0o644
+
+          target = os.environ["TARGET"]
+          release_tag = os.environ["RELEASE_TAG"]
+          release_dir = pathlib.Path("target") / target / "release"
+          runner_temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          cli_aux_dir = pathlib.Path(os.environ["CLI_AUX_DIR"])
+          pathlib.Path("dist").mkdir(exist_ok=True)
+
+          def stage_archive(binary):
+              archive_base = f"{binary}-{release_tag}-{target}"
+              staging_dir = runner_temp / archive_base
+              if staging_dir.exists():
+                  shutil.rmtree(staging_dir)
+              staging_dir.mkdir(parents=True)
+              shutil.copy2(release_dir / f"{binary}.exe", staging_dir / f"{binary}.exe")
+              shutil.copy2("LICENSE", staging_dir / "LICENSE")
+              shutil.copy2("README.md", staging_dir / "README.md")
+              if binary == "cairnid":
+                  shutil.copytree(cli_aux_dir, staging_dir, dirs_exist_ok=True)
+              return archive_base, staging_dir
+
+          def archive_members(staging_dir):
+              return sorted(path for path in staging_dir.rglob("*") if path.is_file())
+
+          for binary in ("cairnid", "cairnid-mcp"):
+              archive_base, staging_dir = stage_archive(binary)
+              output_path = pathlib.Path("dist") / f"{archive_base}.zip"
+              with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_STORED) as archive:
+                  for path in archive_members(staging_dir):
+                      relative = path.relative_to(staging_dir).as_posix()
+                      member_name = f"{archive_base}/{relative}"
+                      info = zipfile.ZipInfo(member_name, DETERMINISTIC_ZIP_DATE_TIME)
+                      mode = EXECUTABLE_MODE if path.name.endswith(".exe") else FILE_MODE
+                      info.external_attr = (mode & 0xFFFF) << 16
+                      with path.open("rb") as handle:
+                          archive.writestr(info, handle.read(), compress_type=zipfile.ZIP_STORED)
 
       - name: Smoke archive-installed CLI and MCP
         shell: python

@@ -11,10 +11,16 @@ use super::{
 use fixtures::*;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{fs, io::Write, path::Path};
+use std::{
+    fs,
+    io::{Read, Write},
+    path::Path,
+};
 use time::OffsetDateTime;
 use uuid::Uuid;
-use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
+use zip::{
+    CompressionMethod, DateTime as ZipDateTime, ZipArchive, ZipWriter, write::SimpleFileOptions,
+};
 
 const EXPECTED_EXTERNAL_PROVIDER_ARTIFACT_COUNT: usize = 7;
 
@@ -1585,6 +1591,62 @@ fn release_assets_report_returns_failed_json_for_missing_manifest_and_malformed_
     )
     .expect("malformed SBOM report");
     assert_failed_release_assets_report(&report, "must contain valid JSON");
+}
+
+#[test]
+fn release_assets_report_rejects_unexpected_archive_member() {
+    let release = fake_release_assets_dir("report-unexpected-archive-member");
+    let archive_name = format!("cairnid-{}-x86_64-pc-windows-msvc.zip", release.tag);
+    rewrite_zip_archive(
+        &release.root,
+        &archive_name,
+        None,
+        Some("unexpected-debug.log"),
+    );
+    rewrite_checksum_for_file(&release.root, &archive_name);
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("unexpected member report");
+    assert_failed_release_assets_report(&report, "contains unexpected archive members");
+    assert_failed_release_assets_report(&report, "unexpected-debug.log");
+}
+
+#[test]
+fn release_assets_report_rejects_zip_timestamp_drift() {
+    let release = fake_release_assets_dir("report-zip-timestamp-drift");
+    let archive_name = format!("cairnid-{}-x86_64-pc-windows-msvc.zip", release.tag);
+    let drifted_timestamp =
+        ZipDateTime::from_date_and_time(2026, 6, 7, 12, 0, 0).expect("valid zip timestamp");
+    rewrite_zip_archive(&release.root, &archive_name, Some(drifted_timestamp), None);
+    rewrite_checksum_for_file(&release.root, &archive_name);
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("timestamp drift report");
+    assert_failed_release_assets_report(&report, "timestamp must be 1980-01-01 00:00:00");
+}
+
+#[test]
+fn release_assets_report_rejects_gzip_header_timestamp_drift() {
+    let release = fake_release_assets_dir("report-gzip-timestamp-drift");
+    let archive_name = format!("cairnid-{}-x86_64-unknown-linux-gnu.tar.gz", release.tag);
+    let archive_path = release.root.join(&archive_name);
+    let mut archive = fs::read(&archive_path).expect("read tar.gz archive");
+    archive[4..8].copy_from_slice(&1234_u32.to_le_bytes());
+    fs::write(&archive_path, archive).expect("write tampered tar.gz archive");
+    rewrite_checksum_for_file(&release.root, &archive_name);
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("gzip timestamp drift report");
+    assert_failed_release_assets_report(&report, "gzip header mtime must be 0");
 }
 
 #[test]
@@ -3523,6 +3585,57 @@ fn rewrite_checksum_for_file(root: &Path, file_name: &str) {
         + "\n";
     assert!(replaced, "checksum entry missing for {file_name}");
     fs::write(checksum_path, updated).expect("rewrite checksums");
+}
+
+fn rewrite_zip_archive(
+    root: &Path,
+    archive_name: &str,
+    timestamp_override: Option<ZipDateTime>,
+    extra_member: Option<&str>,
+) {
+    let archive_path = root.join(archive_name);
+    let source_file = fs::File::open(&archive_path).expect("open source zip");
+    let mut source = ZipArchive::new(source_file).expect("read source zip");
+    let mut members = Vec::new();
+    for index in 0..source.len() {
+        let mut member = source.by_index(index).expect("read source zip member");
+        let mut content = Vec::new();
+        member
+            .read_to_end(&mut content)
+            .expect("read source zip member content");
+        members.push((
+            member.name().to_owned(),
+            content,
+            member.last_modified().unwrap_or(ZipDateTime::DEFAULT),
+            member.unix_mode().unwrap_or(0o644) & 0o777,
+        ));
+    }
+    drop(source);
+
+    if let Some(extra_member) = extra_member {
+        members.push((
+            extra_member.to_owned(),
+            b"debug output must not ship\n".to_vec(),
+            ZipDateTime::DEFAULT,
+            0o644,
+        ));
+    }
+
+    let output_file = fs::File::create(&archive_path).expect("rewrite zip");
+    let mut output = ZipWriter::new(output_file);
+    for (name, content, timestamp, mode) in members {
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Stored)
+            .last_modified_time(timestamp_override.unwrap_or(timestamp))
+            .unix_permissions(mode);
+        output
+            .start_file(name, options)
+            .expect("start rewritten zip member");
+        output
+            .write_all(&content)
+            .expect("write rewritten zip member");
+    }
+    output.finish().expect("finish rewritten zip");
 }
 
 fn sha256_test_file(path: &Path) -> String {
