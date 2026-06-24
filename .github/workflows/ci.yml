@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
@@ -141,7 +141,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Show Rust version
         run: |
           rustc --version
@@ -155,7 +155,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Show Rust version
         run: |
           rustc --version
@@ -201,7 +201,7 @@ jobs:
             cli_binary_path: target\release\cairnid.exe
             mcp_binary_path: target\release\cairnid-mcp.exe
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Show Rust version
         run: |
           rustc --version
@@ -566,7 +566,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
@@ -654,7 +654,7 @@ jobs:
     env:
       CAIRN_DATABASE_TEST_URL: postgres://cairn:cairn@localhost:5432/cairn_identity_test
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install native dependencies
         timeout-minutes: 35
         env:
@@ -695,7 +695,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
@@ -726,7 +726,7 @@ jobs:
     timeout-minutes: 45
     needs: [rust, web]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Show Docker version
         run: docker version
       - name: Validate Compose file
