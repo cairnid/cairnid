@@ -276,7 +276,7 @@ fn write_manpage_tree(
         .bin_name(invocation.clone());
     let children = command
         .get_subcommands()
-        .filter(|subcommand| !subcommand.is_hide_set())
+        .filter(|subcommand| !subcommand.is_hide_set() && subcommand.get_name() != "help")
         .map(|subcommand| (subcommand.get_name().to_owned(), subcommand.clone()))
         .collect::<Vec<_>>();
 
