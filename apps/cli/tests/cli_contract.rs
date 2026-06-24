@@ -6,6 +6,7 @@ use cairn_operations::{
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeSet,
     env, fs,
     fs::File,
     io::Write,
@@ -228,6 +229,25 @@ fn manpages_writes_root_and_nested_roff_files() {
         assert!(roff.contains(".TH "), "{file_name}:\n{roff}");
         assert!(!roff.contains(SECRET_SENTINEL));
     }
+    let expected_files = CLI_MANPAGE_FILES
+        .iter()
+        .map(|path| {
+            path.strip_prefix("man/man1/")
+                .expect("manpage path prefix")
+                .to_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    let actual_files = fs::read_dir(&output_dir)
+        .expect("read manpage output directory")
+        .map(|entry| {
+            entry
+                .expect("read manpage output directory entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(actual_files, expected_files);
 
     let evidence_check =
         fs::read_to_string(output_dir.join("cairnid-evidence-check.1")).expect("read nested page");
