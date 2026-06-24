@@ -745,6 +745,13 @@ fn canonical_startup_evidence_root(path: &Path) -> Result<PathBuf, StartupEviden
 fn parse_evidence_directory_request(
     mut arguments: JsonObject,
 ) -> Result<EvidenceDirectoryRequest, McpEvidenceRequestError> {
+    if arguments
+        .keys()
+        .any(|key| !matches!(key.as_str(), "evidence_dir" | "max_age_days"))
+    {
+        return Err(McpEvidenceRequestError::UNKNOWN_ARGUMENT);
+    }
+
     let evidence_dir = optional_string_argument(
         arguments.remove("evidence_dir"),
         McpEvidenceRequestError::INVALID_EVIDENCE_DIR,
@@ -753,9 +760,6 @@ fn parse_evidence_directory_request(
         arguments.remove("max_age_days"),
         McpEvidenceRequestError::INVALID_MAX_AGE_DAYS,
     )?;
-    if !arguments.is_empty() {
-        return Err(McpEvidenceRequestError::UNKNOWN_ARGUMENT);
-    }
     validate_max_age_days(max_age_days)?;
 
     Ok(EvidenceDirectoryRequest {
