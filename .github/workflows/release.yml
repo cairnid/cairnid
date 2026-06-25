@@ -1767,12 +1767,19 @@ jobs:
           - Generated Bash, Zsh, Fish, PowerShell, and Elvish completions plus roff manpages for cairnid and its subcommands inside each cairnid CLI archive.
           - CycloneDX JSON SBOMs for each archive.
           - SHA256SUMS.txt and release-manifest.json.
-          - GitHub artifact attestations generated with actions/attest@v4 and OIDC.
+          - GitHub artifact provenance attestations generated with actions/attest@v4 and OIDC for release assets.
+
+          Pre-publish checklist:
+          - Confirm GitHub Release immutability is enabled before publishing this draft. Final release verification requires --github-release-immutability-enabled-before-publish.
 
           Verify after downloading:
 
+              # For each release asset, verify provenance.
               gh attestation verify <asset> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml --source-ref refs/tags/${RELEASE_TAG}
-              gh attestation verify <asset> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml --source-ref refs/tags/${RELEASE_TAG} --predicate-type https://cyclonedx.org/bom
+
+              # For archive files only (.tar.gz and .zip), verify the CycloneDX SBOM predicate.
+              gh attestation verify <archive> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml --source-ref refs/tags/${RELEASE_TAG} --predicate-type https://cyclonedx.org/bom
+
               sha256sum -c SHA256SUMS.txt --ignore-missing
 
           This workflow does not publish crates.io packages, Homebrew formulae, MSI installers, macOS notarized assets, Authenticode signatures, containers, or long-lived signing-key signatures.
@@ -1811,6 +1818,11 @@ jobs:
             echo
             echo "Assets:"
             find dist -maxdepth 1 -type f -printf '- `%f`\n' | sort
+            echo
+            echo "Pre-publish checklist:"
+            echo "- Confirm GitHub Release immutability is enabled before publishing this draft; final verification requires \`--github-release-immutability-enabled-before-publish\`."
+            echo "- Verify provenance attestations for release assets."
+            echo "- Verify CycloneDX SBOM predicate attestations for archive files only, not SHA256SUMS.txt, release-manifest.json, or SBOM JSON assets."
           } >> "$GITHUB_STEP_SUMMARY"
 
   rehearsal:

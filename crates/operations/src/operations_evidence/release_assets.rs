@@ -25,6 +25,7 @@ pub(in crate::operations_evidence) const SIGNER_WORKFLOW: &str =
     "cairnid/cairnid/.github/workflows/release.yml";
 pub(in crate::operations_evidence) const PUBLIC_RELEASE_URL_REQUIRED_FAILURE: &str = "release_url must be present for public release evidence; workflow run URLs are workflow-local validation only";
 pub(in crate::operations_evidence) const GITHUB_RELEASE_IMMUTABILITY_REQUIRED_FAILURE: &str = "--github-release-immutability-enabled-before-publish must be supplied for published release evidence after confirming GitHub release immutability was enabled before publication";
+const CYCLONEDX_SPEC_VERSION: &str = "1.5";
 const DETERMINISTIC_TAR_GZ_MTIME: u32 = 0;
 const DETERMINISTIC_TAR_MEMBER_MTIME: u64 = 0;
 const RELEASE_BINARY_MODE: u32 = 0o755;
@@ -937,15 +938,20 @@ fn validate_manifest_run_metadata(
         ),
     }
 
-    if let Some(validated_ci_run_url) =
-        string_at_path(manifest, &["source", "validated_ci_run_url"])
-    {
-        validate_manifest_github_actions_url(
-            validated_ci_run_url,
-            "release-manifest.json.source.validated_ci_run_url",
-            None,
-            failures,
-        );
+    match string_at_path(manifest, &["source", "validated_ci_run_url"]) {
+        Some(validated_ci_run_url) => {
+            validate_manifest_github_actions_url(
+                validated_ci_run_url,
+                "release-manifest.json.source.validated_ci_run_url",
+                None,
+                failures,
+            );
+        }
+        None if options.release_url.is_some() => failures.push(
+            "release-manifest.json.source.validated_ci_run_url must be a GitHub Actions HTTPS URL under /cairnid/cairnid/actions/runs/ without credentials, query, or fragment"
+                .to_owned(),
+        ),
+        None => {}
     }
 }
 
@@ -1437,6 +1443,11 @@ fn validate_sbom_format(
     };
     if sbom.get("bomFormat").and_then(Value::as_str) != Some("CycloneDX") {
         failures.push(format!("{file_name} must be a CycloneDX JSON SBOM"));
+    }
+    if sbom.get("specVersion").and_then(Value::as_str) != Some(CYCLONEDX_SPEC_VERSION) {
+        failures.push(format!(
+            "{file_name} must declare CycloneDX specVersion {CYCLONEDX_SPEC_VERSION}"
+        ));
     }
     Ok(())
 }

@@ -773,6 +773,38 @@ fn release_assets_verify_rejects_invalid_run_url_without_echoing_value() {
 }
 
 #[test]
+fn release_assets_verify_rejects_invalid_release_url_without_echoing_value() {
+    let release_dir = fake_release_assets_dir("verify-invalid-release-url");
+    let release_dir_arg = release_dir.to_string_lossy().into_owned();
+    let secret_release_url = format!(
+        "https://{SECRET_SENTINEL}@github.com/cairnid/cairnid/releases/tag/{RELEASE_ASSET_TAG}"
+    );
+    let output = run_cairnid([
+        "release-assets",
+        "verify",
+        &release_dir_arg,
+        "--tag",
+        RELEASE_ASSET_TAG,
+        "--source-commit",
+        RELEASE_ASSET_SOURCE_COMMIT,
+        "--release-url",
+        &secret_release_url,
+        "--github-release-immutability-enabled-before-publish",
+        "--provenance-attestations-verified",
+        "--sbom-attestations-verified",
+    ]);
+
+    assert!(!stdout(&output).contains(SECRET_SENTINEL));
+    assert!(!stderr(&output).contains(SECRET_SENTINEL));
+    assert_failed_release_assets_stdout(
+        &output,
+        "release_url must be a GitHub HTTPS URL under /cairnid/cairnid/releases/tag/ without credentials, query, or fragment",
+    );
+    let receipt: Value = serde_json::from_slice(&output.stdout).expect("valid failed receipt JSON");
+    assert_eq!(receipt["release_url"], Value::Null);
+}
+
+#[test]
 fn evidence_init_creates_scaffold_and_status_reports_incomplete_lifecycle() {
     let evidence_dir = unique_evidence_dir("init-status");
     let evidence_dir_arg = evidence_dir.to_string_lossy().into_owned();

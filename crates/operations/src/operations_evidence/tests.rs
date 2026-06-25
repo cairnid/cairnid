@@ -1400,6 +1400,28 @@ fn release_assets_receipt_generation_rejects_invalid_manifest_provenance_metadat
 }
 
 #[test]
+fn release_assets_receipt_generation_requires_validated_ci_run_url_for_final_release() {
+    let release = fake_release_assets_dir("receipt-missing-validated-ci-run-url");
+    update_release_manifest(&release.root, |manifest| {
+        manifest["source"]
+            .as_object_mut()
+            .expect("manifest source object")
+            .remove("validated_ci_run_url");
+    });
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("missing validated CI run URL report");
+
+    assert_failed_release_assets_report(
+        &report,
+        "release-manifest.json.source.validated_ci_run_url must be a GitHub Actions HTTPS URL under /cairnid/cairnid/actions/runs/",
+    );
+}
+
+#[test]
 fn release_assets_receipt_generation_rejects_workflow_run_only_receipt() {
     let release = fake_release_assets_dir("receipt-workflow-run-only");
     let mut options = release_assets_options(&release);
@@ -1512,6 +1534,47 @@ fn release_assets_receipt_generation_rejects_hash_mismatch_and_missing_asset() {
             .iter()
             .any(|failure| failure.contains(&format!("missing release asset {missing_sbom}"))),
         "{failures:?}"
+    );
+}
+
+#[test]
+fn release_assets_receipt_generation_rejects_invalid_sbom_spec_version() {
+    let release = fake_release_assets_dir("receipt-invalid-sbom-spec-version");
+    let sbom_name = format!(
+        "cairnid-{}-x86_64-pc-windows-msvc.sbom.cdx.json",
+        release.tag
+    );
+    let sbom_path = release.root.join(&sbom_name);
+    let mut sbom: Value = serde_json::from_str(&fs::read_to_string(&sbom_path).expect("read SBOM"))
+        .expect("parse SBOM");
+    sbom["specVersion"] = json!("1.4");
+    fs::write(
+        &sbom_path,
+        serde_json::to_string_pretty(&sbom).expect("serialize SBOM") + "\n",
+    )
+    .expect("write SBOM");
+    rewrite_checksum_for_file(&release.root, &sbom_name);
+    update_release_manifest(&release.root, |manifest| {
+        let assets = manifest["assets"]
+            .as_array_mut()
+            .expect("manifest assets array");
+        let asset = assets
+            .iter_mut()
+            .find(|asset| asset["name"] == sbom_name)
+            .expect("SBOM manifest asset");
+        asset["sha256"] = json!(sha256_test_file(&sbom_path));
+        asset["size_bytes"] = json!(sbom_path.metadata().expect("SBOM metadata").len());
+    });
+
+    let report = release_assets_verification_report(
+        &release_assets_options(&release),
+        release_evidence_now(),
+    )
+    .expect("invalid SBOM spec version report");
+
+    assert_failed_release_assets_report(
+        &report,
+        &format!("{sbom_name} must declare CycloneDX specVersion 1.5"),
     );
 }
 

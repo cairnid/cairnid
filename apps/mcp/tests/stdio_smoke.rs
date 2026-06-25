@@ -831,6 +831,174 @@ fn stdio_explicit_evidence_root_is_independent_of_launch_cwd() {
 }
 
 #[test]
+fn stdio_relative_evidence_dir_inside_root_is_accepted() {
+    let root = temp_root("stdio-relative-inside-root");
+    let evidence_dir = root.join("relative-inside-evidence");
+    init_release_evidence_directory(&evidence_dir, OffsetDateTime::now_utc(), false)
+        .expect("initialize relative evidence directory");
+
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let status = call_evidence_status(
+        &mut server,
+        2,
+        json!({
+            "evidence_dir": "relative-inside-evidence"
+        }),
+    );
+    assert_eq!(status["isError"].as_bool(), Some(false));
+    assert_eq!(
+        status["structuredContent"]["status"].as_str(),
+        Some("incomplete")
+    );
+
+    drop(server);
+    remove_temp_root(root);
+}
+
+#[test]
+fn stdio_absolute_evidence_dir_inside_root_is_accepted() {
+    let root = temp_root("stdio-absolute-inside-root");
+    let evidence_dir = root.join("absolute-inside-evidence");
+    init_release_evidence_directory(&evidence_dir, OffsetDateTime::now_utc(), false)
+        .expect("initialize absolute evidence directory");
+
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let status = call_evidence_status(
+        &mut server,
+        2,
+        json!({
+            "evidence_dir": evidence_dir.to_string_lossy().to_string()
+        }),
+    );
+    assert_eq!(status["isError"].as_bool(), Some(false));
+    assert_eq!(
+        status["structuredContent"]["status"].as_str(),
+        Some("incomplete")
+    );
+
+    drop(server);
+    remove_temp_root(root);
+}
+
+#[test]
+fn stdio_absolute_outside_evidence_dirs_do_not_leak_filesystem_state() {
+    let root = temp_root("stdio-absolute-outside-root");
+    let outside_root = temp_root("stdio-absolute-outside");
+    let outside_missing = outside_root.join(format!("missing-{SENTINEL}"));
+    let outside_file = outside_root.join(format!("file-{SENTINEL}.txt"));
+    let outside_dir = outside_root.join(format!("dir-{SENTINEL}"));
+    fs::write(&outside_file, "outside file").expect("write outside file");
+    fs::create_dir_all(&outside_dir).expect("create outside directory");
+
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    for (request_id, path) in (2..).zip([&outside_missing, &outside_file, &outside_dir]) {
+        let result = call_evidence_status(
+            &mut server,
+            request_id,
+            json!({
+                "evidence_dir": path.to_string_lossy().to_string()
+            }),
+        );
+        assert_tool_error_code(&result, "outside_allowlisted_root");
+        assert!(
+            !result.to_string().contains(SENTINEL),
+            "outside evidence path state leaked sentinel: {result}"
+        );
+    }
+
+    drop(server);
+    remove_temp_root(outside_root);
+    remove_temp_root(root);
+}
+
+#[test]
+fn stdio_absolute_parent_escape_evidence_dirs_do_not_leak_filesystem_state() {
+    let root = temp_root("stdio-absolute-parent-escape-root");
+    let outside_root = temp_root("stdio-absolute-parent-escape-outside");
+    let outside_missing = outside_root.join(format!("missing-{SENTINEL}"));
+    let outside_file = outside_root.join(format!("file-{SENTINEL}.txt"));
+    let outside_dir = outside_root.join(format!("dir-{SENTINEL}"));
+    fs::write(&outside_file, "outside file").expect("write outside file");
+    fs::create_dir_all(&outside_dir).expect("create outside directory");
+
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    for (request_id, outside_path) in (2..).zip([&outside_missing, &outside_file, &outside_dir]) {
+        let escaped_path = absolute_escape_through_root(&root, outside_path);
+        let result = call_evidence_status(
+            &mut server,
+            request_id,
+            json!({
+                "evidence_dir": escaped_path.to_string_lossy().to_string()
+            }),
+        );
+        assert_tool_error_code(&result, "outside_allowlisted_root");
+        assert!(
+            !result.to_string().contains(SENTINEL),
+            "absolute parent escape leaked outside path state: {result}"
+        );
+    }
+
+    drop(server);
+    remove_temp_root(outside_root);
+    remove_temp_root(root);
+}
+
+#[test]
+fn stdio_relative_parent_escape_does_not_leak_filesystem_state() {
+    let root = temp_root("stdio-relative-parent-escape-root");
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let result = call_evidence_status(
+        &mut server,
+        2,
+        json!({
+            "evidence_dir": format!("../{SENTINEL}")
+        }),
+    );
+    assert_tool_error_code(&result, "outside_allowlisted_root");
+    assert!(
+        !result.to_string().contains(SENTINEL),
+        "relative parent escape leaked outside path state: {result}"
+    );
+
+    drop(server);
+    remove_temp_root(root);
+}
+
+#[cfg(windows)]
+#[test]
+fn stdio_unc_absolute_evidence_dir_outside_root_is_rejected_as_outside_root() {
+    let root = temp_root("stdio-unc-outside-root");
+    let mut server = McpProcess::start(&root);
+    initialize_mcp(&mut server);
+
+    let result = call_evidence_status(
+        &mut server,
+        2,
+        json!({
+            "evidence_dir": format!(r"\\{SENTINEL}\share\release-evidence")
+        }),
+    );
+    assert_tool_error_code(&result, "outside_allowlisted_root");
+    assert!(
+        !result.to_string().contains(SENTINEL),
+        "UNC evidence path leaked sentinel: {result}"
+    );
+
+    drop(server);
+    remove_temp_root(root);
+}
+
+#[test]
 fn stdio_evidence_status_returns_stable_tool_error_envelopes() {
     let root = temp_root("stdio-errors");
     let default_evidence_dir = root.join(DEFAULT_EVIDENCE_CHILD);
@@ -856,7 +1024,7 @@ fn stdio_evidence_status_returns_stable_tool_error_envelopes() {
         (json!({"evidence_dir": ""}), "empty_evidence_dir"),
         (
             json!({"evidence_dir": "../release-evidence"}),
-            "parent_traversal",
+            "outside_allowlisted_root",
         ),
         (
             json!({"evidence_dir": outside.to_string_lossy().to_string()}),
@@ -2895,6 +3063,14 @@ fn temp_root(name: &str) -> PathBuf {
     ));
     fs::create_dir_all(&root).expect("create temp root");
     root
+}
+
+fn absolute_escape_through_root(root: &Path, outside_path: &Path) -> PathBuf {
+    let root_parent = root.parent().expect("temp root should have parent");
+    let outside_suffix = outside_path
+        .strip_prefix(root_parent)
+        .expect("outside path should share temp parent");
+    root.join("..").join(outside_suffix)
 }
 
 fn remove_temp_root(root: PathBuf) {

@@ -102,8 +102,8 @@ Unknown request arguments are rejected with `unknown_argument`; the input schema
 - Write boundary: every advertised tool is read-only. The server does not expose the scaffold initializer, release-evidence init, or any other write-capable operation.
 - Root boundary: `--evidence-root <DIR>` is the allowlisted root. When omitted, the process working directory is the allowlisted root.
 - Startup root checks: the allowlisted root must be inspectable, must be a directory, and must not be a symlink. Startup root failures exit non-zero before stdio JSON-RPC starts.
-- Request path checks: relative `evidence_dir` values are resolved under the configured root. Absolute `evidence_dir` values are accepted only when their canonical path remains under that root.
-- Rejected request paths: empty paths, parent traversal with `..`, Windows drive-relative paths such as `C:release-evidence`, rooted relative paths such as `\release-evidence`, paths outside the allowlisted root, non-directories, symlinked evidence directories, and symlink entries inside an evidence directory.
+- Request path checks: relative `evidence_dir` values are resolved lexically under the configured root. Absolute `evidence_dir` values are accepted only when their lexical and canonical path remains under that root.
+- Rejected request paths: empty paths, parent traversal with `..`, traversal that would escape the allowlisted root, Windows drive-relative paths such as `C:release-evidence`, rooted relative paths such as `\release-evidence`, paths outside the allowlisted root, non-directories, symlinked evidence directories, and symlink entries inside an evidence directory.
 - Validator detail boundary: `evidence_status` and `evidence_check` return stable status, failure-code summaries, and sanitized next actions, not raw validator failure text.
 - Data leakage boundary: tool responses do not return artifact JSON, resource links, logs, standard streams, provider exports, secret values, or secret-bearing static OpenID artifacts. `evidence_plan` can return missing environment variable names and artifact metadata needed to run the documented evidence commands.
 
@@ -168,9 +168,9 @@ Stable request error codes:
 - `invalid_evidence_dir`: `evidence_dir` is present but is not a string path.
 - `invalid_max_age_days`: `max_age_days` is present but is not an integer, or is outside 1 through 365.
 - `empty_evidence_dir`: `evidence_dir` is empty or whitespace.
-- `parent_traversal`: `evidence_dir` contains `..`.
+- `parent_traversal`: `evidence_dir` contains `..` but remains under the configured evidence root after lexical normalization.
 - `drive_relative_or_root_style_relative_path`: `evidence_dir` is a drive-relative path such as `C:release-evidence`, or a rooted relative path such as `\release-evidence`.
-- `outside_allowlisted_root`: the canonical evidence path resolves outside the configured evidence root.
+- `outside_allowlisted_root`: the requested path or parent traversal resolves outside the configured evidence root before filesystem probing.
 - `symlinked_evidence_dir`: the evidence directory itself is a symlink.
 - `symlink_entry`: an entry inside the evidence directory is a symlink.
 - `missing_evidence_dir`: the requested evidence directory does not exist.

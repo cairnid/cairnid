@@ -16,6 +16,8 @@ use rmcp::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+#[cfg(windows)]
+use std::path::{Prefix, PrefixComponent};
 use std::{
     collections::BTreeMap,
     env,
@@ -53,13 +55,23 @@ struct Cli {
 }
 
 #[derive(Debug, Clone)]
+struct StartupEvidenceRoot {
+    supplied: PathBuf,
+    canonical: PathBuf,
+}
+
+#[derive(Debug, Clone)]
 struct CairnIdMcpServer {
     evidence_root: PathBuf,
+    canonical_evidence_root: PathBuf,
 }
 
 impl CairnIdMcpServer {
-    fn new(evidence_root: PathBuf) -> Self {
-        Self { evidence_root }
+    fn new(evidence_root: StartupEvidenceRoot) -> Self {
+        Self {
+            evidence_root: evidence_root.supplied,
+            canonical_evidence_root: evidence_root.canonical,
+        }
     }
 }
 
@@ -268,6 +280,7 @@ struct McpEvidenceRequestError {
 }
 
 impl McpEvidenceRequestError {
+    #[cfg(test)]
     const ALLOWLIST_ROOT_UNAVAILABLE: Self = Self::new(
         "allowlist_root_unavailable",
         "internal_error",
@@ -378,8 +391,16 @@ impl From<McpEvidenceRequestError> for CallToolResult {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EvidenceDirectoryKind {
+    #[cfg(test)]
     AllowlistRoot,
     EvidenceDir,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EvidenceDirPathBoundary {
+    InsideRoot,
+    InsideRootWithParentTraversal,
+    OutsideRoot,
 }
 
 fn evidence_directory_input_schema() -> std::sync::Arc<JsonObject> {
@@ -575,7 +596,7 @@ impl CairnIdMcpServer {
         arguments: JsonObject,
     ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
         let request = parse_evidence_directory_request(arguments)?;
-        evidence_status_for_root(&self.evidence_root, request)
+        evidence_status_for_roots(&self.evidence_root, &self.canonical_evidence_root, request)
     }
 
     #[tool(
@@ -596,7 +617,7 @@ impl CairnIdMcpServer {
         arguments: JsonObject,
     ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
         let request = parse_evidence_directory_request(arguments)?;
-        evidence_check_for_root(&self.evidence_root, request)
+        evidence_check_for_roots(&self.evidence_root, &self.canonical_evidence_root, request)
     }
 }
 
@@ -628,7 +649,7 @@ async fn run(cli: Cli) -> Result<(), StartupError> {
         startup_evidence_root(cli.evidence_root).map_err(StartupError::EvidenceRoot)?;
     init_stdio_tracing();
     tracing::debug!(
-        evidence_root = %evidence_root.display(),
+        evidence_root = %evidence_root.canonical.display(),
         "starting cairnid-mcp stdio server"
     );
 
@@ -655,18 +676,38 @@ fn init_stdio_tracing() {
         .init();
 }
 
+#[cfg(test)]
 fn evidence_status_for_root(
     root: &Path,
     request: EvidenceDirectoryRequest,
 ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
-    evidence_summary_for_root(root, request)
+    let canonical_root = canonical_existing_directory(root, EvidenceDirectoryKind::AllowlistRoot)?;
+    evidence_status_for_roots(root, &canonical_root, request)
 }
 
+fn evidence_status_for_roots(
+    root: &Path,
+    canonical_root: &Path,
+    request: EvidenceDirectoryRequest,
+) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
+    evidence_summary_for_roots(root, canonical_root, request)
+}
+
+#[cfg(test)]
 fn evidence_check_for_root(
     root: &Path,
     request: EvidenceDirectoryRequest,
 ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
-    let report = release_evidence_report_for_root(root, request)?;
+    let canonical_root = canonical_existing_directory(root, EvidenceDirectoryKind::AllowlistRoot)?;
+    evidence_check_for_roots(root, &canonical_root, request)
+}
+
+fn evidence_check_for_roots(
+    root: &Path,
+    canonical_root: &Path,
+    request: EvidenceDirectoryRequest,
+) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
+    let report = release_evidence_report_for_roots(root, canonical_root, request)?;
     let summary = mcp_evidence_summary(&report);
     if summary.status == "ready" {
         Ok(Json(summary))
@@ -675,20 +716,23 @@ fn evidence_check_for_root(
     }
 }
 
-fn evidence_summary_for_root(
+fn evidence_summary_for_roots(
     root: &Path,
+    canonical_root: &Path,
     request: EvidenceDirectoryRequest,
 ) -> Result<Json<McpEvidenceSummary>, CallToolResult> {
-    let report = release_evidence_report_for_root(root, request)?;
+    let report = release_evidence_report_for_roots(root, canonical_root, request)?;
 
     Ok(Json(mcp_evidence_summary(&report)))
 }
 
-fn release_evidence_report_for_root(
+fn release_evidence_report_for_roots(
     root: &Path,
+    canonical_root: &Path,
     request: EvidenceDirectoryRequest,
 ) -> Result<ReleaseEvidenceReport, CallToolResult> {
-    let evidence_dir = resolve_evidence_dir_in_root(root, request.evidence_dir.as_deref())?;
+    let evidence_dir =
+        resolve_evidence_dir_in_roots(root, canonical_root, request.evidence_dir.as_deref())?;
     let max_age_days = request
         .max_age_days
         .unwrap_or(DEFAULT_RELEASE_EVIDENCE_MAX_AGE_DAYS);
@@ -714,13 +758,30 @@ fn incomplete_evidence_error(summary: McpEvidenceSummary) -> CallToolResult {
     CallToolResult::structured_error(value)
 }
 
-fn startup_evidence_root(value: Option<PathBuf>) -> Result<PathBuf, StartupEvidenceRootError> {
-    let root = match value {
+fn startup_evidence_root(
+    value: Option<PathBuf>,
+) -> Result<StartupEvidenceRoot, StartupEvidenceRootError> {
+    let supplied = match value {
         Some(root) => root,
         None => env::current_dir().map_err(|_| StartupEvidenceRootError::inspect_failed())?,
     };
+    let supplied = absolute_startup_evidence_root(supplied)?;
+    let canonical = canonical_startup_evidence_root(&supplied)?;
 
-    canonical_startup_evidence_root(&root)
+    Ok(StartupEvidenceRoot {
+        supplied,
+        canonical,
+    })
+}
+
+fn absolute_startup_evidence_root(root: PathBuf) -> Result<PathBuf, StartupEvidenceRootError> {
+    if root.is_absolute() {
+        return Ok(root);
+    }
+
+    env::current_dir()
+        .map(|current_dir| current_dir.join(root))
+        .map_err(|_| StartupEvidenceRootError::inspect_failed())
 }
 
 fn canonical_startup_evidence_root(path: &Path) -> Result<PathBuf, StartupEvidenceRootError> {
@@ -808,29 +869,38 @@ fn validate_max_age_days(value: Option<i64>) -> Result<(), McpEvidenceRequestErr
     }
 }
 
+#[cfg(test)]
 fn resolve_evidence_dir_in_root(
     root: &Path,
     value: Option<&str>,
 ) -> Result<PathBuf, McpEvidenceRequestError> {
-    let root = canonical_existing_directory(root, EvidenceDirectoryKind::AllowlistRoot)?;
+    let canonical_root = canonical_existing_directory(root, EvidenceDirectoryKind::AllowlistRoot)?;
+    resolve_evidence_dir_in_roots(root, &canonical_root, value)
+}
+
+fn resolve_evidence_dir_in_roots(
+    root: &Path,
+    canonical_root: &Path,
+    value: Option<&str>,
+) -> Result<PathBuf, McpEvidenceRequestError> {
     let requested = value.unwrap_or(DEFAULT_EVIDENCE_CHILD).trim();
     if requested.is_empty() {
         return Err(McpEvidenceRequestError::EMPTY_EVIDENCE_DIR);
     }
 
     let requested = Path::new(requested);
-    reject_parent_traversal(requested)?;
     reject_drive_relative_or_root_style_relative_path(requested)?;
+    reject_boundary_escape_or_parent_traversal(root, canonical_root, requested)?;
 
     let candidate = if requested.is_absolute() {
         requested.to_path_buf()
     } else {
-        root.join(requested)
+        canonical_root.to_path_buf().join(requested)
     };
     let evidence_dir =
         canonical_existing_directory(&candidate, EvidenceDirectoryKind::EvidenceDir)?;
 
-    if !evidence_dir.starts_with(&root) {
+    if !evidence_dir.starts_with(canonical_root) {
         return Err(McpEvidenceRequestError::OUTSIDE_ALLOWLISTED_ROOT);
     }
 
@@ -866,6 +936,7 @@ fn canonical_existing_directory(
 
 fn directory_inspection_error(kind: EvidenceDirectoryKind) -> McpEvidenceRequestError {
     match kind {
+        #[cfg(test)]
         EvidenceDirectoryKind::AllowlistRoot => McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE,
         EvidenceDirectoryKind::EvidenceDir => McpEvidenceRequestError::EVIDENCE_READ_FAILED,
     }
@@ -873,6 +944,7 @@ fn directory_inspection_error(kind: EvidenceDirectoryKind) -> McpEvidenceRequest
 
 fn directory_symlink_error(kind: EvidenceDirectoryKind) -> McpEvidenceRequestError {
     match kind {
+        #[cfg(test)]
         EvidenceDirectoryKind::AllowlistRoot => McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE,
         EvidenceDirectoryKind::EvidenceDir => McpEvidenceRequestError::SYMLINKED_EVIDENCE_DIR,
     }
@@ -880,20 +952,10 @@ fn directory_symlink_error(kind: EvidenceDirectoryKind) -> McpEvidenceRequestErr
 
 fn directory_not_directory_error(kind: EvidenceDirectoryKind) -> McpEvidenceRequestError {
     match kind {
+        #[cfg(test)]
         EvidenceDirectoryKind::AllowlistRoot => McpEvidenceRequestError::ALLOWLIST_ROOT_UNAVAILABLE,
         EvidenceDirectoryKind::EvidenceDir => McpEvidenceRequestError::NON_DIRECTORY_EVIDENCE_DIR,
     }
-}
-
-fn reject_parent_traversal(path: &Path) -> Result<(), McpEvidenceRequestError> {
-    if path
-        .components()
-        .any(|component| matches!(component, Component::ParentDir))
-    {
-        return Err(McpEvidenceRequestError::PARENT_TRAVERSAL);
-    }
-
-    Ok(())
 }
 
 fn reject_drive_relative_or_root_style_relative_path(
@@ -911,6 +973,179 @@ fn reject_drive_relative_or_root_style_relative_path(
     }
 
     Ok(())
+}
+
+fn reject_boundary_escape_or_parent_traversal(
+    root: &Path,
+    canonical_root: &Path,
+    requested: &Path,
+) -> Result<(), McpEvidenceRequestError> {
+    match evidence_dir_path_boundary(root, canonical_root, requested) {
+        EvidenceDirPathBoundary::InsideRoot => Ok(()),
+        EvidenceDirPathBoundary::InsideRootWithParentTraversal => {
+            Err(McpEvidenceRequestError::PARENT_TRAVERSAL)
+        }
+        EvidenceDirPathBoundary::OutsideRoot => {
+            Err(McpEvidenceRequestError::OUTSIDE_ALLOWLISTED_ROOT)
+        }
+    }
+}
+
+fn evidence_dir_path_boundary(
+    root: &Path,
+    canonical_root: &Path,
+    requested: &Path,
+) -> EvidenceDirPathBoundary {
+    if requested.is_absolute() {
+        return best_absolute_evidence_dir_path_boundary(root, canonical_root, requested);
+    }
+
+    relative_evidence_dir_path_boundary(requested)
+}
+
+fn best_absolute_evidence_dir_path_boundary(
+    root: &Path,
+    canonical_root: &Path,
+    requested: &Path,
+) -> EvidenceDirPathBoundary {
+    let supplied_root_boundary = absolute_evidence_dir_path_boundary(root, requested);
+    let canonical_root_boundary = absolute_evidence_dir_path_boundary(canonical_root, requested);
+
+    [supplied_root_boundary, canonical_root_boundary]
+        .into_iter()
+        .min_by_key(|boundary| match boundary {
+            EvidenceDirPathBoundary::InsideRoot => 0,
+            EvidenceDirPathBoundary::InsideRootWithParentTraversal => 1,
+            EvidenceDirPathBoundary::OutsideRoot => 2,
+        })
+        .expect("fixed path boundary candidates")
+}
+
+fn relative_evidence_dir_path_boundary(requested: &Path) -> EvidenceDirPathBoundary {
+    let mut depth = 0usize;
+    let mut has_parent_traversal = false;
+
+    for component in requested.components() {
+        match component {
+            Component::Normal(_) => depth += 1,
+            Component::CurDir => {}
+            Component::ParentDir => {
+                has_parent_traversal = true;
+                if depth == 0 {
+                    return EvidenceDirPathBoundary::OutsideRoot;
+                }
+                depth -= 1;
+            }
+            Component::Prefix(_) | Component::RootDir => {
+                return EvidenceDirPathBoundary::OutsideRoot;
+            }
+        }
+    }
+
+    if has_parent_traversal {
+        EvidenceDirPathBoundary::InsideRootWithParentTraversal
+    } else {
+        EvidenceDirPathBoundary::InsideRoot
+    }
+}
+
+fn absolute_evidence_dir_path_boundary(root: &Path, requested: &Path) -> EvidenceDirPathBoundary {
+    let Some((root_key, _)) = lexical_absolute_path_key(root) else {
+        return EvidenceDirPathBoundary::OutsideRoot;
+    };
+    let Some((requested_key, has_parent_traversal)) = lexical_absolute_path_key(requested) else {
+        return EvidenceDirPathBoundary::OutsideRoot;
+    };
+
+    if root_key.len() > requested_key.len()
+        || !root_key
+            .iter()
+            .zip(requested_key.iter())
+            .all(|(root_component, requested_component)| root_component == requested_component)
+    {
+        return EvidenceDirPathBoundary::OutsideRoot;
+    }
+
+    if has_parent_traversal {
+        EvidenceDirPathBoundary::InsideRootWithParentTraversal
+    } else {
+        EvidenceDirPathBoundary::InsideRoot
+    }
+}
+
+#[cfg(not(windows))]
+type PathBoundaryKey = std::ffi::OsString;
+
+#[cfg(windows)]
+type PathBoundaryKey = String;
+
+fn lexical_absolute_path_key(path: &Path) -> Option<(Vec<PathBoundaryKey>, bool)> {
+    if !path.is_absolute() {
+        return None;
+    }
+
+    let mut key = Vec::new();
+    let anchor_len = push_absolute_anchor_key(path, &mut key)?;
+    let mut has_parent_traversal = false;
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir | Component::CurDir => {}
+            Component::Normal(component) => key.push(path_component_key(component)),
+            Component::ParentDir => {
+                has_parent_traversal = true;
+                if key.len() > anchor_len {
+                    key.pop();
+                }
+            }
+        }
+    }
+
+    Some((key, has_parent_traversal))
+}
+
+#[cfg(not(windows))]
+fn push_absolute_anchor_key(path: &Path, _key: &mut Vec<PathBoundaryKey>) -> Option<usize> {
+    path.is_absolute().then_some(0)
+}
+
+#[cfg(windows)]
+fn push_absolute_anchor_key(path: &Path, key: &mut Vec<PathBoundaryKey>) -> Option<usize> {
+    let Component::Prefix(prefix) = path.components().next()? else {
+        return None;
+    };
+    key.push(windows_prefix_key(prefix));
+    Some(key.len())
+}
+
+#[cfg(not(windows))]
+fn path_component_key(value: &std::ffi::OsStr) -> PathBoundaryKey {
+    value.to_os_string()
+}
+
+#[cfg(windows)]
+fn path_component_key(value: &std::ffi::OsStr) -> PathBoundaryKey {
+    windows_os_str_key(value)
+}
+
+#[cfg(windows)]
+fn windows_prefix_key(prefix: PrefixComponent<'_>) -> String {
+    match prefix.kind() {
+        Prefix::Disk(drive) | Prefix::VerbatimDisk(drive) => {
+            format!("disk:{}", char::from(drive).to_ascii_lowercase())
+        }
+        Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => format!(
+            "unc:{}:{}",
+            windows_os_str_key(server),
+            windows_os_str_key(share)
+        ),
+        _ => format!("other:{}", windows_os_str_key(prefix.as_os_str())),
+    }
+}
+
+#[cfg(windows)]
+fn windows_os_str_key(value: &std::ffi::OsStr) -> String {
+    value.to_string_lossy().to_lowercase()
 }
 
 fn reject_symlink_entries(evidence_dir: &Path) -> Result<(), McpEvidenceRequestError> {
@@ -1274,7 +1509,11 @@ mod tests {
 
     #[test]
     fn server_info_uses_binary_name() {
-        let info = CairnIdMcpServer::new(PathBuf::from(".")).get_info();
+        let info = CairnIdMcpServer::new(StartupEvidenceRoot {
+            supplied: PathBuf::from("."),
+            canonical: PathBuf::from("."),
+        })
+        .get_info();
 
         assert_eq!(info.server_info.name, "cairnid-mcp");
         assert!(info.capabilities.tools.is_some());
@@ -1312,8 +1551,13 @@ mod tests {
     fn rejects_parent_traversal_paths() {
         let root = temp_root("parent-traversal");
 
-        assert!(resolve_evidence_dir_in_root(&root, Some("../release-evidence")).is_err());
-        assert!(resolve_evidence_dir_in_root(&root, Some("release-evidence/../other")).is_err());
+        let outside_escape = resolve_evidence_dir_in_root(&root, Some("../release-evidence"))
+            .expect_err("parent traversal escaping root");
+        assert_eq!(outside_escape.code, "outside_allowlisted_root");
+        let inside_traversal =
+            resolve_evidence_dir_in_root(&root, Some("release-evidence/../other"))
+                .expect_err("parent traversal within root");
+        assert_eq!(inside_traversal.code, "parent_traversal");
 
         remove_temp_root(root);
     }

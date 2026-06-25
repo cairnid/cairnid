@@ -98,6 +98,7 @@ const chatTool = joinText('chat', 'gpt');
 const modelVendor = joinText('open', modelLower);
 const localTool = joinText('co', 'dex');
 const otherAssistant = joinText('clau', 'de');
+const localTodoFile = joinText('TODO', '_', 'LOCAL');
 const checkerPathPattern = /^infra\/scripts\/check-public-surface\.ts$/;
 const cargoLockPathPattern = /^Cargo\.lock$/;
 const licensePathPattern = /^LICENSE$/;
@@ -117,7 +118,7 @@ const pathRules: PathRule[] = [
   },
   {
     name: 'local note artifact',
-    pattern: /(^|\/)(?:NOTES|SCRATCH|TODO_LOCAL|.*_NOTES|.*\.local)\.(?:md|txt)$/i,
+    pattern: new RegExp(`(^|/)(?:NOTES|SCRATCH|${localTodoFile}|.*_NOTES|.*\\.local)\\.(?:md|txt)$`, 'i'),
   },
   {
     name: 'local note directory',
