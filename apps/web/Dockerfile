@@ -1,4 +1,4 @@
-FROM oven/bun:1.3.14 AS deps
+FROM oven/bun:1.4.0 AS deps
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 COPY apps/web/package.json ./apps/web/package.json
@@ -10,7 +10,7 @@ COPY apps/web ./apps/web
 WORKDIR /app/apps/web
 RUN bun run build
 
-FROM oven/bun:1.3.14-slim AS runtime
+FROM oven/bun:1.4.0-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
