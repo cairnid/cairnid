@@ -13,21 +13,21 @@
     "test:e2e": "bun --bun vite build && bun --bun playwright test"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.21.0",
-    "@sveltejs/adapter-node": "^5.5.4",
-    "@sveltejs/kit": "^2.65.2",
-    "svelte": "^5.56.3",
-    "zod": "^4.2.0"
+    "@lucide/svelte": "^1.37.0",
+    "@sveltejs/adapter-node": "^5.5.7",
+    "@sveltejs/kit": "^2.70.3",
+    "svelte": "^5.57.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.0",
-    "@sveltejs/vite-plugin-svelte": "^7.1.2",
-    "@tailwindcss/vite": "^4.3.1",
-    "@types/node": "^25.9.3",
-    "svelte-check": "^4.3.4",
+    "@playwright/test": "^1.62.1",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^25.9.5",
+    "svelte-check": "^4.7.6",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.9.3",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.9"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   }
 }
